@@ -132,7 +132,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
     name: "askweb",
     label: "Askweb Search",
     description:
-      "Search the web using one of the configured providers (Brave, Exa, Jina, Tavily, SerpAPI, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
+      "Read-only/open-world network search: query one configured provider (Brave, Exa, Jina, Tavily, SerpAPI, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
     promptSnippet:
       "Search the web with askweb. Use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
@@ -287,7 +287,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
     name: "askweb_providers",
     label: "Askweb Providers",
     description:
-      "List built-in web search providers and which ones are currently configured via environment variables.",
+      "Read-only/idempotent local/env status: list built-in web search providers and which ones are currently configured via environment variables.",
     promptSnippet: "List configured askweb providers.",
     promptGuidelines: [
       "Use askweb_providers before askweb if it is unclear which providers are available.",
