@@ -4,13 +4,12 @@ import { encode } from '@toon-format/toon'
 import { builtinProviders } from './core/providers.ts'
 import { create } from './core/registry.ts'
 import { searchAll } from './core/all.ts'
-import { readUrl } from './core/read.ts'
+import { readProviderNames, readUrl } from './core/read.ts'
 import { resolveDefaultProvider, listProviders } from './core/resolve.ts'
 import './providers/index.ts'
 
 const z = tool.schema
 const providerNames = [...builtinProviders, 'all'] as const
-const readProviderNames = ['jina'] as const
 
 const AskwebPlugin: Plugin = async () => ({
   tool: {

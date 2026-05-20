@@ -3,13 +3,12 @@ import { z } from 'zod'
 import { builtinProviders } from './core/providers.ts'
 import { create } from './core/registry.ts'
 import { searchAll } from './core/all.ts'
-import { readUrl } from './core/read.ts'
+import { readProviderNames, readUrl } from './core/read.ts'
 import { EmptyQueryError, EmptyUrlError } from './core/errors.ts'
 import { resolveDefaultProvider, listProviders } from './core/resolve.ts'
 import './providers/index.ts'
 
 const providerNames = [...builtinProviders, 'all'] as const
-const readProviderNames = ['jina'] as const
 
 export const searchTool = tool({
   description: 'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',

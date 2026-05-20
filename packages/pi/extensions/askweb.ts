@@ -1,15 +1,17 @@
 import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { Text } from "@earendil-works/pi-tui"
 import { Type, type Static } from "typebox"
-import type {
-  ProviderError,
-  ProviderStatus,
-  ReadOptions,
-  ReadResult,
-  SearchAllResult,
-  SearchOptions,
-  SearchResult,
-  WebSearchProviderName,
+import {
+  readProviderNames,
+  type ProviderError,
+  type ProviderStatus,
+  type ReadOptions,
+  type ReadProviderName,
+  type ReadResult,
+  type SearchAllResult,
+  type SearchOptions,
+  type SearchResult,
+  type WebSearchProviderName,
 } from "askweb"
 
 type SearchSingleDetails = {
@@ -35,7 +37,7 @@ type SearchDetails = SearchSingleDetails | SearchAllDetails
 type ReadDetails = {
   mode: "read"
   url: string
-  provider: "jina"
+  provider: ReadProviderName
   options: ReadOptions
   result: ReadResult
 }
@@ -53,8 +55,7 @@ function loadAskweb(): Promise<AskwebModule> {
 
 const PROVIDERS = ["auto", "all", "brave", "exa", "jina", "searxng", "serpapi", "tavily"] as const
 const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) picks the first available provider from env. Use "all" to query every configured provider in parallel.`
-const READ_PROVIDERS = ["jina"] as const
-const READ_PROVIDER_HINT = `Read provider to use. One of: ${READ_PROVIDERS.join(", ")}. Defaults to jina.`
+const READ_PROVIDER_HINT = `Read provider to use. One of: ${readProviderNames.join(", ")}. Defaults to jina.`
 
 const MAX_RESULTS_HARD_CAP = 20
 const DEFAULT_MAX_RESULTS = 10
@@ -125,7 +126,7 @@ type SearchParams = Static<typeof searchParameters>
 type ReadParams = Static<typeof readParameters>
 type EmptyParams = Static<typeof emptyParameters>
 type ProviderInput = (typeof PROVIDERS)[number]
-type ReadProviderInput = (typeof READ_PROVIDERS)[number]
+type ReadProviderInput = (typeof readProviderNames)[number]
 
 export default function askwebExtension(pi: ExtensionAPI) {
   pi.registerTool({
@@ -253,7 +254,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
       const rawProvider = (params.provider ?? "jina").trim() || "jina"
       if (!isKnownReadProvider(rawProvider)) {
         throw new Error(
-          `Unknown read provider "${rawProvider}". Available: ${READ_PROVIDERS.join(", ")}.`,
+          `Unknown read provider "${rawProvider}". Available: ${readProviderNames.join(", ")}.`,
         )
       }
 
@@ -402,7 +403,7 @@ function isKnownProvider(name: string): name is ProviderInput {
 }
 
 function isKnownReadProvider(name: string): name is ReadProviderInput {
-  return READ_PROVIDERS.some((provider) => provider === name)
+  return readProviderNames.some((provider) => provider === name)
 }
 
 function normalizeReadFormat(format: string | undefined): ReadOptions["format"] {
