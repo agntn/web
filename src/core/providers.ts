@@ -1,6 +1,7 @@
 export const builtinProviders = [
   'brave',
   'exa',
+  'jina',
   'searxng',
   'serpapi',
   'tavily',

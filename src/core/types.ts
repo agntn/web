@@ -22,9 +22,33 @@ export interface SearchOptions {
   category?: string
 }
 
+export interface ReadResult {
+  url: string
+  title?: string
+  description?: string
+  content: string
+  text?: string
+  html?: string
+  publishedDate?: string
+  image?: string
+  links?: string[] | Record<string, string>
+  images?: string[] | Record<string, string>
+  metadata?: Record<string, unknown>
+}
+
+export interface ReadOptions {
+  format?: 'markdown' | 'text' | 'html'
+  maxTokens?: number
+  targetSelector?: string
+  removeSelector?: string
+  timeout?: number
+  noCache?: boolean
+}
+
 export interface SearchProvider {
   name(): string
   search(query: string, options?: SearchOptions): Promise<SearchResult[]>
+  read?(url: string, options?: ReadOptions): Promise<ReadResult>
   /**
    * Optional reachability probe. Used by {@link searchAll} and async detection
    * helpers to skip self-hosted / optional providers whose endpoint is not
@@ -38,6 +62,7 @@ export interface SearchProvider {
 export interface ProviderConfig {
   apiKey?: string
   baseURL?: string
+  readBaseURL?: string
 }
 
 export type ProviderFactory = (config: ProviderConfig) => SearchProvider

@@ -1,5 +1,6 @@
 const passthroughFirstArgs = new Set([
   'search',
+  'read',
   'providers',
 ])
 

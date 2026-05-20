@@ -1,7 +1,7 @@
 {
   "name": "askweb",
   "version": "0.1.2",
-  "description": "Unified web search provider for agents and CLI.",
+  "description": "Unified web search and read provider for agents and CLI.",
   "type": "module",
   "license": "MIT",
   "sideEffects": [

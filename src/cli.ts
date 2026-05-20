@@ -8,10 +8,11 @@ const main = defineCommand({
   meta: {
     name: 'askweb',
     version,
-    description: 'Unified web search provider for agents and CLI',
+    description: 'Unified web search and read provider for agents and CLI',
   },
   subCommands: {
     search: () => import('./commands/search.ts').then(m => m.default),
+    read: () => import('./commands/read.ts').then(m => m.default),
     providers: () => import('./commands/providers.ts').then(m => m.default),
   },
 })

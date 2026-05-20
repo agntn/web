@@ -4,6 +4,7 @@ import { normalizeMainArgs } from '../../src/cli-args.ts'
 describe('CLI main args', () => {
   it('keeps explicit subcommands unchanged', () => {
     expect(normalizeMainArgs(['search', 'query'])).toEqual(['search', 'query'])
+    expect(normalizeMainArgs(['read', 'https://example.com'])).toEqual(['read', 'https://example.com'])
     expect(normalizeMainArgs(['providers'])).toEqual(['providers'])
   })
 

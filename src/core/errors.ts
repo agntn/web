@@ -74,6 +74,25 @@ export class EmptyQueryError extends AskwebError {
   }
 }
 
+/** Thrown when the read URL is empty or whitespace-only. */
+export class EmptyUrlError extends AskwebError {
+  constructor() {
+    super('Read URL cannot be empty')
+    this.name = 'EmptyUrlError'
+  }
+}
+
+/** Thrown when a provider does not implement the read capability. */
+export class ReadNotSupportedError extends AskwebError {
+  readonly provider: string
+
+  constructor(provider: string) {
+    super(`Provider does not support read: ${provider}`)
+    this.name = 'ReadNotSupportedError'
+    this.provider = provider
+  }
+}
+
 /** Thrown when no provider can be selected from env or registry. */
 export class NoProviderConfiguredError extends AskwebError {
   constructor() {
