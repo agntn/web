@@ -54,12 +54,14 @@ test/unit/                # Public behavior and provider contract tests
 - Keep capability names explicit: `search*` for query → results, `read*`/`readUrl` for URL → content
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible
+- Keep capability provider lists single-source: `src/core/read.ts` exports read-capable names; AI/OpenCode/Pi surfaces import that list instead of mirroring `['jina']`
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
 ## ANTI-PATTERNS
 
 - Do not leak provider-specific response formats into public API
 - Do not hide URL → content behind `SearchProvider.search()`
+- Do not duplicate provider-name arrays across CLI/tool surfaces; update one core export and reuse it
 - Do not couple CLI formatting with core data models
 - Do not add `as any`, `@ts-ignore`, or placeholder unsafe types
 - Do not introduce CJS compatibility shims
