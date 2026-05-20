@@ -15,8 +15,8 @@ export { register, create, providers, has } from './core/registry.ts'
 export { searchAll, searchAllDetailed } from './core/all.ts'
 export type { SearchAllOptions, SearchAllResult, SearchAllResponse, ProviderError } from './core/all.ts'
 
-export { readUrl } from './core/read.ts'
-export type { ReadUrlOptions } from './core/read.ts'
+export { readProviderNames, readUrl } from './core/read.ts'
+export type { ReadProviderName, ReadUrlOptions } from './core/read.ts'
 
 export {
   resolveDefaultProvider,

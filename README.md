@@ -263,8 +263,8 @@ interface ReadResult {
   html?: string
   publishedDate?: string
   image?: string
-  links?: string[] | Record<string, string>
-  images?: string[] | Record<string, string>
+  links?: string[]
+  images?: string[]
   metadata?: Record<string, unknown>
 }
 ```
@@ -287,7 +287,8 @@ interface SearchOptions {
 Read options you can pass to `readUrl`:
 
 ```typescript
-interface ReadOptions {
+interface ReadUrlOptions {
+  provider?: 'jina' // custom registered provider names are also accepted at runtime
   format?: 'markdown' | 'text' | 'html'
   maxTokens?: number
   targetSelector?: string

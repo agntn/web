@@ -15,7 +15,7 @@ vi.mock('../../src/core/client.ts', () => ({
 }))
 
 import { create, has } from '../../src/core/registry.ts'
-import { AuthError } from '../../src/core/errors.ts'
+import { AuthError, HTTPError } from '../../src/core/errors.ts'
 import type { SearchResult, ReadResult } from '../../src/core/types.ts'
 
 // Triggers self-registration of jina provider
@@ -153,6 +153,20 @@ describe('jina provider', () => {
   })
 
   describe('read()', () => {
+    it('derives regional read hosts from regional search hosts', async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        code: 200,
+        status: 20000,
+        data: { url: 'https://example.com/', content: 'Read content' },
+      })
+
+      const provider = create('jina', { baseURL: 'https://eu.s.jina.ai' })
+      await provider.read!('https://example.com')
+
+      const [url] = mockGetJSON.mock.calls[0]
+      expect(url).toBe('https://eu.r.jina.ai/https%3A%2F%2Fexample.com')
+    })
+
     it('calls r.jina.ai with encoded URL and JSON accept header without requiring apiKey', async () => {
       mockGetJSON.mockResolvedValueOnce({
         code: 200,
@@ -196,8 +210,8 @@ describe('jina provider', () => {
       expect(headers).toEqual({
         Accept: 'application/json',
         Authorization: 'Bearer test-key',
-        'X-Respond-With': 'text',
-        'X-Max-Tokens': '500',
+        'X-Return-Format': 'text',
+        'X-Token-Budget': '500',
         'X-Target-Selector': 'main',
         'X-Remove-Selector': 'nav',
         'X-Timeout': '30',
@@ -237,9 +251,35 @@ describe('jina provider', () => {
         publishedDate: '2024-08-01T00:00:00Z',
         image: 'https://example.com/hero.png',
         links: ['https://example.com/a'],
-        images: { hero: 'https://example.com/hero.png' },
+        images: ['https://example.com/hero.png'],
         metadata: { lang: 'en', warning: 'cached' },
       })
+    })
+    it('throws on Jina application-level errors for search responses', async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        code: 401,
+        status: 40100,
+        message: 'invalid token',
+      })
+
+      const provider = create('jina', { apiKey: 'bad-key' })
+
+      await expect(provider.search('query')).rejects.toThrow(AuthError)
+    })
+
+    it('throws on Jina application-level errors for read responses', async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        code: 422,
+        status: 42200,
+        message: 'unsupported url',
+      })
+
+      const provider = create('jina', {})
+
+      await expect(provider.read!('ftp://example.com')).rejects.toMatchObject({
+        statusCode: 422,
+        body: 'unsupported url',
+      } satisfies Partial<HTTPError>)
     })
   })
 })

@@ -31,8 +31,8 @@ export interface ReadResult {
   html?: string
   publishedDate?: string
   image?: string
-  links?: string[] | Record<string, string>
-  images?: string[] | Record<string, string>
+  links?: string[]
+  images?: string[]
   metadata?: Record<string, unknown>
 }
 

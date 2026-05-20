@@ -254,6 +254,21 @@ describe('searchTool', () => {
 describe('readTool', () => {
   beforeEach(() => {
     mockGetJSON.mockReset()
+    for (const key of envKeys) {
+      savedEnv[key] = process.env[key]
+      delete process.env[key]
+    }
+  })
+
+  afterEach(() => {
+    for (const key of envKeys) {
+      if (savedEnv[key] !== undefined) {
+        process.env[key] = savedEnv[key]
+      }
+      else {
+        delete process.env[key]
+      }
+    }
   })
 
   it('reads a URL with Jina by default', async () => {
@@ -275,7 +290,7 @@ describe('readTool', () => {
     expect(result.content).toBe('Read content')
     const [url, headers] = mockGetJSON.mock.calls[0]
     expect(url).toBe('https://r.jina.ai/https%3A%2F%2Fexample.com')
-    expect(headers).toEqual({ Accept: 'application/json', 'X-Respond-With': 'markdown' })
+    expect(headers).toEqual({ Accept: 'application/json', 'X-Return-Format': 'markdown' })
   })
 
   it('rejects empty URL', async () => {

@@ -1,7 +1,7 @@
 import type { SearchResult, SearchOptions, ReadResult, ReadOptions, SearchProvider, ProviderConfig, ProviderFactory } from '../core/types.ts'
 import { defaultClient } from '../core/client.ts'
 import type { Client } from '../core/client.ts'
-import { AuthError, normalizeError } from '../core/errors.ts'
+import { AuthError, HTTPError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
 interface JinaResult {
@@ -20,18 +20,21 @@ interface JinaResult {
   pageshotUrl?: string
 }
 
-interface JinaSearchResponse {
-  code: number
-  status: number
-  data?: JinaResult[] | null
+interface JinaEnvelope {
+  code?: number
+  status?: number
+  message?: string
+  error?: string
+  detail?: unknown
   meta?: Record<string, unknown>
 }
 
-interface JinaReadResponse {
-  code: number
-  status: number
+interface JinaSearchResponse extends JinaEnvelope {
+  data?: JinaResult[] | null
+}
+
+interface JinaReadResponse extends JinaEnvelope {
   data?: JinaResult | null
-  meta?: Record<string, unknown>
 }
 
 const JINA_MAX_RESULTS = 20
@@ -78,6 +81,7 @@ class JinaProvider implements SearchProvider {
         'Accept': 'application/json',
       }
       const response = await this.client.getJSON<JinaSearchResponse>(url, headers)
+      assertJinaSuccess(response, url)
       return (response.data ?? []).map(mapSearchResult)
     }
     catch (error) {
@@ -89,6 +93,7 @@ class JinaProvider implements SearchProvider {
     try {
       const requestUrl = `${this.readBaseURL}/${encodeURIComponent(url)}`
       const response = await this.client.getJSON<JinaReadResponse>(requestUrl, readHeaders(this.apiKey, options))
+      assertJinaSuccess(response, requestUrl)
       return mapReadResult(response.data ?? { url, content: '' })
     }
     catch (error) {
@@ -98,15 +103,17 @@ class JinaProvider implements SearchProvider {
 }
 
 function deriveReadBaseURL(searchBaseURL: string): string {
-  return searchBaseURL === 'https://s.jina.ai' ? 'https://r.jina.ai' : searchBaseURL
+  const match = searchBaseURL.match(/^(https?:\/\/)(.+\.)?s\.jina\.ai$/)
+  if (!match) return searchBaseURL
+  return `${match[1]}${match[2] ?? ''}r.jina.ai`
 }
 
 function readHeaders(apiKey: string | undefined, options: ReadOptions | undefined): Record<string, string> {
   const headers: Record<string, string> = { Accept: 'application/json' }
 
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`
-  if (options?.format) headers['X-Respond-With'] = options.format
-  if (options?.maxTokens !== undefined) headers['X-Max-Tokens'] = String(options.maxTokens)
+  if (options?.format) headers['X-Return-Format'] = options.format
+  if (options?.maxTokens !== undefined) headers['X-Token-Budget'] = String(options.maxTokens)
   if (options?.targetSelector) headers['X-Target-Selector'] = options.targetSelector
   if (options?.removeSelector) headers['X-Remove-Selector'] = options.removeSelector
   if (options?.timeout !== undefined) headers['X-Timeout'] = String(options.timeout)
@@ -145,8 +152,8 @@ function mapReadResult(result: JinaResult): ReadResult {
     html: result.html,
     publishedDate: result.publishedTime,
     image: firstImage(result.images),
-    links: result.links ?? undefined,
-    images: result.images ?? undefined,
+    links: stringValues(result.links),
+    images: stringValues(result.images),
     metadata: resultMetadata(result),
   }
 }
@@ -156,17 +163,33 @@ function snippetFrom(text: string | undefined): string | undefined {
 }
 
 function firstImage(images: JinaResult['images']): string | undefined {
-  if (Array.isArray(images)) {
-    return images.find(isNonEmptyString)
-  }
-  if (images && typeof images === 'object') {
-    return Object.values(images).find(isNonEmptyString)
-  }
-  return undefined
+  return stringValues(images)?.[0]
+}
+
+function stringValues(value: string[] | Record<string, string> | null | undefined): string[] | undefined {
+  const values = Array.isArray(value) ? value : value ? Object.values(value) : []
+  const strings = values.filter(isNonEmptyString)
+  return strings.length > 0 ? strings : undefined
 }
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
+}
+
+function assertJinaSuccess(response: JinaEnvelope, url: string): void {
+  const code = response.code
+  const status = response.status
+  if ((code !== undefined && code >= 400) || (status !== undefined && status >= 40000)) {
+    const statusCode = code !== undefined && code >= 400 ? code : Math.floor((status ?? 50000) / 100)
+    throw new HTTPError(statusCode, url, jinaErrorMessage(response))
+  }
+}
+
+function jinaErrorMessage(response: JinaEnvelope): string {
+  if (response.message) return response.message
+  if (response.error) return response.error
+  if (response.detail !== undefined) return JSON.stringify(response.detail)
+  return `Jina API error: code=${response.code ?? 'unknown'} status=${response.status ?? 'unknown'}`
 }
 
 function resultMetadata(result: JinaResult): Record<string, unknown> | undefined {

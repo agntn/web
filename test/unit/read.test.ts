@@ -22,7 +22,13 @@ describe('readUrl', () => {
     await expect(readUrl('   ')).rejects.toThrow(EmptyUrlError)
   })
 
-  it('throws ReadNotSupportedError when provider has no read capability', async () => {
+  it('throws ReadNotSupportedError for search-only built-in providers before constructing them', async () => {
+    delete process.env.EXA_API_KEY
+
+    await expect(readUrl('https://example.com', { provider: 'exa' })).rejects.toThrow(ReadNotSupportedError)
+  })
+
+  it('throws ReadNotSupportedError when a custom provider has no read capability', async () => {
     const providerName = `search-only-${Math.random().toString(36).slice(2)}`
     register(providerName, 'https://search.example.com', () => ({
       name: () => providerName,

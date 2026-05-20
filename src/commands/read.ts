@@ -32,7 +32,7 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    const { readUrl } = await import('../core/read.ts')
+    const { readUrl, readProviderNames } = await import('../core/read.ts')
     const { AuthError, UnknownProviderError, EmptyUrlError, ReadNotSupportedError } = await import('../core/errors.ts')
     let providerName = args.provider || 'jina'
 
@@ -68,14 +68,14 @@ export default defineCommand({
       }
 
       if (result.title) {
-        consola.log(`\x1b[1m\x1b[36m${result.title}\x1b[0m`)
+        consola.log(`\x1b[1m\x1b[36m${sanitizeTerminalText(result.title)}\x1b[0m`)
       }
-      consola.log(`  ${result.url}`)
+      consola.log(`  ${sanitizeTerminalText(result.url)}`)
       if (result.description) {
-        consola.log(`  \x1b[90m${truncateSingleLine(result.description, 160)}\x1b[0m`)
+        consola.log(`  \x1b[90m${truncateSingleLine(sanitizeTerminalText(result.description), 160)}\x1b[0m`)
       }
       consola.log('')
-      consola.log(result.content)
+      consola.log(sanitizeTerminalText(result.content))
     }
     catch (error) {
       if (error instanceof EmptyUrlError) {
@@ -89,14 +89,8 @@ export default defineCommand({
         process.exit(1)
       }
       if (error instanceof UnknownProviderError) {
-        const { providers } = await import('../core/registry.ts')
         consola.error(`Unknown provider: ${providerName}`)
-        const available = providers()
-        if (available.length > 0) {
-          consola.info(`Available providers: ${available.join(', ')}`)
-        } else {
-          consola.info('No providers registered. Import a provider first.')
-        }
+        consola.info(`Read-capable providers: ${readProviderNames.join(', ')}`)
         process.exit(1)
       }
       if (error instanceof ReadNotSupportedError) {
@@ -143,4 +137,12 @@ function parseFormat(input: string | undefined): ParsedFormat {
 function truncateSingleLine(text: string, maxLength: number): string {
   const singleLine = text.replace(/\s+/g, ' ').trim()
   return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 1)}…`
+}
+
+function sanitizeTerminalText(text: string): string {
+  return text
+    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, '')
+    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1B[\x20-\x2F]*[\x30-\x7E]/g, '')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
 }
