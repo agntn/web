@@ -1,17 +1,16 @@
 import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { Text } from "@earendil-works/pi-tui"
 import { Type, type Static } from "typebox"
-import {
-  readProviderNames,
-  type ProviderError,
-  type ProviderStatus,
-  type ReadOptions,
-  type ReadProviderName,
-  type ReadResult,
-  type SearchAllResult,
-  type SearchOptions,
-  type SearchResult,
-  type WebSearchProviderName,
+import type {
+  ProviderError,
+  ProviderStatus,
+  ReadOptions,
+  ReadProviderName,
+  ReadResult,
+  SearchAllResult,
+  SearchOptions,
+  SearchResult,
+  WebSearchProviderName,
 } from "askweb"
 
 type SearchSingleDetails = {
@@ -55,7 +54,7 @@ function loadAskweb(): Promise<AskwebModule> {
 
 const PROVIDERS = ["auto", "all", "brave", "exa", "jina", "searxng", "serpapi", "tavily"] as const
 const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) picks the first available provider from env. Use "all" to query every configured provider in parallel.`
-const READ_PROVIDER_HINT = `Read provider to use. One of: ${readProviderNames.join(", ")}. Defaults to jina.`
+const READ_PROVIDER_HINT = "Read provider to use. Defaults to Jina and is validated against askweb.readProviderNames at execution time."
 
 const MAX_RESULTS_HARD_CAP = 20
 const DEFAULT_MAX_RESULTS = 10
@@ -126,7 +125,7 @@ type SearchParams = Static<typeof searchParameters>
 type ReadParams = Static<typeof readParameters>
 type EmptyParams = Static<typeof emptyParameters>
 type ProviderInput = (typeof PROVIDERS)[number]
-type ReadProviderInput = (typeof readProviderNames)[number]
+type ReadProviderInput = ReadProviderName
 
 export default function askwebExtension(pi: ExtensionAPI) {
   pi.registerTool({
@@ -251,10 +250,12 @@ export default function askwebExtension(pi: ExtensionAPI) {
         throw new Error("URL cannot be empty")
       }
 
-      const rawProvider = (params.provider ?? "jina").trim() || "jina"
-      if (!isKnownReadProvider(rawProvider)) {
+      const askweb = await loadAskweb()
+      const defaultReadProvider: ReadProviderName = askweb.readProviderNames[0] ?? "jina"
+      const rawProvider = (params.provider ?? defaultReadProvider).trim() || defaultReadProvider
+      if (!isKnownReadProvider(rawProvider, askweb)) {
         throw new Error(
-          `Unknown read provider "${rawProvider}". Available: ${readProviderNames.join(", ")}.`,
+          `Unknown read provider "${rawProvider}". Available: ${askweb.readProviderNames.join(", ")}.`,
         )
       }
 
@@ -268,7 +269,6 @@ export default function askwebExtension(pi: ExtensionAPI) {
         noCache: params.noCache,
       })
 
-      const askweb = await loadAskweb()
       const result = await askweb.readUrl(url, { provider: rawProvider, ...readOptions })
       const header = `[provider=${rawProvider}] read ${result.url}`
       return {
@@ -402,8 +402,8 @@ function isKnownProvider(name: string): name is ProviderInput {
   return PROVIDERS.some((provider) => provider === name)
 }
 
-function isKnownReadProvider(name: string): name is ReadProviderInput {
-  return readProviderNames.some((provider) => provider === name)
+function isKnownReadProvider(name: string, askweb: AskwebModule): name is ReadProviderInput {
+  return askweb.readProviderNames.some((provider) => provider === name)
 }
 
 function normalizeReadFormat(format: string | undefined): ReadOptions["format"] {
