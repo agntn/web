@@ -15,8 +15,8 @@ vi.mock('../../src/core/client.ts', () => ({
   })),
 }))
 
-import { searchTool } from '../../src/ai.ts'
-import { EmptyQueryError } from '../../src/core/errors.ts'
+import { readTool, searchTool } from '../../src/ai.ts'
+import { EmptyQueryError, EmptyUrlError } from '../../src/core/errors.ts'
 
 const exaResponse = {
   requestId: 'test-req',
@@ -62,7 +62,7 @@ const searxngResponse = {
 }
 
 const savedEnv: Record<string, string | undefined> = {}
-const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY']
+const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY']
 
 describe('searchTool', () => {
   beforeEach(() => {
@@ -248,5 +248,59 @@ describe('searchTool', () => {
     expect(Array.isArray(results)).toBe(true)
     expect(results[0]).toHaveProperty('url')
     expect(results[0]).toHaveProperty('title')
+  })
+})
+
+describe('readTool', () => {
+  beforeEach(() => {
+    mockGetJSON.mockReset()
+    for (const key of envKeys) {
+      savedEnv[key] = process.env[key]
+      delete process.env[key]
+    }
+  })
+
+  afterEach(() => {
+    for (const key of envKeys) {
+      if (savedEnv[key] !== undefined) {
+        process.env[key] = savedEnv[key]
+      }
+      else {
+        delete process.env[key]
+      }
+    }
+  })
+
+  it('reads a URL with Jina by default', async () => {
+    mockGetJSON.mockResolvedValueOnce({
+      code: 200,
+      status: 20000,
+      data: {
+        title: 'Read Result',
+        url: 'https://example.com/',
+        content: 'Read content',
+      },
+    })
+
+    const result = await readTool.execute!(
+      { url: 'https://example.com', format: 'markdown' },
+      { toolCallId: 'read-call-1', messages: [] },
+    )
+
+    expect(result.content).toBe('Read content')
+    const [url, headers] = mockGetJSON.mock.calls[0]
+    expect(url).toBe('https://r.jina.ai/https%3A%2F%2Fexample.com')
+    expect(headers).toEqual({ Accept: 'application/json', 'X-Return-Format': 'markdown' })
+  })
+
+  it('rejects empty URL', async () => {
+    await expect(
+      readTool.execute!(
+        { url: '   ' },
+        { toolCallId: 'read-empty', messages: [] },
+      ),
+    ).rejects.toThrow(EmptyUrlError)
+
+    expect(mockGetJSON).not.toHaveBeenCalled()
   })
 })

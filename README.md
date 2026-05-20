@@ -5,11 +5,11 @@
 [![license](https://img.shields.io/github/license/oritwoen/askweb?style=flat&colorA=130f40&colorB=474787)](https://github.com/oritwoen/askweb/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/oritwoen/askweb)
 
-One API for Brave, Exa, Tavily, SerpAPI, and SearXNG. Write your search logic once, swap the provider string, done.
+One API for Brave, Exa, Jina, Tavily, SerpAPI, and SearXNG. Write your search logic once, swap the provider string, done.
 
-If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Tavily puts the key in the request body. And so on.
+If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
 
-`askweb` normalizes all of that behind a single interface. It also ships an [AI SDK](https://ai-sdk.dev/) tool and a CLI.
+`askweb` normalizes all of that behind a single interface. It also ships an [AI SDK](https://ai-sdk.dev/) tool and a CLI. Search is query-to-results; read is URL-to-content.
 
 ## Install
 
@@ -44,6 +44,7 @@ Swap the provider string, same code:
 
 ```typescript
 const brave = create('brave')   // reads BRAVE_API_KEY
+const jina = create('jina')     // reads JINA_API_KEY
 const tavily = create('tavily') // reads TAVILY_API_KEY
 ```
 
@@ -79,34 +80,53 @@ const results = await searchAll('query', {
 })
 ```
 
+### Read a URL
+
+Use `readUrl` when you already have a URL and want normalized page content:
+
+```typescript
+import { readUrl } from 'askweb'
+
+const page = await readUrl('https://example.com/article', {
+  provider: 'jina',
+  format: 'markdown',
+  maxTokens: 4000,
+})
+
+console.log(page.title, page.content)
+```
+
+Jina read uses `r.jina.ai` and does not require an API key for basic reads; if `JINA_API_KEY` is present it is sent as Bearer auth.
+
 ### AI SDK tool
 
-The `askweb/ai` subpath exports a ready-made tool compatible with [Vercel AI SDK](https://ai-sdk.dev/docs/foundations/tools):
+The `askweb/ai` subpath exports ready-made tools compatible with [Vercel AI SDK](https://ai-sdk.dev/docs/foundations/tools):
 
 ```typescript
 import { generateText } from 'ai'
-import { searchTool } from 'askweb/ai'
+import { readTool, searchTool } from 'askweb/ai'
 
 const { text } = await generateText({
   model: yourModel,
-  tools: { webSearch: searchTool },
+  tools: { webSearch: searchTool, webRead: readTool },
   prompt: 'Find the latest TypeScript release notes',
 })
 ```
 
-The tool accepts an optional `provider` parameter. Set it to `"all"` to query all available providers in parallel:
+`searchTool` accepts an optional `provider` parameter. Set it to `"all"` to query all available providers in parallel. `readTool` accepts a URL and reads page content with a read-capable provider:
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
-tools: { webSearch: searchTool }
-// Input schema: { query: string, provider?: "brave" | "exa" | ... | "all", maxResults?: number }
+tools: { webSearch: searchTool, webRead: readTool }
+// searchTool input: { query: string, provider?: "brave" | "exa" | ... | "all", maxResults?: number }
+// readTool input: { url: string, provider?: "jina", format?: "markdown" | "text" | "html" }
 ```
 
-When no provider is specified, the tool auto-detects the first available one from environment variables.
+For `searchTool`, when no provider is specified, the tool auto-detects the first available one from environment variables. `readTool` defaults to Jina Reader.
 
 ### Pi extension
 
-`askweb` ships with a [pi](https://pi.dev) extension that registers two tools and two commands. Install the package straight from GitHub:
+`askweb` ships with a [pi](https://pi.dev) extension that registers three tools and two commands. Install the package straight from GitHub:
 
 ```bash
 pi install git:github.com/oritwoen/askweb
@@ -115,6 +135,7 @@ pi install git:github.com/oritwoen/askweb
 Provided tools:
 
 - `askweb` — search the web with a single provider, or `provider="all"` to fan out across every configured/reachable provider in parallel
+- `askweb_read` — read a URL into normalized content with a read-capable provider (currently Jina Reader)
 - `askweb_providers` — list built-in providers, env-var configuration, and reachability status
 
 Provided slash commands:
@@ -122,7 +143,7 @@ Provided slash commands:
 - `/web [query]` — quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` — show provider configuration and reachability status
 
-The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
+The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
 
 ## CLI
 
@@ -130,6 +151,7 @@ The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API
 askweb "your query"
 askweb --provider brave "your query" --max-results 5
 askweb search "your query" --json
+askweb read https://example.com --format markdown --json
 askweb providers
 ```
 
@@ -137,12 +159,15 @@ askweb providers
 |---------|-------------|
 | `askweb <query>` | Search the web using the default provider |
 | `askweb search <query>` | Search the web using a provider |
+| `askweb read <url>` | Read a URL into normalized content |
 | `askweb providers` | List built-in providers |
 
 | Flag | Description |
 |------|-------------|
-| `--provider <name>` | Provider to use (default: `exa`) |
-| `--max-results <n>` | Maximum results to return (default: `10`) |
+| `--provider <name>` | Provider to use (search default: first configured; read default: `jina`) |
+| `--max-results <n>` | Maximum search results to return (default: `10`) |
+| `--format <markdown\|text\|html>` | Preferred read format |
+| `--max-tokens <n>` | Maximum read tokens when supported |
 | `--json` | Output as JSON |
 
 ## Providers
@@ -151,23 +176,25 @@ askweb providers
 |----------|---------|------|-----------|
 | Brave | `BRAVE_API_KEY` | Header | 2k queries/mo |
 | Exa | `EXA_API_KEY` | Header | 1k queries/mo |
+| Jina | `JINA_API_KEY` | Bearer header | Required for search; optional for read |
 | SearXNG | - | None | Self-hosted |
 | SerpAPI | `SERPAPI_API_KEY` | Query param | 100 queries/mo |
 | Tavily | `TAVILY_API_KEY` | Body | 1k queries/mo |
 
 ### Result shape
 
-All providers always return `{ url, title, snippet }`. Optional fields depend on what each provider's native API exposes — `askweb` passes them through without flattening:
+All search providers always return `{ url, title, snippet }`. Optional fields depend on what each provider's native API exposes — `askweb` passes them through without flattening:
 
 | Provider | Optional fields populated |
 |----------|---------------------------|
 | Exa     | `text` (full page), `highlights[]`, `summary` (AI), `score`, `publishedDate`, `author`, `image`, `favicon` |
+| Jina    | `text` (`content`/`text`), `publishedDate`, `image`, `metadata` |
 | Tavily  | `text` (raw_content, full HTML/markdown), `score`, `publishedDate` |
 | Brave   | `text` (joined `extra_snippets`), `favicon` |
 | SerpAPI | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}` |
 | SearXNG | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}` |
 
-Pick the provider that fits the shape you want. Exa is closest to "AI search" (summary + highlights + full text on request). Tavily is best when you want the raw page content. Brave/SerpAPI/SearXNG are classic SERP-style metadata.
+Pick the provider that fits the shape you want. Exa is closest to "AI search" (summary + highlights + full text on request). Jina uses Jina Search Foundation and can return result content plus metadata. Tavily is best when you want the raw page content. Brave/SerpAPI/SearXNG are classic SERP-style metadata.
 
 SearXNG requires no API key. It's a self-hosted metasearch engine. By default askweb connects to `http://localhost:8080`. Override with `baseURL`:
 
@@ -197,13 +224,13 @@ try {
 }
 ```
 
-A 401 from Exa and a 401 from Brave both become `AuthError`. A 429 from any provider becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `AskwebError`.
+A 401 from any provider becomes `AuthError`. A 429 from any provider becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `AskwebError`.
 
 For safety, `HTTPError.url` redacts sensitive query params and URL userinfo credentials before surfacing the URL in error messages.
 
 ## Data model
 
-Every provider returns the same normalized type:
+Every search provider returns the same normalized type:
 
 ```typescript
 interface SearchResult {
@@ -222,7 +249,25 @@ interface SearchResult {
 }
 ```
 
-Optional fields depend on what the provider returns. Exa provides `score`, `text`, and `highlights`. Brave provides `favicon`. Not all providers populate all fields.
+Optional fields depend on what the provider returns. Exa provides `score`, `text`, and `highlights`. Jina provides result `text`/metadata when available. Brave provides `favicon`. Not all providers populate all fields.
+
+Read results use the same naming for URL-to-content:
+
+```typescript
+interface ReadResult {
+  url: string
+  title?: string
+  description?: string
+  content: string
+  text?: string
+  html?: string
+  publishedDate?: string
+  image?: string
+  links?: string[]
+  images?: string[]
+  metadata?: Record<string, unknown>
+}
+```
 
 Search options you can pass to `.search()` or `searchAll`:
 
@@ -237,7 +282,21 @@ interface SearchOptions {
 }
 ```
 
-`maxResults` works with every provider. Domain filtering and date ranges are currently Exa-specific. `category` is supported by Exa and SearXNG.
+`maxResults` works with every search provider. Domain filtering is supported by Exa, Tavily, and Jina include filters (`site`). Date ranges are currently Exa-specific. `category` is supported by Exa, Jina (`web`, `images`, `news`), and SearXNG.
+
+Read options you can pass to `readUrl`:
+
+```typescript
+interface ReadUrlOptions {
+  provider?: 'jina' // custom registered provider names are also accepted at runtime
+  format?: 'markdown' | 'text' | 'html'
+  maxTokens?: number
+  targetSelector?: string
+  removeSelector?: string
+  timeout?: number
+  noCache?: boolean
+}
+```
 
 ## Development
 

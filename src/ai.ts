@@ -3,14 +3,15 @@ import { z } from 'zod'
 import { builtinProviders } from './core/providers.ts'
 import { create } from './core/registry.ts'
 import { searchAll } from './core/all.ts'
-import { EmptyQueryError } from './core/errors.ts'
+import { readProviderNames, readUrl } from './core/read.ts'
+import { EmptyQueryError, EmptyUrlError } from './core/errors.ts'
 import { resolveDefaultProvider, listProviders } from './core/resolve.ts'
 import './providers/index.ts'
 
 const providerNames = [...builtinProviders, 'all'] as const
 
 export const searchTool = tool({
-  description: 'Search the web using multiple search engines (Brave, Exa, Tavily, SerpAPI, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+  description: 'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
   inputSchema: z.object({
     query: z.string().describe('Search query'),
     provider: z.enum(providerNames).optional().describe('Provider to use. Defaults to first available from env. Use "all" for parallel search.'),
@@ -34,6 +35,27 @@ export const searchTool = tool({
 
     const name = providerName ?? resolveDefaultProvider()
     return create(name).search(query, searchOptions)
+  },
+})
+
+export const readTool = tool({
+  description: 'Read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai). Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.',
+  inputSchema: z.object({
+    url: z.string().describe('URL to read'),
+    provider: z.enum(readProviderNames).optional().describe('Read provider to use. Defaults to Jina.'),
+    format: z.enum(['markdown', 'text', 'html']).optional().describe('Preferred content format.'),
+    maxTokens: z.number().min(1).optional().describe('Maximum tokens to return when supported by the provider.'),
+    targetSelector: z.string().optional().describe('CSS selector to target when supported by the provider.'),
+    removeSelector: z.string().optional().describe('CSS selector to remove when supported by the provider.'),
+    timeout: z.number().min(1).optional().describe('Provider timeout in seconds when supported.'),
+    noCache: z.boolean().optional().describe('Bypass provider cache when supported.'),
+  }),
+  execute: async ({ url, provider, format, maxTokens, targetSelector, removeSelector, timeout, noCache }) => {
+    if (!url.trim()) {
+      throw new EmptyUrlError()
+    }
+
+    return readUrl(url, { provider, format, maxTokens, targetSelector, removeSelector, timeout, noCache })
   },
 })
 

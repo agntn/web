@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { detectAvailableProviders, resolveDefaultProvider, listProviders } from '../../src/core/resolve.ts'
 import '../../src/providers/index.ts'
 
-const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY'] as const
+const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY'] as const
 
 describe('resolve', () => {
   const savedEnv: Record<string, string | undefined> = {}
@@ -34,9 +34,11 @@ describe('resolve', () => {
     it('should detect multiple providers', () => {
       process.env.EXA_API_KEY = 'test-key'
       process.env.BRAVE_API_KEY = 'test-key'
+      process.env.JINA_API_KEY = 'test-key'
       const available = detectAvailableProviders()
       expect(available).toContain('exa')
       expect(available).toContain('brave')
+      expect(available).toContain('jina')
     })
 
     it('should always include searxng when registered', () => {
@@ -48,6 +50,7 @@ describe('resolve', () => {
       const available = detectAvailableProviders()
       expect(available).not.toContain('exa')
       expect(available).not.toContain('brave')
+      expect(available).not.toContain('jina')
       expect(available).not.toContain('tavily')
       expect(available).not.toContain('serpapi')
     })
@@ -76,6 +79,7 @@ describe('resolve', () => {
       const names = list.map(p => p.name)
       expect(names).toContain('brave')
       expect(names).toContain('exa')
+      expect(names).toContain('jina')
       expect(names).toContain('searxng')
       expect(names).toContain('serpapi')
       expect(names).toContain('tavily')

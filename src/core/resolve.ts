@@ -5,6 +5,7 @@ import { NoProviderAvailableError, NoProviderConfiguredError } from './errors.ts
 const envKeys: Record<string, WebSearchProviderName> = {
   EXA_API_KEY: 'exa',
   BRAVE_API_KEY: 'brave',
+  JINA_API_KEY: 'jina',
   TAVILY_API_KEY: 'tavily',
   SERPAPI_API_KEY: 'serpapi',
 }

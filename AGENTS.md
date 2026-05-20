@@ -6,16 +6,24 @@
 
 ## OVERVIEW
 
-`askweb` is a unified web search provider for agents and CLI. The goal is to normalize multiple web search backends behind one stable TypeScript API and one stable command-line interface, so agent runtimes do not need provider-specific glue.
+`askweb` is a unified web-access provider for agents and CLI. It currently exposes two explicit capabilities: `search` (query → result URLs/snippets) and `read` (URL → normalized page content). Providers are integrations that may implement one or both capabilities; do not force URL readers into `search()`.
+
+Scope preference from the 2026-05-20 Jina/read session: keep `read` here while it is lightweight, but if read grows into browser rendering, crawling, many read-only providers, or heavy dependencies, split into three packages: search, read, and an umbrella `askweb` aggregator using both.
 
 ## STRUCTURE
 
 ```
 src/
-├── index.ts              # Public API barrel and normalized provider catalog
-└── cli.ts                # citty-based CLI entry point for local and scripted usage
-test/
-└── index.test.ts         # Basic contract tests for the public API
+├── core/                 # Registry, shared types/errors, searchAll, readUrl
+├── providers/            # Provider adapters; integrations may support search and/or read
+├── commands/             # citty CLI subcommands (`search`, `read`, `providers`)
+├── index.ts              # Public API barrel
+├── ai.ts                 # Vercel AI SDK tools
+├── opencode.ts           # OpenCode plugin tools
+└── cli.ts                # CLI entry point
+packages/pi/extensions/
+└── askweb.ts             # Pi tool/command surface
+test/unit/                # Public behavior and provider contract tests
 .github/workflows/
 ├── test.yml              # CI: typecheck -> build -> test
 └── release.yml           # npm publish on v* tags
@@ -26,7 +34,11 @@ test/
 | Task | Location | Notes |
 |------|----------|-------|
 | Add public exports | `src/index.ts` | Keep the public surface small and explicit |
-| Extend CLI | `src/cli.ts` | Add subcommands with `citty`; keep text and JSON output stable |
+| Add/extend providers | `src/providers/` | Keep provider-shaped responses inside the adapter |
+| Add search behavior | `src/core/all.ts` + provider adapter | Preserve query → results semantics |
+| Add read behavior | `src/core/read.ts` + provider adapter + `src/commands/read.ts` | Preserve URL → content semantics |
+| Extend CLI | `src/commands/` + `src/cli.ts` | Add subcommands with `citty`; keep text and JSON output stable |
+| Extend agent tools | `src/ai.ts`, `src/opencode.ts`, `packages/pi/extensions/askweb.ts` | Keep names capability-specific (`searchTool`, `readTool`, `askweb_read`) |
 | Add tests | `test/` | Mirror public behavior, not implementation details |
 | Change build outputs | `build.config.ts` + `package.json` | Keep `entries` and `exports` aligned |
 | Change CI flow | `.github/workflows/test.yml` | Order stays `typecheck -> build -> test` |
@@ -39,16 +51,21 @@ test/
 - Public API stays export-barrel-driven from `src/index.ts`
 - CLI should be thin and call reusable functions from `src/index.ts`
 - Prefer normalized models over provider-shaped raw objects
+- Keep capability names explicit: `search*` for query → results, `read*`/`readUrl` for URL → content
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible
-- Default to minimal dependencies; only add HTTP/cache layers when provider adapters land
+- Keep capability provider lists single-source: `src/core/read.ts` exports read-capable names; AI/OpenCode/Pi surfaces import that list instead of mirroring `['jina']`
+- Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
 ## ANTI-PATTERNS
 
 - Do not leak provider-specific response formats into public API
+- Do not hide URL → content behind `SearchProvider.search()`
+- Do not duplicate provider-name arrays across CLI/tool surfaces; update one core export and reuse it
 - Do not couple CLI formatting with core data models
 - Do not add `as any`, `@ts-ignore`, or placeholder unsafe types
 - Do not introduce CJS compatibility shims
+- Do not add browser/runtime-heavy dependencies to the core package without revisiting the read/search split
 - Do not add network code directly in the CLI
 - Do not make tests depend on external services
 

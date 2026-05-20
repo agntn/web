@@ -4,6 +4,9 @@ import { Type, type Static } from "typebox"
 import type {
   ProviderError,
   ProviderStatus,
+  ReadOptions,
+  ReadProviderName,
+  ReadResult,
   SearchAllResult,
   SearchOptions,
   SearchResult,
@@ -30,6 +33,14 @@ type SearchAllDetails = {
 
 type SearchDetails = SearchSingleDetails | SearchAllDetails
 
+type ReadDetails = {
+  mode: "read"
+  url: string
+  provider: ReadProviderName
+  options: ReadOptions
+  result: ReadResult
+}
+
 type AskwebModule = typeof import("askweb")
 
 let askwebModulePromise: Promise<AskwebModule> | undefined
@@ -41,8 +52,9 @@ function loadAskweb(): Promise<AskwebModule> {
   return askwebModulePromise
 }
 
-const PROVIDERS = ["auto", "all", "brave", "exa", "searxng", "serpapi", "tavily"] as const
+const PROVIDERS = ["auto", "all", "brave", "exa", "jina", "searxng", "serpapi", "tavily"] as const
 const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) picks the first available provider from env. Use "all" to query every configured provider in parallel.`
+const READ_PROVIDER_HINT = "Read provider to use. Defaults to Jina and is validated against askweb.readProviderNames at execution time."
 
 const MAX_RESULTS_HARD_CAP = 20
 const DEFAULT_MAX_RESULTS = 10
@@ -84,24 +96,49 @@ const searchParameters = Type.Object({
   ),
 })
 
+const readParameters = Type.Object({
+  url: Type.String({ description: "URL to read." }),
+  provider: Type.Optional(Type.String({ description: READ_PROVIDER_HINT })),
+  format: Type.Optional(
+    Type.String({ description: 'Preferred content format: "markdown", "text", or "html".' }),
+  ),
+  maxTokens: Type.Optional(
+    Type.Number({ description: "Maximum tokens to return when supported.", minimum: 1 }),
+  ),
+  targetSelector: Type.Optional(
+    Type.String({ description: "CSS selector to target when supported." }),
+  ),
+  removeSelector: Type.Optional(
+    Type.String({ description: "CSS selector to remove when supported." }),
+  ),
+  timeout: Type.Optional(
+    Type.Number({ description: "Provider timeout in seconds when supported.", minimum: 1 }),
+  ),
+  noCache: Type.Optional(
+    Type.Boolean({ description: "Bypass provider cache when supported." }),
+  ),
+})
+
 const emptyParameters = Type.Object({})
 
 type SearchParams = Static<typeof searchParameters>
+type ReadParams = Static<typeof readParameters>
 type EmptyParams = Static<typeof emptyParameters>
 type ProviderInput = (typeof PROVIDERS)[number]
+type ReadProviderInput = ReadProviderName
 
 export default function askwebExtension(pi: ExtensionAPI) {
   pi.registerTool({
     name: "askweb",
     label: "Askweb Search",
     description:
-      "Search the web using one of the configured providers (Brave, Exa, Tavily, SerpAPI, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
+      "Read-only/open-world network search: query one configured provider (Brave, Exa, Jina, Tavily, SerpAPI, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
     promptSnippet:
       "Search the web with askweb. Use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
       "Use askweb when the user explicitly asks for fresh web information, news, references, or links.",
       "Prefer a single provider when the user names one; use provider=all when freshness or coverage matters and at least two providers are configured.",
-      "For AI-style summaries/highlights/full page text prefer Exa; for raw full page content prefer Tavily; for classic SERP metadata Brave/SerpAPI/SearXNG are fine.",
+      "For AI-style summaries/highlights/full page text prefer Exa; for Jina Search Foundation results use Jina; for raw full page content prefer Tavily; for classic SERP metadata Brave/SerpAPI/SearXNG are fine.",
       "Pass maxResults conservatively (5-10) unless the user asks for more.",
       "Forward includeDomains/excludeDomains/startPublishedDate/endPublishedDate when the user gives concrete filters.",
     ],
@@ -194,10 +231,64 @@ export default function askwebExtension(pi: ExtensionAPI) {
   })
 
   pi.registerTool({
+    name: "askweb_read",
+    label: "Askweb Read",
+    description:
+      "Read-only/open-world network fetch: read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai). Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.",
+    promptSnippet: "Read a URL with askweb_read when page content is needed, not just search results.",
+    promptGuidelines: [
+      "Use askweb_read after search when the user needs the contents of a specific URL.",
+      "Use askweb for query-to-URL search; use askweb_read for URL-to-content reading.",
+    ],
+    parameters: readParameters,
+    renderCall(args, theme) {
+      return new Text(renderReadCall(args, theme), 0, 0)
+    },
+    async execute(_toolCallId, params): Promise<AgentToolResult<ReadDetails>> {
+      const url = params.url.trim()
+      if (!url) {
+        throw new Error("URL cannot be empty")
+      }
+
+      const askweb = await loadAskweb()
+      const defaultReadProvider: ReadProviderName = askweb.readProviderNames[0] ?? "jina"
+      const rawProvider = (params.provider ?? defaultReadProvider).trim() || defaultReadProvider
+      if (!isKnownReadProvider(rawProvider, askweb)) {
+        throw new Error(
+          `Unknown read provider "${rawProvider}". Available: ${askweb.readProviderNames.join(", ")}.`,
+        )
+      }
+
+      const format = normalizeReadFormat(params.format)
+      const readOptions: ReadOptions = stripUndefinedRead({
+        format,
+        maxTokens: params.maxTokens,
+        targetSelector: params.targetSelector,
+        removeSelector: params.removeSelector,
+        timeout: params.timeout,
+        noCache: params.noCache,
+      })
+
+      const result = await askweb.readUrl(url, { provider: rawProvider, ...readOptions })
+      const header = `[provider=${rawProvider}] read ${result.url}`
+      return {
+        content: [{ type: "text", text: withHeader(header, formatReadResult(result)) }],
+        details: {
+          mode: "read",
+          url,
+          provider: rawProvider,
+          options: readOptions,
+          result,
+        },
+      }
+    },
+  })
+
+  pi.registerTool({
     name: "askweb_providers",
     label: "Askweb Providers",
     description:
-      "List built-in web search providers and which ones are currently configured via environment variables.",
+      "Read-only/idempotent local/env status: list built-in web search providers and which ones are currently configured via environment variables.",
     promptSnippet: "List configured askweb providers.",
     promptGuidelines: [
       "Use askweb_providers before askweb if it is unclear which providers are available.",
@@ -311,6 +402,16 @@ function isKnownProvider(name: string): name is ProviderInput {
   return PROVIDERS.some((provider) => provider === name)
 }
 
+function isKnownReadProvider(name: string, askweb: AskwebModule): name is ReadProviderInput {
+  return askweb.readProviderNames.some((provider) => provider === name)
+}
+
+function normalizeReadFormat(format: string | undefined): ReadOptions["format"] {
+  if (format === undefined || format === "") return undefined
+  if (format === "markdown" || format === "text" || format === "html") return format
+  throw new Error('Invalid read format. Expected "markdown", "text", or "html".')
+}
+
 function normalizeProvider(provider: ProviderInput | undefined): "all" | WebSearchProviderName | undefined {
   if (provider === "auto") {
     return undefined
@@ -326,6 +427,17 @@ function stripUndefined(input: SearchOptions): SearchOptions {
   if (input.startPublishedDate !== undefined) out.startPublishedDate = input.startPublishedDate
   if (input.endPublishedDate !== undefined) out.endPublishedDate = input.endPublishedDate
   if (input.category !== undefined) out.category = input.category
+  return out
+}
+
+function stripUndefinedRead(input: ReadOptions): ReadOptions {
+  const out: ReadOptions = {}
+  if (input.format !== undefined) out.format = input.format
+  if (input.maxTokens !== undefined) out.maxTokens = input.maxTokens
+  if (input.targetSelector !== undefined) out.targetSelector = input.targetSelector
+  if (input.removeSelector !== undefined) out.removeSelector = input.removeSelector
+  if (input.timeout !== undefined) out.timeout = input.timeout
+  if (input.noCache !== undefined) out.noCache = input.noCache
   return out
 }
 
@@ -392,6 +504,13 @@ function formatAllResults(
   return lines
 }
 
+function formatReadResult(result: ReadResult): string[] {
+  const lines = [result.title || "(no title)", `   ${result.url}`]
+  if (result.description) lines.push(`   ${truncateSingleLine(result.description, 160)}`)
+  if (result.content) lines.push("", result.content)
+  return lines
+}
+
 function renderSearchCall(params: SearchParams, theme: RenderTheme): string {
   const parts = [theme.fg("toolTitle", theme.bold("askweb"))]
   parts.push(theme.fg("dim", `"${truncateSingleLine(params.query, 120)}"`))
@@ -407,6 +526,16 @@ function renderSearchCall(params: SearchParams, theme: RenderTheme): string {
     parts.push(theme.fg("muted", `from=${params.startPublishedDate}`))
   if (params.endPublishedDate)
     parts.push(theme.fg("muted", `to=${params.endPublishedDate}`))
+  return parts.join(" ")
+}
+
+function renderReadCall(params: ReadParams, theme: RenderTheme): string {
+  const parts = [theme.fg("toolTitle", theme.bold("askweb_read"))]
+  parts.push(theme.fg("dim", truncateSingleLine(params.url, 120)))
+  if (params.provider) parts.push(theme.fg("muted", `provider=${params.provider}`))
+  if (params.format) parts.push(theme.fg("muted", `format=${params.format}`))
+  if (params.maxTokens !== undefined)
+    parts.push(theme.fg("muted", `maxTokens=${params.maxTokens}`))
   return parts.join(" ")
 }
 
