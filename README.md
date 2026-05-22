@@ -11,6 +11,9 @@ If you're building an AI agent or a CLI tool that needs web search, you don't wa
 
 `askweb` normalizes all of that behind a single interface. It also ships an [AI SDK](https://ai-sdk.dev/) tool and a CLI. Search is query-to-results; read is URL-to-content.
 
+> [!WARNING]
+> `askweb` is experimental. The package name, public API, provider model, CLI flags, and tool surfaces may change before the first stable release. Pin exact versions if you build on it now.
+
 ## Install
 
 ```bash
