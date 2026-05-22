@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/github/license/oritwoen/askweb?style=flat&colorA=130f40&colorB=474787)](https://github.com/oritwoen/askweb/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/oritwoen/askweb)
 
-One API for Brave, Exa, Jina, Tavily, SerpAPI, and SearXNG. Write your search logic once, swap the provider string, done.
+One API for Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
 
 If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
 
@@ -33,7 +33,7 @@ Provided slash commands:
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` - show provider configuration and reachability status
 
-The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
+The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
 
 ## Install
 
@@ -182,6 +182,7 @@ askweb providers
 | Jina | `JINA_API_KEY` | Bearer header | Required for search; optional for read |
 | SearXNG | - | None | Self-hosted |
 | SerpAPI | `SERPAPI_API_KEY` | Query param | 100 queries/mo |
+| SerpBase | `SERPBASE_API_KEY` | `X-API-Key` header | 100 searches to start |
 | Tavily | `TAVILY_API_KEY` | Body | 1k queries/mo |
 
 ### Result shape
@@ -195,9 +196,12 @@ All search providers always return `{ url, title, snippet }`. Optional fields de
 | Tavily  | `text` (raw_content, full HTML/markdown), `score`, `publishedDate` |
 | Brave   | `text` (joined `extra_snippets`), `favicon` |
 | SerpAPI | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}` |
+| SerpBase | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}` |
 | SearXNG | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}` |
 
-Pick the provider that fits the shape you want. Exa is closest to "AI search" (summary + highlights + full text on request). Jina uses Jina Search Foundation and can return result content plus metadata. Tavily is best when you want the raw page content. Brave/SerpAPI/SearXNG are classic SERP-style metadata.
+Pick the provider that fits the shape you want. Exa is closest to "AI search" (summary + highlights + full text on request). Jina uses Jina Search Foundation and can return result content plus metadata. Tavily is best when you want the raw page content. Brave/SerpAPI/SerpBase/SearXNG are classic SERP-style metadata.
+
+SerpBase uses Google SERP endpoints. `category: "images"`, `"news"`, or `"videos"` selects the matching SerpBase endpoint; `maxResults` is applied client-side to the returned page.
 
 SearXNG requires no API key. It's a self-hosted metasearch engine. By default askweb connects to `http://localhost:8080`. Override with `baseURL`:
 

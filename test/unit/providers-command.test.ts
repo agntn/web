@@ -11,7 +11,7 @@ vi.mock('consola', () => ({
 import providersCommand from '../../src/commands/providers.ts'
 import { builtinProviders } from '../../src/index.ts'
 
-const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY']
+const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY', 'SERPBASE_API_KEY']
 
 describe('providers command', () => {
   const savedEnv: Record<string, string | undefined> = {}
