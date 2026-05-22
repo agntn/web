@@ -14,7 +14,7 @@ const providerNames = [...builtinProviders, 'all'] as const
 const AskwebPlugin: Plugin = async () => ({
   tool: {
     askweb: tool({
-      description: 'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+      description: 'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
       args: {
         query: z.string().describe('Search query'),
         provider: z.enum(providerNames).optional().describe('Provider to use. Defaults to first available from env. Use "all" for parallel search.'),

@@ -4,6 +4,7 @@ export const builtinProviders = [
   'jina',
   'searxng',
   'serpapi',
+  'serpbase',
   'tavily',
 ] as const
 

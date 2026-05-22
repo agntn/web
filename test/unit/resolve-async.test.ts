@@ -8,7 +8,7 @@ import { searchAllDetailed } from '../../src/core/all.ts'
 import { NoProviderAvailableError } from '../../src/core/errors.ts'
 import '../../src/providers/index.ts'
 
-const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY'] as const
+const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY', 'SERPBASE_API_KEY'] as const
 
 describe('resolve async', () => {
   const savedEnv: Record<string, string | undefined> = {}

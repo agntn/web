@@ -52,7 +52,7 @@ function loadAskweb(): Promise<AskwebModule> {
   return askwebModulePromise
 }
 
-const PROVIDERS = ["auto", "all", "brave", "exa", "jina", "searxng", "serpapi", "tavily"] as const
+const PROVIDERS = ["auto", "all", "brave", "exa", "jina", "searxng", "serpapi", "serpbase", "tavily"] as const
 const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) picks the first available provider from env. Use "all" to query every configured provider in parallel.`
 const READ_PROVIDER_HINT = "Read provider to use. Defaults to Jina and is validated against askweb.readProviderNames at execution time."
 
@@ -132,13 +132,13 @@ export default function askwebExtension(pi: ExtensionAPI) {
     name: "askweb",
     label: "Askweb Search",
     description:
-      "Read-only/open-world network search: query one configured provider (Brave, Exa, Jina, Tavily, SerpAPI, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
+      "Read-only/open-world network search: query one configured provider (Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
     promptSnippet:
       "Search the web with askweb. Use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
       "Use askweb when the user explicitly asks for fresh web information, news, references, or links.",
       "Prefer a single provider when the user names one; use provider=all when freshness or coverage matters and at least two providers are configured.",
-      "For AI-style summaries/highlights/full page text prefer Exa; for Jina Search Foundation results use Jina; for raw full page content prefer Tavily; for classic SERP metadata Brave/SerpAPI/SearXNG are fine.",
+      "For AI-style summaries/highlights/full page text prefer Exa; for Jina Search Foundation results use Jina; for raw full page content prefer Tavily; for classic SERP metadata Brave/SerpAPI/SerpBase/SearXNG are fine.",
       "Pass maxResults conservatively (5-10) unless the user asks for more.",
       "Forward includeDomains/excludeDomains/startPublishedDate/endPublishedDate when the user gives concrete filters.",
     ],

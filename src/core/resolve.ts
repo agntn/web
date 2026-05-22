@@ -8,6 +8,7 @@ const envKeys: Record<string, WebSearchProviderName> = {
   JINA_API_KEY: 'jina',
   TAVILY_API_KEY: 'tavily',
   SERPAPI_API_KEY: 'serpapi',
+  SERPBASE_API_KEY: 'serpbase',
 }
 
 function envVarFor(name: WebSearchProviderName): string | null {

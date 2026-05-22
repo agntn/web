@@ -53,6 +53,7 @@ describe('searchAll', () => {
     delete process.env.JINA_API_KEY
     delete process.env.TAVILY_API_KEY
     delete process.env.SERPAPI_API_KEY
+    delete process.env.SERPBASE_API_KEY
   })
 
   it('queries multiple providers and merges results', async () => {
@@ -377,6 +378,7 @@ describe('searchAllDetailed', () => {
     delete process.env.JINA_API_KEY
     delete process.env.TAVILY_API_KEY
     delete process.env.SERPAPI_API_KEY
+    delete process.env.SERPBASE_API_KEY
   })
 
   it('returns results and empty errors when all providers succeed', async () => {
