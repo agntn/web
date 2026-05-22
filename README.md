@@ -14,6 +14,27 @@ If you're building an AI agent or a CLI tool that needs web search, you don't wa
 > [!WARNING]
 > `askweb` is experimental. The package name, public API, provider model, CLI flags, and tool surfaces may change before the first stable release. Pin exact versions if you build on it now.
 
+## Pi extension
+
+`askweb` ships with a [pi](https://pi.dev) extension that registers three tools and two commands. Install the package straight from GitHub:
+
+```bash
+pi install git:github.com/oritwoen/askweb
+```
+
+Provided tools:
+
+- `askweb` - search the web with a single provider, or `provider="all"` to fan out across every configured/reachable provider in parallel
+- `askweb_read` - read a URL into normalized content with a read-capable provider (currently Jina Reader)
+- `askweb_providers` - list built-in providers, env-var configuration, and reachability status
+
+Provided slash commands:
+
+- `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
+- `/web-providers` - show provider configuration and reachability status
+
+The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
+
 ## Install
 
 ```bash
@@ -126,27 +147,6 @@ tools: { webSearch: searchTool, webRead: readTool }
 ```
 
 For `searchTool`, when no provider is specified, the tool auto-detects the first available one from environment variables. `readTool` defaults to Jina Reader.
-
-### Pi extension
-
-`askweb` ships with a [pi](https://pi.dev) extension that registers three tools and two commands. Install the package straight from GitHub:
-
-```bash
-pi install git:github.com/oritwoen/askweb
-```
-
-Provided tools:
-
-- `askweb` — search the web with a single provider, or `provider="all"` to fan out across every configured/reachable provider in parallel
-- `askweb_read` — read a URL into normalized content with a read-capable provider (currently Jina Reader)
-- `askweb_providers` — list built-in providers, env-var configuration, and reachability status
-
-Provided slash commands:
-
-- `/web [query]` — quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
-- `/web-providers` — show provider configuration and reachability status
-
-The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
 
 ## CLI
 
