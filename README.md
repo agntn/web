@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/github/license/oritwoen/askweb?style=flat&colorA=130f40&colorB=474787)](https://github.com/oritwoen/askweb/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/oritwoen/askweb)
 
-One API for Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
+One API for Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
 
 If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
 
@@ -33,7 +33,7 @@ Provided slash commands:
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` - show provider configuration and reachability status
 
-The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
+The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
 
 ## Install
 
@@ -120,7 +120,7 @@ const page = await readUrl('https://example.com/article', {
 console.log(page.title, page.content)
 ```
 
-Jina read uses `r.jina.ai` and does not require an API key for basic reads; if `JINA_API_KEY` is present it is sent as Bearer auth.
+Jina read uses `r.jina.ai` and does not require an API key for basic reads; if `JINA_API_KEY` is present it is sent as Bearer auth. Firecrawl read uses `api.firecrawl.dev/v2/scrape` and requires `FIRECRAWL_API_KEY`; it handles JS-rendered pages and PDFs.
 
 ### AI SDK tool
 
@@ -179,6 +179,7 @@ askweb providers
 |----------|---------|------|-----------|
 | Brave | `BRAVE_API_KEY` | Header | 2k queries/mo |
 | Exa | `EXA_API_KEY` | Header | 1k queries/mo |
+| Firecrawl | `FIRECRAWL_API_KEY` | Bearer header | 500 credits free |
 | Jina | `JINA_API_KEY` | Bearer header | Required for search; optional for read |
 | SearXNG | - | None | Self-hosted |
 | SerpAPI | `SERPAPI_API_KEY` | Query param | 100 queries/mo |
@@ -192,6 +193,7 @@ All search providers always return `{ url, title, snippet }`. Optional fields de
 | Provider | Optional fields populated |
 |----------|---------------------------|
 | Exa     | `text` (full page), `highlights[]`, `summary` (AI), `score`, `publishedDate`, `author`, `image`, `favicon` |
+| Firecrawl | `text` (markdown from scraped page) |
 | Jina    | `text` (`content`/`text`), `publishedDate`, `image`, `metadata` |
 | Tavily  | `text` (raw_content, full HTML/markdown), `score`, `publishedDate` |
 | Brave   | `text` (joined `extra_snippets`), `favicon` |
@@ -295,7 +297,7 @@ Read options you can pass to `readUrl`:
 
 ```typescript
 interface ReadUrlOptions {
-  provider?: 'jina' // custom registered provider names are also accepted at runtime
+  provider?: 'jina' | 'firecrawl' // custom registered provider names are also accepted at runtime
   format?: 'markdown' | 'text' | 'html'
   maxTokens?: number
   targetSelector?: string
