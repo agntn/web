@@ -7,7 +7,7 @@ describe('askweb', () => {
   })
 
   it('should list all built-in provider names', () => {
-    expect(builtinProviders).toEqual(['brave', 'exa', 'jina', 'searxng', 'serpapi', 'serpbase', 'tavily'])
+    expect(builtinProviders).toEqual(['brave', 'exa', 'firecrawl', 'jina', 'searxng', 'serpapi', 'serpbase', 'tavily'])
   })
 
   it('should register built-in providers from main entrypoint', () => {

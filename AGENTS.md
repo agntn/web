@@ -57,6 +57,22 @@ test/unit/                # Public behavior and provider contract tests
 - Keep capability provider lists single-source: `src/core/read.ts` exports read-capable names; AI/OpenCode/Pi surfaces import that list instead of mirroring `['jina']`
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
+## ADDING A NEW PROVIDER
+
+Seven files must be updated. Missing any causes a bug (test failure, missing from CLI/Pi, or silent no-op). Checklist:
+
+1. `src/providers/<name>.ts` — implement `SearchProvider`, call `register()` at module level
+2. `src/providers/index.ts` — add `import './<name>.ts'`
+3. `src/core/providers.ts` — add to `builtinProviders` array
+4. `src/core/resolve.ts` — add env var to `envKeys` map (unless self-hosted like searxng)
+5. `src/core/read.ts` — add to `readProviderNames` if provider supports read/scrape
+6. `packages/pi/extensions/askweb.ts` — add to `PROVIDERS` array + update tool descriptions
+7. `test/unit/<name>.ts` + `test/index.test.ts` — add provider tests + update hardcoded expected list
+
+After: `pnpm typecheck && pnpm test:run && pnpm build`
+
+Note: Pi tool descriptions (`PROVIDERS` array, description strings) are frozen at session start. After changing them, a new Pi session is required for the tools to accept the new provider name.
+
 ## ANTI-PATTERNS
 
 - Do not leak provider-specific response formats into public API

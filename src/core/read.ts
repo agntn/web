@@ -3,7 +3,7 @@ import { builtinProviders } from './providers.ts'
 import { EmptyUrlError, ReadNotSupportedError } from './errors.ts'
 import { create } from './registry.ts'
 
-export const readProviderNames = ['jina'] as const
+export const readProviderNames = ['jina', 'firecrawl'] as const
 export type ReadProviderName = typeof readProviderNames[number]
 
 export interface ReadUrlOptions extends ReadOptions {
