@@ -25,6 +25,7 @@ interface FirecrawlSearchResponse {
   success: boolean
   data?: {
     web?: FirecrawlWebResult[]
+    news?: FirecrawlWebResult[]
     warning?: string
   }
 }
@@ -101,7 +102,9 @@ class FirecrawlProvider implements SearchProvider {
         throw new Error('Firecrawl search failed')
       }
 
-      return (response.data?.web ?? []).map(mapSearchResult)
+      const web = response.data?.web ?? []
+      const news = response.data?.news ?? []
+      return (news.length > 0 ? [...web, ...news] : web).map(mapSearchResult)
     }
     catch (error) {
       throw normalizeError(error, 'firecrawl')
@@ -111,7 +114,7 @@ class FirecrawlProvider implements SearchProvider {
   async read(url: string, options?: ReadOptions): Promise<ReadResult> {
     const body: Record<string, unknown> = {
       url,
-      formats: [options?.format ?? 'markdown'],
+      formats: [normalizeFormat(options?.format)],
       onlyMainContent: true,
     }
 
@@ -132,7 +135,7 @@ class FirecrawlProvider implements SearchProvider {
         url,
         title: data.metadata?.title,
         description: data.metadata?.description,
-        content: data.markdown ?? '',
+        content: data.markdown ?? data.html ?? '',
         html: data.html,
         links: data.links,
         image: data.metadata?.ogImage,
@@ -143,6 +146,11 @@ class FirecrawlProvider implements SearchProvider {
       throw normalizeError(error, 'firecrawl')
     }
   }
+}
+
+function normalizeFormat(format?: string): 'markdown' | 'html' {
+  if (format === 'html') return 'html'
+  return 'markdown'
 }
 
 function mapSearchResult(result: FirecrawlWebResult): SearchResult {

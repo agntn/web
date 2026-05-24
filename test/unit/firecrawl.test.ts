@@ -156,6 +156,23 @@ describe('firecrawl provider', () => {
       expect(body.sources).toEqual(['news'])
     })
 
+    it('combines web and news results when news data is present', async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {
+          web: [{ title: 'Web Result', description: 'web desc', url: 'https://example.com/web' }],
+          news: [{ title: 'News Result', description: 'news desc', url: 'https://example.com/news' }],
+        },
+      })
+
+      const provider = create('firecrawl', { apiKey: 'test-key' })
+      const results = await provider.search('test query', { category: 'news' })
+
+      expect(results).toHaveLength(2)
+      expect(results[0].title).toBe('Web Result')
+      expect(results[1].title).toBe('News Result')
+    })
+
     it('does not set sources when category is not news', async () => {
       const provider = create('firecrawl', { apiKey: 'test-key' })
       await provider.search('test query', { category: 'general' })
@@ -232,6 +249,29 @@ describe('firecrawl provider', () => {
 
       const [, body] = mockPostJSON.mock.calls[0]
       expect(body.formats).toEqual(['html'])
+    })
+
+    it('maps text format to markdown', async () => {
+      const provider = create('firecrawl', { apiKey: 'test-key' })
+      await provider.read('https://example.com', { format: 'text' })
+
+      const [, body] = mockPostJSON.mock.calls[0]
+      expect(body.formats).toEqual(['markdown'])
+    })
+
+    it('falls back to html content when markdown is missing', async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {
+          html: '<p>Only HTML</p>',
+          metadata: { title: 'Test' },
+        },
+      })
+
+      const provider = create('firecrawl', { apiKey: 'test-key' })
+      const result = await provider.read('https://example.com', { format: 'html' })
+
+      expect(result.content).toBe('<p>Only HTML</p>')
     })
 
     it('converts timeout from seconds to milliseconds', async () => {

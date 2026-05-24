@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { detectAvailableProviders, resolveDefaultProvider, listProviders } from '../../src/core/resolve.ts'
 import '../../src/providers/index.ts'
 
-const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY', 'SERPBASE_API_KEY'] as const
+const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'FIRECRAWL_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY', 'SERPBASE_API_KEY'] as const
 
 describe('resolve', () => {
   const savedEnv: Record<string, string | undefined> = {}

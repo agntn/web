@@ -61,7 +61,7 @@ test/unit/                # Public behavior and provider contract tests
 
 Seven files must be updated. Missing any causes a bug (test failure, missing from CLI/Pi, or silent no-op). Checklist:
 
-1. `src/providers/<name>.ts` — implement `SearchProvider`, call `register()` at module level
+1. `src/providers/<name>.ts` — implement provider, call `register()` at module level; support search, read, or both
 2. `src/providers/index.ts` — add `import './<name>.ts'`
 3. `src/core/providers.ts` — add to `builtinProviders` array
 4. `src/core/resolve.ts` — add env var to `envKeys` map (unless self-hosted like searxng)
