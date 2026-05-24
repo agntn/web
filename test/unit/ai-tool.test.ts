@@ -62,7 +62,7 @@ const searxngResponse = {
 }
 
 const savedEnv: Record<string, string | undefined> = {}
-const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY', 'SERPBASE_API_KEY']
+const envKeys = ['EXA_API_KEY', 'BRAVE_API_KEY', 'FIRECRAWL_API_KEY', 'JINA_API_KEY', 'TAVILY_API_KEY', 'SERPAPI_API_KEY', 'SERPBASE_API_KEY']
 
 describe('searchTool', () => {
   beforeEach(() => {

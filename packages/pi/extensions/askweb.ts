@@ -52,7 +52,7 @@ function loadAskweb(): Promise<AskwebModule> {
   return askwebModulePromise
 }
 
-const PROVIDERS = ["auto", "all", "brave", "exa", "jina", "searxng", "serpapi", "serpbase", "tavily"] as const
+const PROVIDERS = ["auto", "all", "brave", "exa", "firecrawl", "jina", "searxng", "serpapi", "serpbase", "tavily"] as const
 const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) picks the first available provider from env. Use "all" to query every configured provider in parallel.`
 const READ_PROVIDER_HINT = "Read provider to use. Defaults to Jina and is validated against askweb.readProviderNames at execution time."
 
@@ -132,7 +132,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
     name: "askweb",
     label: "Askweb Search",
     description:
-      "Read-only/open-world network search: query one configured provider (Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
+      "Read-only/open-world network search: query one configured provider (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Firecrawl adds markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
     promptSnippet:
       "Search the web with askweb. Use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
@@ -234,7 +234,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
     name: "askweb_read",
     label: "Askweb Read",
     description:
-      "Read-only/open-world network fetch: read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai). Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.",
+      "Read-only/open-world network fetch: read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai); Firecrawl is also available for JS-rendered pages, PDFs, and structured extraction. Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.",
     promptSnippet: "Read a URL with askweb_read when page content is needed, not just search results.",
     promptGuidelines: [
       "Use askweb_read after search when the user needs the contents of a specific URL.",
