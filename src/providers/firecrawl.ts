@@ -104,7 +104,8 @@ class FirecrawlProvider implements SearchProvider {
 
       const web = response.data?.web ?? []
       const news = response.data?.news ?? []
-      return (news.length > 0 ? [...web, ...news] : web).map(mapSearchResult)
+      const allResults = news.length > 0 ? [...web, ...news] : web
+      return allResults.slice(0, clampMaxResults(options?.maxResults)).map(mapSearchResult)
     }
     catch (error) {
       throw normalizeError(error, 'firecrawl')

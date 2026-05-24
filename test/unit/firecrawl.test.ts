@@ -173,6 +173,21 @@ describe('firecrawl provider', () => {
       expect(results[1].title).toBe('News Result')
     })
 
+    it('slices combined results to maxResults', async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {
+          web: Array.from({ length: 5 }, (_, i) => ({ title: `Web ${i}`, description: '', url: `https://example.com/w${i}` })),
+          news: Array.from({ length: 5 }, (_, i) => ({ title: `News ${i}`, description: '', url: `https://example.com/n${i}` })),
+        },
+      })
+
+      const provider = create('firecrawl', { apiKey: 'test-key' })
+      const results = await provider.search('test query', { category: 'news', maxResults: 5 })
+
+      expect(results).toHaveLength(5)
+    })
+
     it('does not set sources when category is not news', async () => {
       const provider = create('firecrawl', { apiKey: 'test-key' })
       await provider.search('test query', { category: 'general' })
