@@ -1,6 +1,6 @@
 import type { SearchResult, SearchOptions } from './types.ts'
 import { UnknownProviderError, NoProviderConfiguredError, NoProviderAvailableError, EmptyQueryError, validateDateFilters } from './errors.ts'
-import { create, has } from './registry.ts'
+import { createSearchProvider, has } from './registry.ts'
 import { detectAvailableProviders, detectAvailableProvidersAsync } from './resolve.ts'
 
 export interface SearchAllOptions extends SearchOptions {
@@ -67,7 +67,7 @@ export async function searchAllDetailed(query: string, options?: SearchAllOption
 
   const settled = await Promise.allSettled(
     providerNames.map(async (name) => {
-      const provider = create(name)
+      const provider = createSearchProvider(name)
       const results = await provider.search(query, searchOptions)
       return results.map(result => ({ ...result, provider: name }))
     }),
@@ -93,6 +93,7 @@ export async function searchAllDetailed(query: string, options?: SearchAllOption
     errors,
   }
 }
+
 
 
 

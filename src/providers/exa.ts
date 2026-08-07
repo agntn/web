@@ -1,6 +1,5 @@
-import type { SearchResult, SearchOptions, SearchProvider, ProviderConfig, ProviderFactory } from '../core/types.ts'
-import { defaultClient } from '../core/client.ts'
-import type { Client } from '../core/client.ts'
+import type { SearchResult, SearchOptions, ProviderConfig } from '../core/types.ts'
+import { Provider } from '../core/provider.ts'
 import { AuthError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
@@ -36,23 +35,19 @@ interface ExaSearchResponse {
   results: ExaResult[]
 }
 
-class ExaProvider implements SearchProvider {
-  private readonly client: Client
-  private readonly baseURL: string
+class ExaProvider extends Provider {
+  static readonly providerName = 'exa'
+  static readonly defaultBaseURL = 'https://api.exa.ai'
+
   private readonly apiKey: string
 
   constructor(config: ProviderConfig) {
+    super(config, ExaProvider)
     if (!config.apiKey) {
       throw new AuthError('Missing API key for Exa. Set EXA_API_KEY', 'exa')
     }
 
-    this.client = defaultClient()
-    this.baseURL = config.baseURL ?? 'https://api.exa.ai'
     this.apiKey = config.apiKey
-  }
-
-  name(): string {
-    return 'exa'
   }
 
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
@@ -97,6 +92,4 @@ function mapResult(result: ExaResult): SearchResult {
   }
 }
 
-const factory: ProviderFactory = (config) => new ExaProvider(config)
-
-register('exa', 'https://api.exa.ai', factory)
+register(ExaProvider)

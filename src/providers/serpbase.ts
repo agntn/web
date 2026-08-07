@@ -1,6 +1,5 @@
-import type { SearchResult, SearchOptions, SearchProvider, ProviderConfig, ProviderFactory } from '../core/types.ts'
-import { defaultClient } from '../core/client.ts'
-import type { Client } from '../core/client.ts'
+import type { SearchResult, SearchOptions, ProviderConfig } from '../core/types.ts'
+import { Provider } from '../core/provider.ts'
 import { AskwebError, AuthError, RateLimitError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
@@ -49,23 +48,19 @@ interface SerpBaseSearchResponse {
 
 const SERPBASE_MAX_RESULTS = 20
 
-class SerpBaseProvider implements SearchProvider {
-  private readonly client: Client
-  private readonly baseURL: string
+class SerpBaseProvider extends Provider {
+  static readonly providerName = 'serpbase'
+  static readonly defaultBaseURL = 'https://api.serpbase.dev'
+
   private readonly apiKey: string
 
   constructor(config: ProviderConfig) {
+    super(config, SerpBaseProvider)
     if (!config.apiKey) {
       throw new AuthError('Missing API key for SerpBase. Set SERPBASE_API_KEY', 'serpbase')
     }
 
-    this.client = defaultClient()
-    this.baseURL = config.baseURL ?? 'https://api.serpbase.dev'
     this.apiKey = config.apiKey
-  }
-
-  name(): string {
-    return 'serpbase'
   }
 
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
@@ -166,6 +161,4 @@ function mapResult(result: SerpBaseResult, response: SerpBaseSearchResponse): Se
   }
 }
 
-const factory: ProviderFactory = (config) => new SerpBaseProvider(config)
-
-register('serpbase', 'https://api.serpbase.dev', factory)
+register(SerpBaseProvider)

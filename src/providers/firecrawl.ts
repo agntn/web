@@ -1,6 +1,5 @@
-import type { SearchResult, SearchOptions, ReadResult, ReadOptions, SearchProvider, ProviderConfig, ProviderFactory } from '../core/types.ts'
-import { defaultClient } from '../core/client.ts'
-import type { Client } from '../core/client.ts'
+import type { SearchResult, SearchOptions, ReadResult, ReadOptions, ProviderConfig } from '../core/types.ts'
+import { Provider } from '../core/provider.ts'
 import { AuthError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
@@ -55,23 +54,22 @@ function clampMaxResults(max?: number): number {
   return Math.min(Math.max(max ?? 10, 1), FIRECRAWL_MAX_RESULTS)
 }
 
-class FirecrawlProvider implements SearchProvider {
-  private readonly client: Client
-  private readonly baseURL: string
+class FirecrawlProvider extends Provider {
+  static readonly providerName = 'firecrawl'
+  static readonly defaultBaseURL = 'https://api.firecrawl.dev'
+
   private readonly apiKey: string
 
   constructor(config: ProviderConfig) {
+    super({
+      ...config,
+      baseURL: config.baseURL?.replace(/\/+$/, ''),
+    }, FirecrawlProvider)
     if (!config.apiKey) {
       throw new AuthError('Missing API key for Firecrawl. Set FIRECRAWL_API_KEY', 'firecrawl')
     }
 
-    this.client = defaultClient()
-    this.baseURL = (config.baseURL ?? 'https://api.firecrawl.dev').replace(/\/+$/, '')
     this.apiKey = config.apiKey
-  }
-
-  name(): string {
-    return 'firecrawl'
   }
 
   private authHeaders(): Record<string, string> {
@@ -163,6 +161,4 @@ function mapSearchResult(result: FirecrawlWebResult): SearchResult {
   }
 }
 
-const factory: ProviderFactory = (config) => new FirecrawlProvider(config)
-
-register('firecrawl', 'https://api.firecrawl.dev', factory)
+register(FirecrawlProvider)

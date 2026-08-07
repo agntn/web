@@ -14,7 +14,7 @@ vi.mock('../../src/core/client.ts', () => ({
   })),
 }))
 
-import { create, has } from '../../src/core/registry.ts'
+import { createSearchProvider, has } from '../../src/core/registry.ts'
 import { AskwebError, AuthError, RateLimitError } from '../../src/core/errors.ts'
 import type { SearchResult } from '../../src/core/types.ts'
 
@@ -58,29 +58,29 @@ describe('serpbase provider', () => {
 
   describe('create', () => {
     it('creates provider with apiKey', () => {
-      expect(() => create('serpbase', { apiKey: 'test-key' })).not.toThrow()
+      expect(() => createSearchProvider('serpbase', { apiKey: 'test-key' })).not.toThrow()
     })
 
     it('creates provider with env api key', () => {
       process.env.SERPBASE_API_KEY = 'env-key'
-      expect(() => create('serpbase')).not.toThrow()
+      expect(() => createSearchProvider('serpbase')).not.toThrow()
     })
 
     it('throws AuthError without apiKey and without env var', () => {
-      expect(() => create('serpbase', {})).toThrow(AuthError)
+      expect(() => createSearchProvider('serpbase', {})).toThrow(AuthError)
     })
   })
 
-  describe('name()', () => {
+  describe('name', () => {
     it('returns serpbase', () => {
-      const provider = create('serpbase', { apiKey: 'test-key' })
-      expect(provider.name()).toBe('serpbase')
+      const provider = createSearchProvider('serpbase', { apiKey: 'test-key' })
+      expect(provider.name).toBe('serpbase')
     })
   })
 
   describe('search()', () => {
     it('calls postJSON with Google search endpoint, body, and X-API-Key header', async () => {
-      const provider = create('serpbase', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpbase', { apiKey: 'test-key' })
       await provider.search('test query')
 
       expect(mockPostJSON).toHaveBeenCalledOnce()
@@ -92,7 +92,7 @@ describe('serpbase provider', () => {
     })
 
     it('maps organic result fields correctly', async () => {
-      const provider = create('serpbase', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpbase', { apiKey: 'test-key' })
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results).toHaveLength(1)
@@ -116,7 +116,7 @@ describe('serpbase provider', () => {
         ],
       })
 
-      const provider = create('serpbase', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpbase', { apiKey: 'test-key' })
       const results = await provider.search('test query', { maxResults: 1 })
 
       expect(results).toHaveLength(1)
@@ -141,7 +141,7 @@ describe('serpbase provider', () => {
         }],
       })
 
-      const provider = create('serpbase', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpbase', { apiKey: 'test-key' })
       const results = await provider.search('image query', { category: 'images' })
 
       const [url] = mockPostJSON.mock.calls[0]
@@ -162,7 +162,7 @@ describe('serpbase provider', () => {
         search_type: 'search',
       })
 
-      const provider = create('serpbase', { apiKey: 'bad-key' })
+      const provider = createSearchProvider('serpbase', { apiKey: 'bad-key' })
 
       await expect(provider.search('test query')).rejects.toThrow(AuthError)
     })
@@ -177,7 +177,7 @@ describe('serpbase provider', () => {
         search_type: 'search',
       })
 
-      const provider = create('serpbase', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpbase', { apiKey: 'test-key' })
 
       await expect(provider.search('test query')).rejects.toThrow(RateLimitError)
     })
@@ -192,7 +192,7 @@ describe('serpbase provider', () => {
         search_type: 'search',
       })
 
-      const provider = create('serpbase', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpbase', { apiKey: 'test-key' })
 
       await expect(provider.search('test query')).rejects.toThrow(AskwebError)
     })

@@ -2,7 +2,7 @@ import type { Plugin } from '@opencode-ai/plugin'
 import { tool } from '@opencode-ai/plugin'
 import { encode } from '@toon-format/toon'
 import { builtinProviders } from './core/providers.ts'
-import { create } from './core/registry.ts'
+import { createSearchProvider } from './core/registry.ts'
 import { searchAll } from './core/all.ts'
 import { readProviderNames, readUrl } from './core/read.ts'
 import { resolveDefaultProvider, listProviders } from './core/resolve.ts'
@@ -28,7 +28,7 @@ const AskwebPlugin: Plugin = async () => ({
         }
 
         const name = providerName ?? resolveDefaultProvider()
-        return encode(await create(name).search(query, { maxResults }))
+        return encode(await createSearchProvider(name).search(query, { maxResults }))
       },
     }),
     askweb_read: tool({

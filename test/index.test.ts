@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { builtinProviders, create, readUrl, version } from '../src/index.ts'
+import { Provider, builtinProviders, create, createReadProvider, createSearchProvider, readUrl, version, ReadNotSupportedError } from '../src/index.ts'
 
 describe('askweb', () => {
   it('should export version matching package.json', () => {
@@ -15,6 +15,17 @@ describe('askweb', () => {
       const config = provider === 'searxng' || provider === 'jina' ? undefined : { apiKey: 'test-api-key' }
       expect(() => create(provider, config)).not.toThrow()
     }
+  })
+
+  it('should export the abstract Provider base class', () => {
+    expect(Provider).toBeTypeOf('function')
+    expect(create('searxng')).toBeInstanceOf(Provider)
+  })
+
+  it('should export capability-aware provider constructors', () => {
+    expect(createSearchProvider('searxng').name).toBe('searxng')
+    expect(createReadProvider('jina').name).toBe('jina')
+    expect(() => createReadProvider('searxng')).toThrow(ReadNotSupportedError)
   })
 
   it('should export readUrl', () => {
