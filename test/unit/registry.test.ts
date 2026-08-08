@@ -18,6 +18,7 @@ describe('registry', () => {
   // Use unique names per test suite to avoid collisions with module-level Maps.
   const testProviderName = `testprovider${Math.random().toString(36).slice(2)}`
   const testProviderName2 = `testprovider${Math.random().toString(36).slice(2)}`
+  const testProviderName3 = `testprovider${Math.random().toString(36).slice(2)}`
   const envVarName = `${testProviderName.toUpperCase()}_API_KEY`
 
   class MockProvider extends Provider {
@@ -45,7 +46,7 @@ describe('registry', () => {
   }
 
   class ReadOnlyProvider extends Provider {
-    static readonly providerName = testProviderName2
+    static readonly providerName = testProviderName3
     static readonly defaultBaseURL = 'https://reader.example.com'
 
     constructor(config: ProviderConfig) {
@@ -184,7 +185,7 @@ describe('registry', () => {
     it('rejects a read-only provider when search is required', () => {
       register(ReadOnlyProvider)
 
-      expect(() => createSearchProvider(testProviderName2)).toThrow(SearchNotSupportedError)
+      expect(() => createSearchProvider(testProviderName3)).toThrow(SearchNotSupportedError)
     })
   })
 })
