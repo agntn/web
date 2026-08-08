@@ -47,10 +47,7 @@ class JinaProvider extends Provider {
   private readonly apiKey?: string
 
   constructor(config: ProviderConfig) {
-    super({
-      ...config,
-      baseURL: config.baseURL?.replace(/\/+$/, ''),
-    }, JinaProvider)
+    super(config, JinaProvider)
     this.searchBaseURL = this.baseURL
     this.readBaseURL = (config.readBaseURL ?? deriveReadBaseURL(this.searchBaseURL)).replace(/\/+$/, '')
     assertProviderBaseURL(this.readBaseURL, JinaProvider.providerName)

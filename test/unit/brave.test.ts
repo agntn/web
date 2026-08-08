@@ -78,6 +78,17 @@ describe('brave provider', () => {
       expect(headers).toEqual({ 'X-Subscription-Token': 'test-key' })
     })
 
+    it('normalizes a trailing slash in custom baseURL', async () => {
+      const provider = createSearchProvider('brave', {
+        apiKey: 'test-key',
+        baseURL: 'https://custom.example.com/',
+      })
+      await provider.search('test query')
+
+      const [url] = mockGetJSON.mock.calls[0]
+      expect(url).toContain('https://custom.example.com/res/v1/web/search')
+    })
+
     it('maps result fields correctly', async () => {
       const provider = createSearchProvider('brave', { apiKey: 'test-key' })
       const results: SearchResult[] = await provider.search('test query')

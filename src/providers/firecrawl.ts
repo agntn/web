@@ -61,10 +61,7 @@ class FirecrawlProvider extends Provider {
   private readonly apiKey: string
 
   constructor(config: ProviderConfig) {
-    super({
-      ...config,
-      baseURL: config.baseURL?.replace(/\/+$/, ''),
-    }, FirecrawlProvider)
+    super(config, FirecrawlProvider)
     if (!config.apiKey) {
       throw new AuthError('Missing API key for Firecrawl. Set FIRECRAWL_API_KEY', 'firecrawl')
     }

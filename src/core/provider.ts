@@ -19,8 +19,9 @@ export abstract class Provider {
 
   protected constructor(config: ProviderConfig, provider: Pick<ProviderConstructor, 'providerName' | 'defaultBaseURL'>) {
     this.#name = provider.providerName
-    this.baseURL = config.baseURL ?? provider.defaultBaseURL
-    assertProviderBaseURL(this.baseURL, this.name)
+    const baseURL = config.baseURL ?? provider.defaultBaseURL
+    assertProviderBaseURL(baseURL, this.name)
+    this.baseURL = baseURL.replace(/\/+$/, '')
     this.client = defaultClient()
   }
 }
