@@ -14,7 +14,7 @@ vi.mock('../../src/core/client.ts', () => ({
   })),
 }))
 
-import { create, has } from '../../src/core/registry.ts'
+import { createSearchProvider, has } from '../../src/core/registry.ts'
 import { AuthError } from '../../src/core/errors.ts'
 import type { SearchResult } from '../../src/core/types.ts'
 
@@ -50,24 +50,24 @@ describe('brave provider', () => {
 
   describe('create', () => {
     it('creates provider with apiKey', () => {
-      expect(() => create('brave', { apiKey: 'test-key' })).not.toThrow()
+      expect(() => createSearchProvider('brave', { apiKey: 'test-key' })).not.toThrow()
     })
 
     it('throws AuthError without apiKey and without env var', () => {
-      expect(() => create('brave', {})).toThrow(AuthError)
+      expect(() => createSearchProvider('brave', {})).toThrow(AuthError)
     })
   })
 
-  describe('name()', () => {
+  describe('name', () => {
     it('returns brave', () => {
-      const provider = create('brave', { apiKey: 'test-key' })
-      expect(provider.name()).toBe('brave')
+      const provider = createSearchProvider('brave', { apiKey: 'test-key' })
+      expect(provider.name).toBe('brave')
     })
   })
 
   describe('search()', () => {
     it('calls getJSON with correct url and headers', async () => {
-      const provider = create('brave', { apiKey: 'test-key' })
+      const provider = createSearchProvider('brave', { apiKey: 'test-key' })
       await provider.search('test query')
 
       expect(mockGetJSON).toHaveBeenCalledOnce()
@@ -78,8 +78,19 @@ describe('brave provider', () => {
       expect(headers).toEqual({ 'X-Subscription-Token': 'test-key' })
     })
 
+    it('normalizes a trailing slash in custom baseURL', async () => {
+      const provider = createSearchProvider('brave', {
+        apiKey: 'test-key',
+        baseURL: 'https://custom.example.com/',
+      })
+      await provider.search('test query')
+
+      const [url] = mockGetJSON.mock.calls[0]
+      expect(url).toContain('https://custom.example.com/res/v1/web/search')
+    })
+
     it('maps result fields correctly', async () => {
-      const provider = create('brave', { apiKey: 'test-key' })
+      const provider = createSearchProvider('brave', { apiKey: 'test-key' })
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results).toHaveLength(1)
@@ -91,7 +102,7 @@ describe('brave provider', () => {
     })
 
     it('maps maxResults to count query param', async () => {
-      const provider = create('brave', { apiKey: 'test-key' })
+      const provider = createSearchProvider('brave', { apiKey: 'test-key' })
       await provider.search('test query', { maxResults: 5 })
 
       const [url] = mockGetJSON.mock.calls[0]
@@ -103,7 +114,7 @@ describe('brave provider', () => {
         web: undefined,
       })
 
-      const provider = create('brave', { apiKey: 'test-key' })
+      const provider = createSearchProvider('brave', { apiKey: 'test-key' })
       const results = await provider.search('query')
 
       expect(results).toEqual([])
@@ -124,7 +135,7 @@ describe('brave provider', () => {
         },
       })
 
-      const provider = create('brave', { apiKey: 'test-key' })
+      const provider = createSearchProvider('brave', { apiKey: 'test-key' })
       const results = await provider.search('query')
 
       expect(results[0].text).toBe('Snippet 1\nSnippet 2\nSnippet 3')

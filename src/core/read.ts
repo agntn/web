@@ -1,7 +1,7 @@
 import type { ReadOptions, ReadResult } from './types.ts'
 import { builtinProviders } from './providers.ts'
 import { EmptyUrlError, ReadNotSupportedError } from './errors.ts'
-import { create } from './registry.ts'
+import { createReadProvider } from './registry.ts'
 
 export const readProviderNames = ['jina', 'firecrawl'] as const
 export type ReadProviderName = typeof readProviderNames[number]
@@ -24,13 +24,10 @@ export async function readUrl(url: string, options?: ReadUrlOptions): Promise<Re
     throw new ReadNotSupportedError(providerName)
   }
 
-  const provider = create(providerName)
-  if (typeof provider.read !== 'function') {
-    throw new ReadNotSupportedError(providerName)
-  }
-
+  const provider = createReadProvider(providerName)
   return provider.read(trimmedUrl, readOptions)
 }
+
 
 function isBuiltinProvider(name: string): boolean {
   return (builtinProviders as readonly string[]).includes(name)

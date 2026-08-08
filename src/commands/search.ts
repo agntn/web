@@ -28,9 +28,9 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    const { create } = await import('../core/registry.ts')
+    const { createSearchProvider } = await import('../core/registry.ts')
     const { resolveDefaultProvider } = await import('../core/resolve.ts')
-    const { AuthError, UnknownProviderError, NoProviderConfiguredError } = await import('../core/errors.ts')
+    const { AuthError, SearchNotSupportedError, UnknownProviderError, NoProviderConfiguredError } = await import('../core/errors.ts')
     let providerName = args.provider
 
     try {
@@ -47,7 +47,7 @@ export default defineCommand({
 
       providerName = args.provider || resolveDefaultProvider()
       await import('../providers/index.ts')
-      const provider = create(providerName, {})
+      const provider = createSearchProvider(providerName, {})
       const results = await provider.search(args.query, {
         maxResults: maxResults.value,
       })
@@ -79,6 +79,10 @@ export default defineCommand({
         const authProvider = providerName || error.provider
         consola.error(`Authentication failed for provider "${authProvider}".`)
         consola.info(`Set the ${authProvider.toUpperCase()}_API_KEY environment variable.`)
+        process.exit(1)
+      }
+      if (error instanceof SearchNotSupportedError) {
+        consola.error(`Provider "${error.provider}" does not support web search.`)
         process.exit(1)
       }
       if (error instanceof UnknownProviderError) {

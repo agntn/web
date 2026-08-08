@@ -1,6 +1,5 @@
-import type { SearchResult, SearchOptions, SearchProvider, ProviderConfig, ProviderFactory } from '../core/types.ts'
-import { defaultClient } from '../core/client.ts'
-import type { Client } from '../core/client.ts'
+import type { SearchResult, SearchOptions, ProviderConfig } from '../core/types.ts'
+import { Provider } from '../core/provider.ts'
 import { AuthError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
@@ -24,23 +23,19 @@ interface SerpApiSearchResponse {
   organic_results?: SerpApiResult[]
 }
 
-class SerpApiProvider implements SearchProvider {
-  private readonly client: Client
-  private readonly baseURL: string
+class SerpApiProvider extends Provider {
+  static readonly providerName = 'serpapi'
+  static readonly defaultBaseURL = 'https://serpapi.com'
+
   private readonly apiKey: string
 
   constructor(config: ProviderConfig) {
+    super(config, SerpApiProvider)
     if (!config.apiKey) {
       throw new AuthError('Missing API key for SerpAPI. Set SERPAPI_API_KEY', 'serpapi')
     }
 
-    this.client = defaultClient()
-    this.baseURL = config.baseURL ?? 'https://serpapi.com'
     this.apiKey = config.apiKey
-  }
-
-  name(): string {
-    return 'serpapi'
   }
 
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
@@ -71,6 +66,4 @@ function mapResult(result: SerpApiResult): SearchResult {
   }
 }
 
-const factory: ProviderFactory = (config) => new SerpApiProvider(config)
-
-register('serpapi', 'https://serpapi.com', factory)
+register(SerpApiProvider)

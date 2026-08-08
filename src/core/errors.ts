@@ -82,6 +82,27 @@ export class EmptyUrlError extends AskwebError {
   }
 }
 
+export class InvalidProviderUrlError extends AskwebError {
+  readonly provider: string
+
+  constructor(provider: string) {
+    super(`Invalid base URL for provider "${provider}": expected an absolute http or https URL`)
+    this.name = 'InvalidProviderUrlError'
+    this.provider = provider
+  }
+}
+
+/** Thrown when a provider does not implement the search capability. */
+export class SearchNotSupportedError extends AskwebError {
+  readonly provider: string
+
+  constructor(provider: string) {
+    super(`Provider does not support search: ${provider}`)
+    this.name = 'SearchNotSupportedError'
+    this.provider = provider
+  }
+}
+
 /** Thrown when a provider does not implement the read capability. */
 export class ReadNotSupportedError extends AskwebError {
   readonly provider: string

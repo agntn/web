@@ -4,13 +4,15 @@ export { version } from './version.ts'
 
 export { builtinProviders, type WebSearchProviderName } from './core/providers.ts'
 
-export type { SearchResult, SearchOptions, ReadResult, ReadOptions, SearchProvider, ProviderConfig, ProviderFactory, ClientOptions } from './core/types.ts'
+export type { SearchResult, SearchOptions, ReadResult, ReadOptions, ProviderConfig, ClientOptions } from './core/types.ts'
+export { Provider, isSearchProvider, isReadProvider, isAvailabilityProvider } from './core/provider.ts'
+export type { ProviderConstructor, SearchProvider, ReadProvider, AvailabilityProvider } from './core/provider.ts'
 
-export { AskwebError, HTTPError, AuthError, RateLimitError, UnknownProviderError, NoProviderConfiguredError, NoProviderAvailableError, EmptyQueryError, EmptyUrlError, ReadNotSupportedError, InvalidDateFilterError, normalizeError, validateDateFilters } from './core/errors.ts'
+export { AskwebError, HTTPError, AuthError, RateLimitError, UnknownProviderError, InvalidProviderUrlError, SearchNotSupportedError, NoProviderConfiguredError, NoProviderAvailableError, EmptyQueryError, EmptyUrlError, ReadNotSupportedError, InvalidDateFilterError, normalizeError, validateDateFilters } from './core/errors.ts'
 
 export { Client, defaultClient } from './core/client.ts'
 
-export { register, create, providers, has } from './core/registry.ts'
+export { register, create, createSearchProvider, createReadProvider, providers, has } from './core/registry.ts'
 
 export { searchAll, searchAllDetailed } from './core/all.ts'
 export type { SearchAllOptions, SearchAllResult, SearchAllResponse, ProviderError } from './core/all.ts'

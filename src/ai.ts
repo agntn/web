@@ -1,7 +1,7 @@
 import { tool } from 'ai'
 import { z } from 'zod'
 import { builtinProviders } from './core/providers.ts'
-import { create } from './core/registry.ts'
+import { createSearchProvider } from './core/registry.ts'
 import { searchAll } from './core/all.ts'
 import { readProviderNames, readUrl } from './core/read.ts'
 import { EmptyQueryError, EmptyUrlError } from './core/errors.ts'
@@ -34,7 +34,7 @@ export const searchTool = tool({
     }
 
     const name = providerName ?? resolveDefaultProvider()
-    return create(name).search(query, searchOptions)
+    return createSearchProvider(name).search(query, searchOptions)
   },
 })
 

@@ -1,6 +1,5 @@
-import type { SearchResult, SearchOptions, SearchProvider, ProviderConfig, ProviderFactory } from '../core/types.ts'
-import { defaultClient } from '../core/client.ts'
-import type { Client } from '../core/client.ts'
+import type { SearchResult, SearchOptions, ProviderConfig } from '../core/types.ts'
+import { Provider } from '../core/provider.ts'
 import { AuthError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
@@ -30,23 +29,19 @@ interface TavilySearchResponse {
   query: string
 }
 
-class TavilyProvider implements SearchProvider {
-  private readonly client: Client
-  private readonly baseURL: string
+class TavilyProvider extends Provider {
+  static readonly providerName = 'tavily'
+  static readonly defaultBaseURL = 'https://api.tavily.com'
+
   private readonly apiKey: string
 
   constructor(config: ProviderConfig) {
+    super(config, TavilyProvider)
     if (!config.apiKey) {
       throw new AuthError('Missing API key for Tavily. Set TAVILY_API_KEY', 'tavily')
     }
 
-    this.client = defaultClient()
-    this.baseURL = config.baseURL ?? 'https://api.tavily.com'
     this.apiKey = config.apiKey
-  }
-
-  name(): string {
-    return 'tavily'
   }
 
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
@@ -84,6 +79,4 @@ function mapResult(result: TavilyResult, answer: string | undefined, isFirst: bo
   }
 }
 
-const factory: ProviderFactory = (config) => new TavilyProvider(config)
-
-register('tavily', 'https://api.tavily.com', factory)
+register(TavilyProvider)

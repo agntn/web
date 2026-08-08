@@ -14,7 +14,7 @@ vi.mock('../../src/core/client.ts', () => ({
   })),
 }))
 
-import { create, has } from '../../src/core/registry.ts'
+import { createSearchProvider, has } from '../../src/core/registry.ts'
 import { AuthError } from '../../src/core/errors.ts'
 import type { SearchResult } from '../../src/core/types.ts'
 
@@ -54,24 +54,24 @@ describe('serpapi provider', () => {
 
   describe('create', () => {
     it('creates provider with apiKey', () => {
-      expect(() => create('serpapi', { apiKey: 'test-key' })).not.toThrow()
+      expect(() => createSearchProvider('serpapi', { apiKey: 'test-key' })).not.toThrow()
     })
 
     it('throws AuthError without apiKey and without env var', () => {
-      expect(() => create('serpapi', {})).toThrow(AuthError)
+      expect(() => createSearchProvider('serpapi', {})).toThrow(AuthError)
     })
   })
 
-  describe('name()', () => {
+  describe('name', () => {
     it('returns serpapi', () => {
-      const provider = create('serpapi', { apiKey: 'test-key' })
-      expect(provider.name()).toBe('serpapi')
+      const provider = createSearchProvider('serpapi', { apiKey: 'test-key' })
+      expect(provider.name).toBe('serpapi')
     })
   })
 
   describe('search()', () => {
     it('calls getJSON with URL containing engine, q, api_key, and num parameters', async () => {
-      const provider = create('serpapi', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpapi', { apiKey: 'test-key' })
       await provider.search('test query')
 
       expect(mockGetJSON).toHaveBeenCalledOnce()
@@ -84,7 +84,7 @@ describe('serpapi provider', () => {
     })
 
     it('maps result fields correctly', async () => {
-      const provider = create('serpapi', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpapi', { apiKey: 'test-key' })
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results).toHaveLength(1)
@@ -98,7 +98,7 @@ describe('serpapi provider', () => {
     })
 
     it('maps metadata fields correctly', async () => {
-      const provider = create('serpapi', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpapi', { apiKey: 'test-key' })
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results).toHaveLength(1)
@@ -109,7 +109,7 @@ describe('serpapi provider', () => {
     })
 
     it('maps maxResults option to num query parameter', async () => {
-      const provider = create('serpapi', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpapi', { apiKey: 'test-key' })
       await provider.search('test query', { maxResults: 5 })
 
       const [url] = mockGetJSON.mock.calls[0]
@@ -125,7 +125,7 @@ describe('serpapi provider', () => {
         organic_results: undefined,
       })
 
-      const provider = create('serpapi', { apiKey: 'test-key' })
+      const provider = createSearchProvider('serpapi', { apiKey: 'test-key' })
       const results = await provider.search('query')
 
       expect(results).toEqual([])

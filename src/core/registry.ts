@@ -1,29 +1,35 @@
-import type { SearchProvider, ProviderConfig, ProviderFactory } from './types'
-import { UnknownProviderError } from './errors'
+import type { ProviderConfig } from './types.ts'
+import {
+  Provider,
+  isReadProvider,
+  isSearchProvider,
+  type ProviderConstructor,
+  type ReadProvider,
+  type SearchProvider,
+} from './provider.ts'
+import {
+  ReadNotSupportedError,
+  SearchNotSupportedError,
+  UnknownProviderError,
+} from './errors.ts'
 
-const factories = new Map<string, ProviderFactory>()
-const defaultURLs = new Map<string, string>()
+const providerClasses = new Map<string, ProviderConstructor>()
 
 /**
- * Register a provider factory with the registry.
+ * Register a provider class.
  * Called by providers on import to self-register.
  */
-export function register(
-  name: string,
-  defaultURL: string,
-  factory: ProviderFactory
-): void {
-  factories.set(name, factory)
-  defaultURLs.set(name, defaultURL)
+export function register(provider: ProviderConstructor): void {
+  providerClasses.set(provider.providerName, provider)
 }
 
 /**
  * Create a provider instance by name.
  * Resolves apiKey from config or environment variable (PROVIDER_NAME_API_KEY).
  */
-export function create(name: string, config?: ProviderConfig): SearchProvider {
-  const factory = factories.get(name)
-  if (!factory) {
+export function create(name: string, config?: ProviderConfig): Provider {
+  const ProviderClass = providerClasses.get(name)
+  if (!ProviderClass) {
     throw new UnknownProviderError(name)
   }
 
@@ -31,25 +37,33 @@ export function create(name: string, config?: ProviderConfig): SearchProvider {
     config?.apiKey ||
     process.env[`${name.toUpperCase()}_API_KEY`]
 
-  const resolvedConfig: ProviderConfig = {
+  return new ProviderClass({
     ...config,
     apiKey,
-    baseURL: config?.baseURL || defaultURLs.get(name),
+    baseURL: config?.baseURL || ProviderClass.defaultBaseURL,
+  })
+}
+
+export function createSearchProvider(name: string, config?: ProviderConfig): Provider & SearchProvider {
+  const provider = create(name, config)
+  if (!isSearchProvider(provider)) {
+    throw new SearchNotSupportedError(name)
   }
-
-  return factory(resolvedConfig)
+  return provider
 }
 
-/**
- * List all registered provider names.
- */
+export function createReadProvider(name: string, config?: ProviderConfig): Provider & ReadProvider {
+  const provider = create(name, config)
+  if (!isReadProvider(provider)) {
+    throw new ReadNotSupportedError(name)
+  }
+  return provider
+}
+
 export function providers(): string[] {
-  return Array.from(factories.keys())
+  return Array.from(providerClasses.keys())
 }
 
-/**
- * Check if a provider is registered.
- */
 export function has(name: string): boolean {
-  return factories.has(name)
+  return providerClasses.has(name)
 }

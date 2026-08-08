@@ -14,7 +14,7 @@ vi.mock('../../src/core/client.ts', () => ({
   })),
 }))
 
-import { create, has } from '../../src/core/registry.ts'
+import { createSearchProvider, has } from '../../src/core/registry.ts'
 import { AuthError } from '../../src/core/errors.ts'
 import type { SearchResult } from '../../src/core/types.ts'
 
@@ -49,24 +49,24 @@ describe('tavily provider', () => {
 
   describe('create', () => {
     it('creates provider with apiKey', () => {
-      expect(() => create('tavily', { apiKey: 'test-key' })).not.toThrow()
+      expect(() => createSearchProvider('tavily', { apiKey: 'test-key' })).not.toThrow()
     })
 
     it('throws AuthError without apiKey and without env var', () => {
-      expect(() => create('tavily', {})).toThrow(AuthError)
+      expect(() => createSearchProvider('tavily', {})).toThrow(AuthError)
     })
   })
 
-  describe('name()', () => {
+  describe('name', () => {
     it('returns tavily', () => {
-      const provider = create('tavily', { apiKey: 'test-key' })
-      expect(provider.name()).toBe('tavily')
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
+      expect(provider.name).toBe('tavily')
     })
   })
 
   describe('search()', () => {
     it('calls postJSON with correct url and body containing api_key', async () => {
-      const provider = create('tavily', { apiKey: 'test-key' })
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
       await provider.search('test query')
 
       expect(mockPostJSON).toHaveBeenCalledOnce()
@@ -82,7 +82,7 @@ describe('tavily provider', () => {
     })
 
     it('maps result fields correctly', async () => {
-      const provider = create('tavily', { apiKey: 'test-key' })
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results).toHaveLength(1)
@@ -96,7 +96,7 @@ describe('tavily provider', () => {
     })
 
     it('puts response.answer into first result summary field', async () => {
-      const provider = create('tavily', { apiKey: 'test-key' })
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results[0].summary).toBe('A direct answer from Tavily')
@@ -122,7 +122,7 @@ describe('tavily provider', () => {
         query: 'test query',
       })
 
-      const provider = create('tavily', { apiKey: 'test-key' })
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results[0].summary).toBe('A direct answer from Tavily')
@@ -130,7 +130,7 @@ describe('tavily provider', () => {
     })
 
     it('maps maxResults to max_results in body', async () => {
-      const provider = create('tavily', { apiKey: 'test-key' })
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
       await provider.search('test query', { maxResults: 5 })
 
       const [, body] = mockPostJSON.mock.calls[0]
@@ -138,7 +138,7 @@ describe('tavily provider', () => {
     })
 
     it('passes includeDomains to include_domains in body', async () => {
-      const provider = create('tavily', { apiKey: 'test-key' })
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
       await provider.search('test query', { includeDomains: ['github.com', 'stackoverflow.com'] })
 
       const [, body] = mockPostJSON.mock.calls[0]
@@ -146,7 +146,7 @@ describe('tavily provider', () => {
     })
 
     it('passes excludeDomains to exclude_domains in body', async () => {
-      const provider = create('tavily', { apiKey: 'test-key' })
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
       await provider.search('test query', { excludeDomains: ['reddit.com'] })
 
       const [, body] = mockPostJSON.mock.calls[0]
@@ -159,7 +159,7 @@ describe('tavily provider', () => {
         query: 'test query',
       })
 
-      const provider = create('tavily', { apiKey: 'test-key' })
+      const provider = createSearchProvider('tavily', { apiKey: 'test-key' })
       const results = await provider.search('query')
 
       expect(results).toEqual([])

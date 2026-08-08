@@ -1,6 +1,5 @@
-import type { SearchResult, SearchOptions, SearchProvider, ProviderConfig, ProviderFactory } from '../core/types.ts'
-import { defaultClient } from '../core/client.ts'
-import type { Client } from '../core/client.ts'
+import type { SearchResult, SearchOptions, ProviderConfig } from '../core/types.ts'
+import { Provider } from '../core/provider.ts'
 import { AuthError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
@@ -23,23 +22,19 @@ interface BraveSearchResponse {
   }
 }
 
-class BraveProvider implements SearchProvider {
-  private readonly client: Client
-  private readonly baseURL: string
+class BraveProvider extends Provider {
+  static readonly providerName = 'brave'
+  static readonly defaultBaseURL = 'https://api.search.brave.com'
+
   private readonly apiKey: string
 
   constructor(config: ProviderConfig) {
+    super(config, BraveProvider)
     if (!config.apiKey) {
       throw new AuthError('Missing API key for Brave Search. Set BRAVE_API_KEY', 'brave')
     }
 
-    this.client = defaultClient()
-    this.baseURL = config.baseURL ?? 'https://api.search.brave.com'
     this.apiKey = config.apiKey
-  }
-
-  name(): string {
-    return 'brave'
   }
 
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
@@ -65,6 +60,4 @@ function mapResult(result: BraveResult): SearchResult {
   }
 }
 
-const factory: ProviderFactory = (config) => new BraveProvider(config)
-
-register('brave', 'https://api.search.brave.com', factory)
+register(BraveProvider)

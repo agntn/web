@@ -1,6 +1,5 @@
-import type { SearchResult, SearchOptions, ReadResult, ReadOptions, SearchProvider, ProviderConfig, ProviderFactory } from '../core/types.ts'
-import { defaultClient } from '../core/client.ts'
-import type { Client } from '../core/client.ts'
+import type { SearchResult, SearchOptions, ReadResult, ReadOptions, ProviderConfig } from '../core/types.ts'
+import { Provider, assertProviderBaseURL } from '../core/provider.ts'
 import { AuthError, HTTPError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
@@ -39,21 +38,20 @@ interface JinaReadResponse extends JinaEnvelope {
 
 const JINA_MAX_RESULTS = 20
 
-class JinaProvider implements SearchProvider {
-  private readonly client: Client
+class JinaProvider extends Provider {
+  static readonly providerName = 'jina'
+  static readonly defaultBaseURL = 'https://s.jina.ai'
+
   private readonly searchBaseURL: string
   private readonly readBaseURL: string
   private readonly apiKey?: string
 
   constructor(config: ProviderConfig) {
-    this.client = defaultClient()
-    this.searchBaseURL = (config.baseURL ?? 'https://s.jina.ai').replace(/\/+$/, '')
+    super(config, JinaProvider)
+    this.searchBaseURL = this.baseURL
     this.readBaseURL = (config.readBaseURL ?? deriveReadBaseURL(this.searchBaseURL)).replace(/\/+$/, '')
+    assertProviderBaseURL(this.readBaseURL, JinaProvider.providerName)
     this.apiKey = config.apiKey
-  }
-
-  name(): string {
-    return 'jina'
   }
 
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
@@ -202,6 +200,4 @@ function resultMetadata(result: JinaResult): Record<string, unknown> | undefined
   return Object.keys(metadata).length > 0 ? metadata : undefined
 }
 
-const factory: ProviderFactory = (config) => new JinaProvider(config)
-
-register('jina', 'https://s.jina.ai', factory)
+register(JinaProvider)

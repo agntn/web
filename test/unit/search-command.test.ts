@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { NoProviderConfiguredError, UnknownProviderError } from '../../src/core/errors.ts'
+import { NoProviderConfiguredError, SearchNotSupportedError, UnknownProviderError } from '../../src/core/errors.ts'
 
 const mockLog = vi.fn()
 const mockInfo = vi.fn()
@@ -24,7 +24,7 @@ vi.mock('consola', () => ({
 }))
 
 vi.mock('../../src/core/registry.ts', () => ({
-  create: (name: string, config: Record<string, unknown>) => mockCreate(name, config),
+  createSearchProvider: (name: string, config: Record<string, unknown>) => mockCreate(name, config),
   providers: vi.fn(() => ['brave', 'exa']),
 }))
 
@@ -147,6 +147,19 @@ describe('search command', () => {
     ).rejects.toThrow('__EXIT__')
 
     expect(mockError).toHaveBeenCalledWith('Unknown provider: brave')
+    expect(exitSpy).toHaveBeenCalledWith(1)
+  })
+
+  it('reports providers without search capability', async () => {
+    mockCreate.mockImplementationOnce(() => {
+      throw new SearchNotSupportedError('reader')
+    })
+
+    await expect(
+      runSearch({ provider: 'reader' }),
+    ).rejects.toThrow('__EXIT__')
+
+    expect(mockError).toHaveBeenCalledWith('Provider "reader" does not support web search.')
     expect(exitSpy).toHaveBeenCalledWith(1)
   })
 

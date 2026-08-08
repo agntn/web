@@ -1,6 +1,7 @@
 import { builtinProviders, type WebSearchProviderName } from './providers.ts'
 import { create, has } from './registry.ts'
 import { NoProviderAvailableError, NoProviderConfiguredError } from './errors.ts'
+import { isAvailabilityProvider } from './provider.ts'
 
 const envKeys: Record<string, WebSearchProviderName> = {
   EXA_API_KEY: 'exa',
@@ -52,9 +53,9 @@ export interface ProviderStatus {
   envVar: string | null
   /**
    * Set by {@link listProvidersAsync} when the provider implements
-   * {@link SearchProvider.isAvailable}. `true` = probe succeeded, `false` =
-   * probe failed (host down / unreachable / timeout), `undefined` = no probe
-   * was performed (sync caller) or provider has no probe (trust `configured`).
+   * {@link AvailabilityProvider.isAvailable}. `true` = probe succeeded,
+   * `false` = probe failed (host down / unreachable / timeout), `undefined` =
+   * no reachability probe was performed (trust `configured`).
    */
   reachable?: boolean
 }
@@ -126,7 +127,7 @@ export async function resolveDefaultProviderAsync(): Promise<WebSearchProviderNa
 async function probeConfiguredProvider(name: WebSearchProviderName): Promise<boolean | undefined> {
   try {
     const provider = create(name)
-    if (typeof provider.isAvailable !== 'function') return undefined
+    if (!isAvailabilityProvider(provider)) return undefined
     return await provider.isAvailable()
   }
   catch {

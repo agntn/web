@@ -206,7 +206,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
 
       const resolvedProvider =
         providerName ?? (await askweb.resolveDefaultProviderAsync())
-      const provider = askweb.create(resolvedProvider)
+      const provider = askweb.createSearchProvider(resolvedProvider)
       const results = await provider.search(query, searchOptions)
       const header = buildHeader({
         mode: "single",
@@ -346,7 +346,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
       let results: SearchResult[]
       try {
         results = await askweb
-          .create(providerName)
+          .createSearchProvider(providerName)
           .search(trimmed, { maxResults: DEFAULT_MAX_RESULTS })
       } catch (err) {
         if (ctx.hasUI) {

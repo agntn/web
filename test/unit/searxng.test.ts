@@ -14,7 +14,7 @@ vi.mock('../../src/core/client.ts', () => ({
   })),
 }))
 
-import { create, has } from '../../src/core/registry.ts'
+import { createSearchProvider, has } from '../../src/core/registry.ts'
 import type { SearchResult } from '../../src/core/types.ts'
 
 // Triggers self-registration of searxng provider
@@ -56,18 +56,18 @@ describe('searxng provider', () => {
 
   describe('create', () => {
     it('creates provider without apiKey', () => {
-      expect(() => create('searxng', {})).not.toThrow()
+      expect(() => createSearchProvider('searxng', {})).not.toThrow()
     })
 
     it('creates provider with apiKey (ignores it)', () => {
-      expect(() => create('searxng', { apiKey: 'test-key' })).not.toThrow()
+      expect(() => createSearchProvider('searxng', { apiKey: 'test-key' })).not.toThrow()
     })
   })
 
-  describe('name()', () => {
+  describe('name', () => {
     it('returns searxng', () => {
-      const provider = create('searxng', {})
-      expect(provider.name()).toBe('searxng')
+      const provider = createSearchProvider('searxng', {})
+      expect(provider.name).toBe('searxng')
     })
   })
 
@@ -81,7 +81,7 @@ describe('searxng provider', () => {
       })
       vi.stubGlobal('fetch', fetchMock)
 
-      const provider = create('searxng', {})
+      const provider = createSearchProvider('searxng', {})
       const availability = provider.isAvailable?.()
 
       await vi.advanceTimersByTimeAsync(1999)
@@ -93,7 +93,7 @@ describe('searxng provider', () => {
 
   describe('search()', () => {
     it('calls getJSON with correct URL containing q, format, and pageno', async () => {
-      const provider = create('searxng', {})
+      const provider = createSearchProvider('searxng', {})
       await provider.search('test query')
 
       expect(mockGetJSON).toHaveBeenCalledOnce()
@@ -106,7 +106,7 @@ describe('searxng provider', () => {
     })
 
     it('maps result fields correctly', async () => {
-      const provider = create('searxng', {})
+      const provider = createSearchProvider('searxng', {})
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results).toHaveLength(1)
@@ -120,7 +120,7 @@ describe('searxng provider', () => {
     })
 
     it('maps metadata correctly', async () => {
-      const provider = create('searxng', {})
+      const provider = createSearchProvider('searxng', {})
       const results: SearchResult[] = await provider.search('test query')
 
       expect(results).toHaveLength(1)
@@ -141,14 +141,14 @@ describe('searxng provider', () => {
         query: 'test query',
       })
 
-      const provider = create('searxng', {})
+      const provider = createSearchProvider('searxng', {})
       const results = await provider.search('test query', { maxResults: 2 })
 
       expect(results).toHaveLength(2)
     })
 
     it('adds categories param when category option is provided', async () => {
-      const provider = create('searxng', {})
+      const provider = createSearchProvider('searxng', {})
       await provider.search('test query', { category: 'news' })
 
       const [url] = mockGetJSON.mock.calls[0]
@@ -162,7 +162,7 @@ describe('searxng provider', () => {
         query: 'test query',
       })
 
-      const provider = create('searxng', {})
+      const provider = createSearchProvider('searxng', {})
       const results = await provider.search('query')
 
       expect(results).toEqual([])
@@ -179,7 +179,7 @@ describe('searxng provider', () => {
         query: 'test query',
       })
 
-      const provider = create('searxng', {})
+      const provider = createSearchProvider('searxng', {})
       const results = await provider.search('query')
 
       expect(results[0].image).toBe('https://example.com/thumb.png')
