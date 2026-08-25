@@ -2,6 +2,7 @@ const passthroughFirstArgs = new Set([
   'search',
   'read',
   'providers',
+  'mcp',
 ])
 
 const helpOrVersionFlags = new Set([

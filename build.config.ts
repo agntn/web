@@ -9,15 +9,17 @@ export default defineBuildConfig({
         './src/cli.ts',
         './src/ai.ts',
         './src/opencode.ts',
+        './src/mcp.ts',
       ],
     },
   ],
   hooks: {
     rolldownConfig(config) {
-      config.external = config.external.filter((entry) =>
-        typeof entry === 'string'
-          ? entry !== '@opencode-ai/plugin'
-          : !entry.test('@opencode-ai/plugin/tool'),
+      config.external = config.external.filter(
+        (entry) =>
+          typeof entry === 'string'
+            ? entry !== '@opencode-ai/plugin' && entry !== 'typebox'
+            : !entry.test('@opencode-ai/plugin/tool'),
       )
     },
   },

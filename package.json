@@ -23,6 +23,10 @@
       "types": "./dist/ai.d.mts",
       "import": "./dist/ai.mjs"
     },
+    "./mcp": {
+      "types": "./dist/mcp.d.mts",
+      "import": "./dist/mcp.mjs"
+    },
     "./opencode": {
       "types": "./dist/opencode.d.mts",
       "import": "./dist/opencode.mjs"
@@ -74,15 +78,16 @@
     "ai": "^6.0.116",
     "changelogen": "latest",
     "obuild": "latest",
-    "typebox": "^1.1.38",
     "typescript": "latest",
     "vitest": "latest"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@toon-format/toon": "^2.1.0",
     "citty": "latest",
     "consola": "latest",
     "ofetch": "^1.5.1",
+    "typebox": "^1.1.38",
     "zod": "^4.3.6"
   },
   "peerDependencies": {
