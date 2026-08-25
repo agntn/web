@@ -8,7 +8,7 @@ export type { SearchResult, SearchOptions, ReadResult, ReadOptions, ProviderConf
 export { Provider, isSearchProvider, isReadProvider, isAvailabilityProvider } from './core/provider.ts'
 export type { ProviderConstructor, SearchProvider, ReadProvider, AvailabilityProvider } from './core/provider.ts'
 
-export { AskwebError, HTTPError, AuthError, RateLimitError, UnknownProviderError, InvalidProviderUrlError, SearchNotSupportedError, NoProviderConfiguredError, NoProviderAvailableError, EmptyQueryError, EmptyUrlError, ReadNotSupportedError, InvalidDateFilterError, normalizeError, validateDateFilters } from './core/errors.ts'
+export { WebError, HTTPError, AuthError, RateLimitError, UnknownProviderError, InvalidProviderUrlError, SearchNotSupportedError, NoProviderConfiguredError, NoProviderAvailableError, EmptyQueryError, EmptyUrlError, ReadNotSupportedError, InvalidDateFilterError, normalizeError, validateDateFilters } from './core/errors.ts'
 
 export { Client, defaultClient } from './core/client.ts'
 

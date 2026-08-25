@@ -11,7 +11,7 @@ import type {
   SearchOptions,
   SearchResult,
   WebSearchProviderName,
-} from "askweb"
+} from "@agntn/web"
 
 type SearchSingleDetails = {
   mode: "single"
@@ -41,20 +41,20 @@ type ReadDetails = {
   result: ReadResult
 }
 
-type AskwebModule = typeof import("askweb")
+type WebModule = typeof import("@agntn/web")
 
-let askwebModulePromise: Promise<AskwebModule> | undefined
+let webModulePromise: Promise<WebModule> | undefined
 
-function loadAskweb(): Promise<AskwebModule> {
-  if (!askwebModulePromise) {
-    askwebModulePromise = import("askweb").catch(() => import("../../../src/index.ts"))
+function loadWeb(): Promise<WebModule> {
+  if (!webModulePromise) {
+    webModulePromise = import("@agntn/web").catch(() => import("../../../src/index.ts"))
   }
-  return askwebModulePromise
+  return webModulePromise
 }
 
 const PROVIDERS = ["auto", "all", "brave", "exa", "firecrawl", "jina", "searxng", "serpapi", "serpbase", "tavily"] as const
 const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) picks the first available provider from env. Use "all" to query every configured provider in parallel.`
-const READ_PROVIDER_HINT = "Read provider to use. Defaults to Jina and is validated against askweb.readProviderNames at execution time."
+const READ_PROVIDER_HINT = "Read provider to use. Defaults to Jina and is validated against web.readProviderNames at execution time."
 
 const MAX_RESULTS_HARD_CAP = 20
 const DEFAULT_MAX_RESULTS = 10
@@ -127,16 +127,16 @@ type EmptyParams = Static<typeof emptyParameters>
 type ProviderInput = (typeof PROVIDERS)[number]
 type ReadProviderInput = ReadProviderName
 
-export default function askwebExtension(pi: ExtensionAPI) {
+export default function webExtension(pi: ExtensionAPI) {
   pi.registerTool({
-    name: "askweb",
-    label: "Askweb Search",
+    name: "web_search",
+    label: "Web Search",
     description:
       "Read-only/open-world network search: query one configured provider (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Firecrawl adds markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
     promptSnippet:
-      "Search the web with askweb. Use provider=all to query every configured provider in parallel.",
+      "Search the web with web_search. Use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
-      "Use askweb when the user explicitly asks for fresh web information, news, references, or links.",
+      "Use web_search when the user explicitly asks for fresh web information, news, references, or links.",
       "Prefer a single provider when the user names one; use provider=all when freshness or coverage matters and at least two providers are configured.",
       "For AI-style summaries/highlights/full page text prefer Exa; for Jina Search Foundation results use Jina; for raw full page content prefer Tavily; for classic SERP metadata Brave/SerpAPI/SerpBase/SearXNG are fine.",
       "Pass maxResults conservatively (5-10) unless the user asks for more.",
@@ -174,10 +174,10 @@ export default function askwebExtension(pi: ExtensionAPI) {
         endPublishedDate: params.endPublishedDate,
       })
 
-      const askweb = await loadAskweb()
+      const web = await loadWeb()
 
       if (providerName === "all") {
-        const response = await askweb.searchAllDetailed(query, searchOptions)
+        const response = await web.searchAllDetailed(query, searchOptions)
         const results = response.results
         const okProviders = Array.from(new Set(results.map((r) => r.provider))).sort()
         const header = buildHeader({
@@ -205,8 +205,8 @@ export default function askwebExtension(pi: ExtensionAPI) {
       }
 
       const resolvedProvider =
-        providerName ?? (await askweb.resolveDefaultProviderAsync())
-      const provider = askweb.createSearchProvider(resolvedProvider)
+        providerName ?? (await web.resolveDefaultProviderAsync())
+      const provider = web.createSearchProvider(resolvedProvider)
       const results = await provider.search(query, searchOptions)
       const header = buildHeader({
         mode: "single",
@@ -231,14 +231,14 @@ export default function askwebExtension(pi: ExtensionAPI) {
   })
 
   pi.registerTool({
-    name: "askweb_read",
-    label: "Askweb Read",
+    name: "web_read",
+    label: "Web Read",
     description:
       "Read-only/open-world network fetch: read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai); Firecrawl is also available for JS-rendered pages, PDFs, and structured extraction. Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.",
-    promptSnippet: "Read a URL with askweb_read when page content is needed, not just search results.",
+    promptSnippet: "Read a URL with web_read when page content is needed, not just search results.",
     promptGuidelines: [
-      "Use askweb_read after search when the user needs the contents of a specific URL.",
-      "Use askweb for query-to-URL search; use askweb_read for URL-to-content reading.",
+      "Use web_read after search when the user needs the contents of a specific URL.",
+      "Use web_search for query-to-URL search; use web_read for URL-to-content reading.",
     ],
     parameters: readParameters,
     renderCall(args, theme) {
@@ -250,12 +250,12 @@ export default function askwebExtension(pi: ExtensionAPI) {
         throw new Error("URL cannot be empty")
       }
 
-      const askweb = await loadAskweb()
-      const defaultReadProvider: ReadProviderName = askweb.readProviderNames[0] ?? "jina"
+      const web = await loadWeb()
+      const defaultReadProvider: ReadProviderName = web.readProviderNames[0] ?? "jina"
       const rawProvider = (params.provider ?? defaultReadProvider).trim() || defaultReadProvider
-      if (!isKnownReadProvider(rawProvider, askweb)) {
+      if (!isKnownReadProvider(rawProvider, web)) {
         throw new Error(
-          `Unknown read provider "${rawProvider}". Available: ${askweb.readProviderNames.join(", ")}.`,
+          `Unknown read provider "${rawProvider}". Available: ${web.readProviderNames.join(", ")}.`,
         )
       }
 
@@ -269,7 +269,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
         noCache: params.noCache,
       })
 
-      const result = await askweb.readUrl(url, { provider: rawProvider, ...readOptions })
+      const result = await web.readUrl(url, { provider: rawProvider, ...readOptions })
       const header = `[provider=${rawProvider}] read ${result.url}`
       return {
         content: [{ type: "text", text: withHeader(header, formatReadResult(result)) }],
@@ -285,21 +285,21 @@ export default function askwebExtension(pi: ExtensionAPI) {
   })
 
   pi.registerTool({
-    name: "askweb_providers",
-    label: "Askweb Providers",
+    name: "web_providers",
+    label: "Web Providers",
     description:
       "Read-only/idempotent local/env status: list built-in web search providers and which ones are currently configured via environment variables.",
-    promptSnippet: "List configured askweb providers.",
+    promptSnippet: "List configured web providers.",
     promptGuidelines: [
-      "Use askweb_providers before askweb if it is unclear which providers are available.",
+      "Use web_providers before web_search if it is unclear which providers are available.",
     ],
     parameters: emptyParameters,
     renderCall(_args, theme) {
-      return new Text(theme.fg("toolTitle", theme.bold("askweb_providers")), 0, 0)
+      return new Text(theme.fg("toolTitle", theme.bold("web_providers")), 0, 0)
     },
     async execute(_toolCallId: string, _params: EmptyParams): Promise<AgentToolResult<{ providers: ProviderStatus[] }>> {
-      const askweb = await loadAskweb()
-      const statuses = await askweb.listProvidersAsync()
+      const web = await loadWeb()
+      const statuses = await web.listProvidersAsync()
       const lines = statuses.map((s) => formatProviderStatus(s))
       return {
         content: [
@@ -314,7 +314,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
   })
 
   pi.registerCommand("web", {
-    description: "Search the web with askweb: /web [query]",
+    description: "Search the web: /web [query]",
     handler: async (args, ctx) => {
       if (!ctx.hasUI) {
         return
@@ -328,15 +328,15 @@ export default function askwebExtension(pi: ExtensionAPI) {
       }
 
       const trimmed = query.trim()
-      const askweb = await loadAskweb()
+      const web = await loadWeb()
 
       let providerName: WebSearchProviderName
       try {
-        providerName = await askweb.resolveDefaultProviderAsync()
+        providerName = await web.resolveDefaultProviderAsync()
       } catch (err) {
         if (ctx.hasUI) {
           ctx.ui.notify(
-            `No reachable askweb providers. ${errorMessage(err)}`,
+            `No reachable web providers. ${errorMessage(err)}`,
             "warning",
           )
         }
@@ -345,13 +345,13 @@ export default function askwebExtension(pi: ExtensionAPI) {
 
       let results: SearchResult[]
       try {
-        results = await askweb
+        results = await web
           .createSearchProvider(providerName)
           .search(trimmed, { maxResults: DEFAULT_MAX_RESULTS })
       } catch (err) {
         if (ctx.hasUI) {
           ctx.ui.notify(
-            `askweb ${providerName} failed: ${errorMessage(err)}`,
+            `web ${providerName} failed: ${errorMessage(err)}`,
             "error",
           )
         }
@@ -371,7 +371,7 @@ export default function askwebExtension(pi: ExtensionAPI) {
 
       const labels = results.map(formatResult)
       const selected = await ctx.ui.select(
-        `askweb (${providerName}) — ${trimmed}`,
+        `web (${providerName}) - ${trimmed}`,
         labels,
       )
       if (!selected) {
@@ -388,10 +388,10 @@ export default function askwebExtension(pi: ExtensionAPI) {
   })
 
   pi.registerCommand("web-providers", {
-    description: "List configured askweb providers",
+    description: "List configured web providers",
     handler: async (_args, ctx) => {
-      const askweb = await loadAskweb()
-      const statuses = await askweb.listProvidersAsync()
+      const web = await loadWeb()
+      const statuses = await web.listProvidersAsync()
       if (!ctx.hasUI) return
       ctx.ui.notify(statuses.map(formatProviderStatus).join("\n"), "info")
     },
@@ -402,8 +402,8 @@ function isKnownProvider(name: string): name is ProviderInput {
   return PROVIDERS.some((provider) => provider === name)
 }
 
-function isKnownReadProvider(name: string, askweb: AskwebModule): name is ReadProviderInput {
-  return askweb.readProviderNames.some((provider) => provider === name)
+function isKnownReadProvider(name: string, web: WebModule): name is ReadProviderInput {
+  return web.readProviderNames.some((provider) => provider === name)
 }
 
 function normalizeReadFormat(format: string | undefined): ReadOptions["format"] {
@@ -512,7 +512,7 @@ function formatReadResult(result: ReadResult): string[] {
 }
 
 function renderSearchCall(params: SearchParams, theme: RenderTheme): string {
-  const parts = [theme.fg("toolTitle", theme.bold("askweb"))]
+  const parts = [theme.fg("toolTitle", theme.bold("web_search"))]
   parts.push(theme.fg("dim", `"${truncateSingleLine(params.query, 120)}"`))
   if (params.provider) parts.push(theme.fg("muted", `provider=${params.provider}`))
   if (params.maxResults !== undefined)
@@ -530,7 +530,7 @@ function renderSearchCall(params: SearchParams, theme: RenderTheme): string {
 }
 
 function renderReadCall(params: ReadParams, theme: RenderTheme): string {
-  const parts = [theme.fg("toolTitle", theme.bold("askweb_read"))]
+  const parts = [theme.fg("toolTitle", theme.bold("web_read"))]
   parts.push(theme.fg("dim", truncateSingleLine(params.url, 120)))
   if (params.provider) parts.push(theme.fg("muted", `provider=${params.provider}`))
   if (params.format) parts.push(theme.fg("muted", `format=${params.format}`))

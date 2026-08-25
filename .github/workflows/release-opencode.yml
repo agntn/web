@@ -1,4 +1,4 @@
-name: Release (askweb-opencode)
+name: Release (@agntn/web-opencode)
 
 permissions:
   id-token: write
@@ -6,7 +6,7 @@ permissions:
 on:
   push:
     tags:
-      - 'askweb-opencode-v*'
+      - 'web-opencode-v*'
 
 jobs:
   release:
@@ -23,15 +23,15 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm i
       - run: pnpm build
-      - run: pnpm --filter askweb-opencode build
+      - run: pnpm --filter @agntn/web-opencode build
       - name: Verify tag matches package version
         run: |
-          TAG_VERSION="${GITHUB_REF#refs/tags/askweb-opencode-v}"
-          PKG_VERSION=$(node -p "require('./packages/askweb-opencode/package.json').version")
+          TAG_VERSION="${GITHUB_REF#refs/tags/web-opencode-v}"
+          PKG_VERSION=$(node -p "require('./packages/web-opencode/package.json').version")
           if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
             echo "Tag version ($TAG_VERSION) doesn't match package.json ($PKG_VERSION)"
             exit 1
           fi
-      - run: pnpm --filter askweb-opencode publish --access public --no-git-checks --provenance
+      - run: pnpm --filter @agntn/web-opencode publish --access public --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}

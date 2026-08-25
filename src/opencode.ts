@@ -11,9 +11,9 @@ import './providers/index.ts'
 const z = tool.schema
 const providerNames = [...builtinProviders, 'all'] as const
 
-const AskwebPlugin: Plugin = async () => ({
+const WebPlugin: Plugin = async () => ({
   tool: {
-    askweb: tool({
+    web_search: tool({
       description: 'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
       args: {
         query: z.string().describe('Search query'),
@@ -31,7 +31,7 @@ const AskwebPlugin: Plugin = async () => ({
         return encode(await createSearchProvider(name).search(query, { maxResults }))
       },
     }),
-    askweb_read: tool({
+    web_read: tool({
       description: 'Read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai).',
       args: {
         url: z.string().describe('URL to read'),
@@ -44,7 +44,7 @@ const AskwebPlugin: Plugin = async () => ({
         return encode(await readUrl(url, { provider, format, maxTokens }))
       },
     }),
-    askweb_providers: tool({
+    web_providers: tool({
       description: 'List available web search providers and their configuration status.',
       args: {},
       async execute() {
@@ -54,5 +54,5 @@ const AskwebPlugin: Plugin = async () => ({
   },
 })
 
-export { AskwebPlugin }
-export default AskwebPlugin
+export { WebPlugin }
+export default WebPlugin

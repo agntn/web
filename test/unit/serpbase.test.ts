@@ -10,12 +10,12 @@ vi.mock('../../src/core/client.ts', () => ({
     maxRetries: 5,
     baseDelay: 50,
     timeout: 30000,
-    userAgent: 'askweb/0.0.1',
+    userAgent: 'agntn-web/0.0.1',
   })),
 }))
 
 import { createSearchProvider, has } from '../../src/core/registry.ts'
-import { AskwebError, AuthError, RateLimitError } from '../../src/core/errors.ts'
+import { WebError, AuthError, RateLimitError } from '../../src/core/errors.ts'
 import type { SearchResult } from '../../src/core/types.ts'
 
 // Triggers self-registration of serpbase provider
@@ -182,7 +182,7 @@ describe('serpbase provider', () => {
       await expect(provider.search('test query')).rejects.toThrow(RateLimitError)
     })
 
-    it('throws AskwebError for insufficient credits business status', async () => {
+    it('throws WebError for insufficient credits business status', async () => {
       mockPostJSON.mockResolvedValueOnce({
         status: 1020,
         error: 'insufficient credits',
@@ -194,7 +194,7 @@ describe('serpbase provider', () => {
 
       const provider = createSearchProvider('serpbase', { apiKey: 'test-key' })
 
-      await expect(provider.search('test query')).rejects.toThrow(AskwebError)
+      await expect(provider.search('test query')).rejects.toThrow(WebError)
     })
   })
 })

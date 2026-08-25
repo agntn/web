@@ -4,7 +4,7 @@
     "rootDir": ".",
     "baseUrl": ".",
     "paths": {
-      "askweb": ["./src/index.ts"]
+      "@agntn/web": ["./src/index.ts"]
     },
     "outDir": "./dist-extensions",
     "noEmit": true,

@@ -1,5 +1,5 @@
 {
-  "name": "askweb",
+  "name": "@agntn/web",
   "version": "0.2.0",
   "description": "Unified web search and read provider for agents and CLI.",
   "type": "module",
@@ -10,10 +10,10 @@
   "author": "oritwoen (https://github.com/oritwoen)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oritwoen/askweb.git"
+    "url": "git+https://github.com/agntn/web.git"
   },
-  "homepage": "https://github.com/oritwoen/askweb#readme",
-  "bugs": "https://github.com/oritwoen/askweb/issues",
+  "homepage": "https://github.com/agntn/web#readme",
+  "bugs": "https://github.com/agntn/web/issues",
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
@@ -31,7 +31,7 @@
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "bin": {
-    "askweb": "./dist/cli.mjs"
+    "web": "./dist/cli.mjs"
   },
   "files": [
     "dist",
@@ -76,14 +76,14 @@
     "obuild": "latest",
     "typebox": "^1.1.38",
     "typescript": "latest",
-    "vitest": "latest",
-    "zod": "^4.3.6"
+    "vitest": "latest"
   },
   "dependencies": {
     "@toon-format/toon": "^2.1.0",
     "citty": "latest",
     "consola": "latest",
-    "ofetch": "^1.5.1"
+    "ofetch": "^1.5.1",
+    "zod": "^4.3.6"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

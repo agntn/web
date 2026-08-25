@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  AskwebError,
+  WebError,
   HTTPError,
   AuthError,
   RateLimitError,
@@ -12,17 +12,17 @@ import {
   validateDateFilters,
 } from '../../src/core/errors.ts'
 
-describe('AskwebError', () => {
+describe('WebError', () => {
   it('should instantiate with message', () => {
-    const error = new AskwebError('Test error')
+    const error = new WebError('Test error')
     expect(error.message).toBe('Test error')
-    expect(error.name).toBe('AskwebError')
+    expect(error.name).toBe('WebError')
     expect(error).toBeInstanceOf(Error)
   })
 
-  it('should be instanceof AskwebError', () => {
-    const error = new AskwebError('Test')
-    expect(error).toBeInstanceOf(AskwebError)
+  it('should be instanceof WebError', () => {
+    const error = new WebError('Test')
+    expect(error).toBeInstanceOf(WebError)
   })
 })
 
@@ -32,7 +32,7 @@ describe('HTTPError', () => {
     expect(error.statusCode).toBe(404)
     expect(error.url).toBe('https://example.com')
     expect(error.body).toBe('Not found')
-    expect(error).toBeInstanceOf(AskwebError)
+    expect(error).toBeInstanceOf(WebError)
   })
 
   it('should identify 404 as not found', () => {
@@ -64,7 +64,7 @@ describe('AuthError', () => {
     expect(error.provider).toBe('brave')
     expect(error.message).toBe('Invalid API key')
     expect(error.name).toBe('AuthError')
-    expect(error).toBeInstanceOf(AskwebError)
+    expect(error).toBeInstanceOf(WebError)
   })
 })
 
@@ -73,7 +73,7 @@ describe('RateLimitError', () => {
     const error = new RateLimitError(60)
     expect(error.retryAfter).toBe(60)
     expect(error.name).toBe('RateLimitError')
-    expect(error).toBeInstanceOf(AskwebError)
+    expect(error).toBeInstanceOf(WebError)
   })
 })
 
@@ -82,7 +82,7 @@ describe('UnknownProviderError', () => {
     const error = new UnknownProviderError('unknown-provider')
     expect(error.provider).toBe('unknown-provider')
     expect(error.name).toBe('UnknownProviderError')
-    expect(error).toBeInstanceOf(AskwebError)
+    expect(error).toBeInstanceOf(WebError)
   })
 })
 
@@ -92,22 +92,22 @@ describe('NoProviderAvailableError', () => {
     expect(error.providers).toEqual(['searxng'])
     expect(error.message).toContain('searxng')
     expect(error.name).toBe('NoProviderAvailableError')
-    expect(error).toBeInstanceOf(AskwebError)
+    expect(error).toBeInstanceOf(WebError)
   })
 })
 
 describe('normalizeError', () => {
-  it('should pass through AskwebError', () => {
-    const original = new AskwebError('Test error')
+  it('should pass through WebError', () => {
+    const original = new WebError('Test error')
     const normalized = normalizeError(original)
     expect(normalized).toBe(original)
-    expect(normalized).toBeInstanceOf(AskwebError)
+    expect(normalized).toBeInstanceOf(WebError)
   })
 
   it('should convert object with status 401 to AuthError', () => {
     const error = normalizeError({ status: 401, message: 'Unauthorized' })
     expect(error).toBeInstanceOf(AuthError)
-    expect(error).toBeInstanceOf(AskwebError)
+    expect(error).toBeInstanceOf(WebError)
   })
 
   it('should convert HTTPError 401 to AuthError when provider is known', () => {
@@ -135,7 +135,7 @@ describe('normalizeError', () => {
   it('should convert object with status 429 to RateLimitError', () => {
     const error = normalizeError({ status: 429, message: 'Too many requests' })
     expect(error).toBeInstanceOf(RateLimitError)
-    expect(error).toBeInstanceOf(AskwebError)
+    expect(error).toBeInstanceOf(WebError)
   })
 
   it('should use numeric Retry-After header for 429 when available', () => {
@@ -200,25 +200,25 @@ describe('normalizeError', () => {
   it('should convert object with status 500+ to HTTPError', () => {
     const error = normalizeError({ status: 500, message: 'Server error' })
     expect(error).toBeInstanceOf(HTTPError)
-    expect(error).toBeInstanceOf(AskwebError)
+    expect(error).toBeInstanceOf(WebError)
   })
 
-  it('should convert generic Error to AskwebError', () => {
+  it('should convert generic Error to WebError', () => {
     const original = new Error('Generic error')
     const normalized = normalizeError(original)
-    expect(normalized).toBeInstanceOf(AskwebError)
+    expect(normalized).toBeInstanceOf(WebError)
     expect(normalized.message).toContain('Generic error')
   })
 
-  it('should convert string to AskwebError', () => {
+  it('should convert string to WebError', () => {
     const normalized = normalizeError('String error')
-    expect(normalized).toBeInstanceOf(AskwebError)
+    expect(normalized).toBeInstanceOf(WebError)
     expect(normalized.message).toContain('String error')
   })
 
-  it('all normalized errors should be instanceof AskwebError', () => {
+  it('all normalized errors should be instanceof WebError', () => {
     const errors = [
-      normalizeError(new AskwebError('test')),
+      normalizeError(new WebError('test')),
       normalizeError({ status: 401, message: 'Unauthorized' }),
       normalizeError({ status: 429, message: 'Too many requests' }),
       normalizeError({ status: 500, message: 'Server error' }),
@@ -227,7 +227,7 @@ describe('normalizeError', () => {
     ]
 
     errors.forEach((error) => {
-      expect(error).toBeInstanceOf(AskwebError)
+      expect(error).toBeInstanceOf(WebError)
     })
   })
 })

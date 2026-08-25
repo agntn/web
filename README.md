@@ -1,32 +1,29 @@
-# askweb
+# @agntn/web
 
-[![npm version](https://img.shields.io/npm/v/askweb?style=flat&colorA=130f40&colorB=474787)](https://npmjs.com/package/askweb)
-[![npm downloads](https://img.shields.io/npm/dm/askweb?style=flat&colorA=130f40&colorB=474787)](https://npm.chart.dev/askweb)
-[![license](https://img.shields.io/github/license/oritwoen/askweb?style=flat&colorA=130f40&colorB=474787)](https://github.com/oritwoen/askweb/blob/main/LICENSE)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/oritwoen/askweb)
+[![npm version](https://img.shields.io/npm/v/%40agntn%2Fweb?style=flat&colorA=130f40&colorB=474787)](https://npmjs.com/package/@agntn/web)
+[![npm downloads](https://img.shields.io/npm/dm/%40agntn%2Fweb?style=flat&colorA=130f40&colorB=474787)](https://npm.chart.dev/@agntn/web)
+[![license](https://img.shields.io/github/license/agntn/web?style=flat&colorA=130f40&colorB=474787)](https://github.com/agntn/web/blob/main/LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/agntn/web)
 
 One API for Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
 
 If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
 
-`askweb` normalizes all of that behind a single interface. It also ships an [AI SDK](https://ai-sdk.dev/) tool and a CLI. Search is query-to-results; read is URL-to-content.
-
-> [!WARNING]
-> `askweb` is experimental. The package name, public API, provider model, CLI flags, and tool surfaces may change before the first stable release. Pin exact versions if you build on it now.
+`@agntn/web` normalizes all of that behind a single interface. It also ships an [AI SDK](https://ai-sdk.dev/) tool and a CLI. Search is query-to-results; read is URL-to-content.
 
 ## Pi extension
 
-`askweb` ships with a [pi](https://pi.dev) extension that registers three tools and two commands. Install the package straight from GitHub:
+`@agntn/web` ships with a [pi](https://pi.dev) extension that registers three tools and two commands. Install the package straight from GitHub:
 
 ```bash
-pi install git:github.com/oritwoen/askweb
+pi install git:github.com/agntn/web
 ```
 
 Provided tools:
 
-- `askweb` - search the web with a single provider, or `provider="all"` to fan out across every configured/reachable provider in parallel
-- `askweb_read` - read a URL into normalized content with a read-capable provider (currently Jina Reader)
-- `askweb_providers` - list built-in providers, env-var configuration, and reachability status
+- `web_search` - search the web with a single provider, or `provider="all"` to fan out across every configured/reachable provider in parallel
+- `web_read` - read a URL into normalized content with a read-capable provider (currently Jina Reader)
+- `web_providers` - list built-in providers, env-var configuration, and reachability status
 
 Provided slash commands:
 
@@ -38,10 +35,10 @@ The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API
 ## Install
 
 ```bash
-pnpm add askweb
+pnpm add @agntn/web
 ```
 
-For the AI SDK tool (`askweb/ai` subpath), you also need `ai` and `zod` as peer dependencies:
+For the AI SDK tool (`@agntn/web/ai` subpath), you also need `ai` and `zod` as peer dependencies:
 
 ```bash
 pnpm add ai zod
@@ -52,7 +49,7 @@ pnpm add ai zod
 Set your API key as an environment variable and create a provider:
 
 ```typescript
-import { create } from 'askweb'
+import { create } from '@agntn/web'
 
 // Reads EXA_API_KEY from process.env
 const exa = create('exa')
@@ -83,7 +80,7 @@ const exa = create('exa', { apiKey: 'your-key-here' })
 Query all available providers in parallel and get deduplicated results:
 
 ```typescript
-import { searchAll } from 'askweb'
+import { searchAll } from '@agntn/web'
 
 // Detects providers from env vars, queries them in parallel
 const results = await searchAll('latest node.js release')
@@ -109,7 +106,7 @@ const results = await searchAll('query', {
 Use `readUrl` when you already have a URL and want normalized page content:
 
 ```typescript
-import { readUrl } from 'askweb'
+import { readUrl } from '@agntn/web'
 
 const page = await readUrl('https://example.com/article', {
   provider: 'jina',
@@ -124,15 +121,15 @@ Jina read uses `r.jina.ai` and does not require an API key for basic reads; if `
 
 ### AI SDK tool
 
-The `askweb/ai` subpath exports ready-made tools compatible with [Vercel AI SDK](https://ai-sdk.dev/docs/foundations/tools):
+The `@agntn/web/ai` subpath exports ready-made tools compatible with [Vercel AI SDK](https://ai-sdk.dev/docs/foundations/tools):
 
 ```typescript
 import { generateText } from 'ai'
-import { readTool, searchTool } from 'askweb/ai'
+import { readTool, searchTool } from '@agntn/web/ai'
 
 const { text } = await generateText({
   model: yourModel,
-  tools: { webSearch: searchTool, webRead: readTool },
+  tools: { web_search: searchTool, web_read: readTool },
   prompt: 'Find the latest TypeScript release notes',
 })
 ```
@@ -141,7 +138,7 @@ const { text } = await generateText({
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
-tools: { webSearch: searchTool, webRead: readTool }
+tools: { web_search: searchTool, web_read: readTool }
 // searchTool input: { query: string, provider?: "brave" | "exa" | ... | "all", maxResults?: number }
 // readTool input: { url: string, provider?: "jina", format?: "markdown" | "text" | "html" }
 ```
@@ -151,19 +148,19 @@ For `searchTool`, when no provider is specified, the tool auto-detects the first
 ## CLI
 
 ```bash
-askweb "your query"
-askweb --provider brave "your query" --max-results 5
-askweb search "your query" --json
-askweb read https://example.com --format markdown --json
-askweb providers
+web "your query"
+web --provider brave "your query" --max-results 5
+web search "your query" --json
+web read https://example.com --format markdown --json
+web providers
 ```
 
 | Command | Description |
 |---------|-------------|
-| `askweb <query>` | Search the web using the default provider |
-| `askweb search <query>` | Search the web using a provider |
-| `askweb read <url>` | Read a URL into normalized content |
-| `askweb providers` | List built-in providers |
+| `web <query>` | Search the web using the default provider |
+| `web search <query>` | Search the web using a provider |
+| `web read <url>` | Read a URL into normalized content |
+| `web providers` | List built-in providers |
 
 | Flag | Description |
 |------|-------------|
@@ -187,7 +184,7 @@ askweb providers
 
 ### Result shape
 
-All search providers always return `{ url, title, snippet }`. Optional fields depend on what each provider's native API exposes — `askweb` passes them through without flattening:
+All search providers always return `{ url, title, snippet }`. Optional fields depend on what each provider's native API exposes; `@agntn/web` passes them through without flattening:
 
 | Provider | Optional fields populated |
 |----------|---------------------------|
@@ -203,7 +200,7 @@ Pick the provider that fits the shape you want. Exa is closest to "AI search" (s
 
 SerpBase uses Google SERP endpoints. `category: "images"`, `"news"`, or `"videos"` selects the matching SerpBase endpoint; `maxResults` is applied client-side to the returned page.
 
-SearXNG requires no API key. It's a self-hosted metasearch engine. By default askweb connects to `http://localhost:8080`. Override with `baseURL`:
+SearXNG requires no API key. It's a self-hosted metasearch engine. By default `@agntn/web` connects to `http://localhost:8080`. Override with `baseURL`:
 
 ```typescript
 const searx = create('searxng', { baseURL: 'https://searx.example.com' })
@@ -214,7 +211,7 @@ const searx = create('searxng', { baseURL: 'https://searx.example.com' })
 All providers throw the same error types:
 
 ```typescript
-import { AuthError, RateLimitError, HTTPError, UnknownProviderError } from 'askweb'
+import { AuthError, RateLimitError, HTTPError, UnknownProviderError } from '@agntn/web'
 
 try {
   const results = await provider.search('query')
@@ -231,7 +228,7 @@ try {
 }
 ```
 
-A 401 from any provider becomes `AuthError`. A 429 from any provider becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `AskwebError`.
+A 401 from any provider becomes `AuthError`. A 429 from any provider becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `WebError`.
 
 For safety, `HTTPError.url` redacts sensitive query params and URL userinfo credentials before surfacing the URL in error messages.
 

@@ -21,9 +21,9 @@ jobs:
         run: pnpm typecheck
       - name: Build
         run: pnpm build
-      - name: Typecheck (askweb-opencode)
-        run: pnpm --filter askweb-opencode typecheck
-      - name: Build (askweb-opencode)
-        run: pnpm --filter askweb-opencode build
+      - name: Typecheck (@agntn/web-opencode)
+        run: pnpm --filter @agntn/web-opencode typecheck
+      - name: Build (@agntn/web-opencode)
+        run: pnpm --filter @agntn/web-opencode build
       - name: Test
         run: pnpm test:run
