@@ -16,10 +16,11 @@ Scope preference from the 2026-05-20 Jina/read session: keep `read` here while i
 src/
 ├── core/                 # Registry, shared types/errors, searchAll, readUrl
 ├── providers/            # Provider adapters; integrations may support search and/or read
-├── commands/             # citty CLI subcommands (`search`, `read`, `providers`)
+├── commands/             # citty CLI subcommands (`search`, `read`, `providers`, `mcp`)
 ├── index.ts              # Public API barrel
 ├── ai.ts                 # Vercel AI SDK tools
 ├── opencode.ts           # OpenCode plugin tools
+├── mcp.ts                # MCP server surface (createMcpServer, executors)
 └── cli.ts                # CLI entry point
 packages/pi/extensions/
 └── web.ts                # Pi tool/command surface
@@ -38,7 +39,8 @@ test/unit/                # Public behavior and provider contract tests
 | Add search behavior | `src/core/all.ts` + provider adapter | Preserve query → results semantics |
 | Add read behavior | `src/core/read.ts` + provider adapter + `src/commands/read.ts` | Preserve URL → content semantics |
 | Extend CLI | `src/commands/` + `src/cli.ts` | Add subcommands with `citty`; keep text and JSON output stable |
-| Extend agent tools | `src/ai.ts`, `src/opencode.ts`, `packages/pi/extensions/web.ts` | Keep names capability-specific (`searchTool`, `readTool`, `web_search`, `web_read`) |
+| Extend agent tools | `src/ai.ts`, `src/opencode.ts`, `packages/pi/extensions/web.ts`, `src/mcp.ts` | Keep names capability-specific (`searchTool`, `readTool`, `web_search`, `web_read`); MCP mirrors the provider enums from `core/providers.ts` and `core/read.ts`, never a frozen copy |
+| Extend MCP server | `src/mcp.ts` + `src/commands/mcp.ts` | Low-level SDK `Server` with TypeBox schemas; every error branch goes through `errorResult`; executor guards re-check boundaries for hosts that skip validation |
 | Add tests | `test/` | Mirror public behavior, not implementation details |
 | Change build outputs | `build.config.ts` + `package.json` | Keep `entries` and `exports` aligned |
 | Change CI flow | `.github/workflows/test.yml` | Order stays `typecheck -> build -> test` |
