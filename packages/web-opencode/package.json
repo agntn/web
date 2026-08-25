@@ -1,18 +1,18 @@
 {
-  "name": "askweb-opencode",
+  "name": "@agntn/web-opencode",
   "version": "0.1.2",
-  "description": "OpenCode plugin for askweb web search. Temporary standalone package until subpath imports land upstream.",
+  "description": "OpenCode plugin for @agntn/web. Temporary standalone package until subpath imports land upstream.",
   "type": "module",
   "license": "MIT",
   "sideEffects": false,
   "author": "oritwoen (https://github.com/oritwoen)",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/oritwoen/askweb.git",
-    "directory": "packages/askweb-opencode"
+    "url": "git+https://github.com/agntn/web.git",
+    "directory": "packages/web-opencode"
   },
-  "homepage": "https://github.com/oritwoen/askweb#readme",
-  "bugs": "https://github.com/oritwoen/askweb/issues",
+  "homepage": "https://github.com/agntn/web#readme",
+  "bugs": "https://github.com/agntn/web/issues",
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
@@ -32,7 +32,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "askweb": "workspace:*"
+    "@agntn/web": "workspace:*"
   },
   "devDependencies": {
     "@opencode-ai/plugin": "^1.2.23",

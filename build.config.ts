@@ -12,4 +12,13 @@ export default defineBuildConfig({
       ],
     },
   ],
+  hooks: {
+    rolldownConfig(config) {
+      config.external = config.external.filter((entry) =>
+        typeof entry === 'string'
+          ? entry !== '@opencode-ai/plugin'
+          : !entry.test('@opencode-ai/plugin/tool'),
+      )
+    },
+  },
 })

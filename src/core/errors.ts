@@ -1,13 +1,13 @@
-/** Base error for all askweb operations. */
-export class AskwebError extends Error {
+/** Base error for all web operations. */
+export class WebError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options)
-    this.name = 'AskwebError'
+    this.name = 'WebError'
   }
 }
 
 /** Non-auth HTTP error with status code, URL, and response body. */
-export class HTTPError extends AskwebError {
+export class HTTPError extends WebError {
   readonly statusCode: number
   readonly url: string
   readonly body: string
@@ -34,7 +34,7 @@ export class HTTPError extends AskwebError {
 }
 
 /** Thrown when a provider rejects the API key (HTTP 401). */
-export class AuthError extends AskwebError {
+export class AuthError extends WebError {
   readonly provider: string
 
   constructor(message: string, provider: string) {
@@ -45,7 +45,7 @@ export class AuthError extends AskwebError {
 }
 
 /** Thrown on HTTP 429. Check {@link retryAfter} for seconds until retry. */
-export class RateLimitError extends AskwebError {
+export class RateLimitError extends WebError {
   readonly retryAfter: number
 
   constructor(retryAfter: number) {
@@ -56,7 +56,7 @@ export class RateLimitError extends AskwebError {
 }
 
 /** Thrown when {@link create} is called with an unregistered provider name. */
-export class UnknownProviderError extends AskwebError {
+export class UnknownProviderError extends WebError {
   readonly provider: string
 
   constructor(provider: string) {
@@ -67,7 +67,7 @@ export class UnknownProviderError extends AskwebError {
 }
 
 /** Thrown when the search query is empty or whitespace-only. */
-export class EmptyQueryError extends AskwebError {
+export class EmptyQueryError extends WebError {
   constructor() {
     super('Search query cannot be empty')
     this.name = 'EmptyQueryError'
@@ -75,14 +75,14 @@ export class EmptyQueryError extends AskwebError {
 }
 
 /** Thrown when the read URL is empty or whitespace-only. */
-export class EmptyUrlError extends AskwebError {
+export class EmptyUrlError extends WebError {
   constructor() {
     super('Read URL cannot be empty')
     this.name = 'EmptyUrlError'
   }
 }
 
-export class InvalidProviderUrlError extends AskwebError {
+export class InvalidProviderUrlError extends WebError {
   readonly provider: string
 
   constructor(provider: string) {
@@ -93,7 +93,7 @@ export class InvalidProviderUrlError extends AskwebError {
 }
 
 /** Thrown when a provider does not implement the search capability. */
-export class SearchNotSupportedError extends AskwebError {
+export class SearchNotSupportedError extends WebError {
   readonly provider: string
 
   constructor(provider: string) {
@@ -104,7 +104,7 @@ export class SearchNotSupportedError extends AskwebError {
 }
 
 /** Thrown when a provider does not implement the read capability. */
-export class ReadNotSupportedError extends AskwebError {
+export class ReadNotSupportedError extends WebError {
   readonly provider: string
 
   constructor(provider: string) {
@@ -115,7 +115,7 @@ export class ReadNotSupportedError extends AskwebError {
 }
 
 /** Thrown when no provider can be selected from env or registry. */
-export class NoProviderConfiguredError extends AskwebError {
+export class NoProviderConfiguredError extends WebError {
   constructor() {
     super('No web search provider configured. Set an API key env var or register a provider.')
     this.name = 'NoProviderConfiguredError'
@@ -123,7 +123,7 @@ export class NoProviderConfiguredError extends AskwebError {
 }
 
 /** Thrown when providers are configured but none are currently reachable. */
-export class NoProviderAvailableError extends AskwebError {
+export class NoProviderAvailableError extends WebError {
   readonly providers: readonly string[]
 
   constructor(providers: readonly string[]) {
@@ -135,7 +135,7 @@ export class NoProviderAvailableError extends AskwebError {
 }
 
 /** Thrown when a date filter string is not valid ISO 8601 or the range is reversed. */
-export class InvalidDateFilterError extends AskwebError {
+export class InvalidDateFilterError extends WebError {
   readonly field: string
   readonly value: string
   readonly reason: string
@@ -182,10 +182,10 @@ export function validateDateFilters(startPublishedDate?: string, endPublishedDat
 }
 
 /**
- * Convert any caught error into a typed {@link AskwebError} subclass.
+ * Convert any caught error into a typed {@link WebError} subclass.
  * Maps HTTP status codes to specific error types (401 → AuthError, 429 → RateLimitError).
  */
-export function normalizeError(error: unknown, provider?: string): AskwebError {
+export function normalizeError(error: unknown, provider?: string): WebError {
   if (error instanceof HTTPError && error.statusCode === 401) {
     return new AuthError(
       `Authentication failed: ${error.body || 'Invalid or missing API key'}`,
@@ -193,7 +193,7 @@ export function normalizeError(error: unknown, provider?: string): AskwebError {
     )
   }
 
-  if (error instanceof AskwebError) {
+  if (error instanceof WebError) {
     return error
   }
 
@@ -223,15 +223,15 @@ export function normalizeError(error: unknown, provider?: string): AskwebError {
         if (status >= 500) {
           return new HTTPError(status, '', message)
         }
-        return new AskwebError(message)
+        return new WebError(message)
     }
   }
 
   if (error instanceof Error) {
-    return new AskwebError(error.message)
+    return new WebError(error.message)
   }
 
-  return new AskwebError(String(error))
+  return new WebError(String(error))
 }
 
 export const DEFAULT_RETRY_AFTER = 60

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Provider, builtinProviders, create, createReadProvider, createSearchProvider, readUrl, version, ReadNotSupportedError } from '../src/index.ts'
 
-describe('askweb', () => {
+describe('@agntn/web', () => {
   it('should export version matching package.json', () => {
     expect(version).toMatch(/^\d+\.\d+\.\d+/)
   })

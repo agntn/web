@@ -23,7 +23,7 @@ export default defineCommand({
       return
     }
 
-    consola.log(`askweb ${version}`)
+    consola.log(`web ${version}`)
     for (const { name, envVar, configured } of status) {
       if (configured) {
         consola.log(`  \x1b[32m\u2713\x1b[0m ${name}`)

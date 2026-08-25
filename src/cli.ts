@@ -6,7 +6,7 @@ import { version } from './version.ts'
 
 const main = defineCommand({
   meta: {
-    name: 'askweb',
+    name: 'web',
     version,
     description: 'Unified web search and read provider for agents and CLI',
   },

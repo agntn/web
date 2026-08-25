@@ -6,9 +6,9 @@
 
 ## OVERVIEW
 
-`askweb` is a unified web-access provider for agents and CLI. It currently exposes two explicit capabilities: `search` (query → result URLs/snippets) and `read` (URL → normalized page content). Providers are integrations that may implement one or both capabilities; do not force URL readers into `search()`.
+`@agntn/web` is a unified web-access provider for agents and CLI. It currently exposes two explicit capabilities: `search` (query → result URLs/snippets) and `read` (URL → normalized page content). Providers are integrations that may implement one or both capabilities; do not force URL readers into `search()`.
 
-Scope preference from the 2026-05-20 Jina/read session: keep `read` here while it is lightweight, but if read grows into browser rendering, crawling, many read-only providers, or heavy dependencies, split into three packages: search, read, and an umbrella `askweb` aggregator using both.
+Scope preference from the 2026-05-20 Jina/read session: keep `read` here while it is lightweight, but if read grows into browser rendering, crawling, many read-only providers, or heavy dependencies, split into three packages: search, read, and the `@agntn/web` umbrella using both.
 
 ## STRUCTURE
 
@@ -22,7 +22,7 @@ src/
 ├── opencode.ts           # OpenCode plugin tools
 └── cli.ts                # CLI entry point
 packages/pi/extensions/
-└── askweb.ts             # Pi tool/command surface
+└── web.ts                # Pi tool/command surface
 test/unit/                # Public behavior and provider contract tests
 .github/workflows/
 ├── test.yml              # CI: typecheck -> build -> test
@@ -38,7 +38,7 @@ test/unit/                # Public behavior and provider contract tests
 | Add search behavior | `src/core/all.ts` + provider adapter | Preserve query → results semantics |
 | Add read behavior | `src/core/read.ts` + provider adapter + `src/commands/read.ts` | Preserve URL → content semantics |
 | Extend CLI | `src/commands/` + `src/cli.ts` | Add subcommands with `citty`; keep text and JSON output stable |
-| Extend agent tools | `src/ai.ts`, `src/opencode.ts`, `packages/pi/extensions/askweb.ts` | Keep names capability-specific (`searchTool`, `readTool`, `askweb_read`) |
+| Extend agent tools | `src/ai.ts`, `src/opencode.ts`, `packages/pi/extensions/web.ts` | Keep names capability-specific (`searchTool`, `readTool`, `web_search`, `web_read`) |
 | Add tests | `test/` | Mirror public behavior, not implementation details |
 | Change build outputs | `build.config.ts` + `package.json` | Keep `entries` and `exports` aligned |
 | Change CI flow | `.github/workflows/test.yml` | Order stays `typecheck -> build -> test` |
@@ -66,7 +66,7 @@ Seven files must be updated. Missing any causes a bug (test failure, missing fro
 3. `src/core/providers.ts` — add to `builtinProviders` array
 4. `src/core/resolve.ts` — add env var to `envKeys` map (unless self-hosted like searxng)
 5. `src/core/read.ts` — add to `readProviderNames` if provider supports read/scrape
-6. `packages/pi/extensions/askweb.ts` — add to `PROVIDERS` array + update tool descriptions
+6. `packages/pi/extensions/web.ts` — add to `PROVIDERS` array + update tool descriptions
 7. `test/unit/<name>.ts` + `test/index.test.ts` — add provider tests + update hardcoded expected list
 
 After: `pnpm typecheck && pnpm test:run && pnpm build`

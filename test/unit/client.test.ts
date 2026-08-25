@@ -42,7 +42,7 @@ describe('Client', () => {
       expect(client.maxRetries).toBe(5)
       expect(client.baseDelay).toBe(50)
       expect(client.timeout).toBe(30_000)
-      expect(client.userAgent).toBe(`askweb/${version}`)
+      expect(client.userAgent).toBe(`agntn-web/${version}`)
     })
 
     it('should accept custom options', () => {
@@ -68,7 +68,7 @@ describe('Client', () => {
       expect(client.maxRetries).toBe(10)
       expect(client.baseDelay).toBe(50) // default
       expect(client.timeout).toBe(45_000)
-      expect(client.userAgent).toBe(`askweb/${version}`) // default
+      expect(client.userAgent).toBe(`agntn-web/${version}`) // default
     })
 
 
@@ -669,7 +669,7 @@ describe('Client', () => {
       expect(client.maxRetries).toBe(5)
       expect(client.baseDelay).toBe(50)
       expect(client.timeout).toBe(30_000)
-      expect(client.userAgent).toBe(`askweb/${version}`)
+      expect(client.userAgent).toBe(`agntn-web/${version}`)
     })
   })
 })

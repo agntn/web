@@ -1,6 +1,6 @@
 import type { SearchResult, SearchOptions, ProviderConfig } from '../core/types.ts'
 import { Provider } from '../core/provider.ts'
-import { AskwebError, AuthError, RateLimitError, normalizeError } from '../core/errors.ts'
+import { WebError, AuthError, RateLimitError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
 
 interface SerpBaseSearchRequest {
@@ -116,9 +116,9 @@ function assertSerpBaseSuccess(response: SerpBaseSearchResponse): void {
     case 1029:
       throw new RateLimitError(60)
     case 1020:
-      throw new AskwebError(`SerpBase insufficient credits: ${message}`)
+      throw new WebError(`SerpBase insufficient credits: ${message}`)
     default:
-      throw new AskwebError(`SerpBase API error ${response.status}: ${message}`)
+      throw new WebError(`SerpBase API error ${response.status}: ${message}`)
   }
 }
 
