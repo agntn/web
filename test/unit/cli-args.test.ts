@@ -6,6 +6,7 @@ describe('CLI main args', () => {
     expect(normalizeMainArgs(['search', 'query'])).toEqual(['search', 'query'])
     expect(normalizeMainArgs(['read', 'https://example.com'])).toEqual(['read', 'https://example.com'])
     expect(normalizeMainArgs(['providers'])).toEqual(['providers'])
+    expect(normalizeMainArgs(['mcp'])).toEqual(['mcp'])
   })
 
   it('keeps help and version flags on the main command', () => {
