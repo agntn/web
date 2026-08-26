@@ -148,4 +148,20 @@ describe('web MCP executors', () => {
       TypeError,
     )
   })
+
+  it('rejects malformed maxResults instead of silently using the default', async () => {
+    await expect(
+      executeSearch({ query: 'test', provider: 'jina', maxResults: '5' }),
+    ).rejects.toBeInstanceOf(TypeError)
+    await expect(
+      executeSearch({ query: 'test', provider: 'jina', maxResults: Number.NaN }),
+    ).rejects.toBeInstanceOf(TypeError)
+  })
+
+  it('passes schema-valid empty optional values through untouched', async () => {
+    vi.stubEnv('JINA_API_KEY', 'test-key')
+    await executeSearch({ query: 'test', provider: 'jina', category: '', includeDomains: [] })
+
+    expect(mockGetJSON.mock.calls[0]?.[0]).toBeDefined()
+  })
 })

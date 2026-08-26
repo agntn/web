@@ -156,7 +156,10 @@ export async function executeSearch(args: Record<string, unknown>): Promise<unkn
   }
 
   let maxResults: number | undefined
-  if (typeof args.maxResults === 'number' && Number.isFinite(args.maxResults)) {
+  if (args.maxResults !== undefined) {
+    if (typeof args.maxResults !== 'number' || !Number.isFinite(args.maxResults)) {
+      throw new TypeError('maxResults must be a finite number')
+    }
     maxResults = Math.min(Math.max(1, Math.trunc(args.maxResults)), MAX_RESULTS_HARD_CAP)
   }
 
@@ -199,15 +202,16 @@ export async function executeRead(args: Record<string, unknown>): Promise<unknow
 /**
  * Boundary guards for typed options when a host skips schema validation.
  *
- * They throw instead of silently dropping or coercing: jina iterates
- * includeDomains with for...of, so a bare string would reach the API as one
- * `site=` param per character, and fractional maxTokens would become an
- * X-Token-Budget header. The MCP handler wraps these in errorResult.
+ * They enforce exactly the declared schema contract and throw instead of
+ * silently dropping or coercing: jina iterates includeDomains with for...of,
+ * so a bare string would reach the API as one `site=` param per character,
+ * and fractional maxTokens would become an X-Token-Budget header. The MCP
+ * handler wraps these in errorResult.
  */
 function stringArg(name: string, value: unknown): string | undefined {
   if (value === undefined) return undefined
-  if (typeof value !== 'string' || !value.trim()) {
-    throw new TypeError(`${name} must be a non-empty string`)
+  if (typeof value !== 'string') {
+    throw new TypeError(`${name} must be a string`)
   }
   return value
 }
@@ -230,11 +234,8 @@ function boolArg(name: string, value: unknown): boolean | undefined {
 
 function domainListArg(name: string, value: unknown): string[] | undefined {
   if (value === undefined) return undefined
-  if (
-    !Array.isArray(value) ||
-    value.some((domain) => typeof domain !== 'string' || !domain.trim())
-  ) {
-    throw new TypeError(`${name} must be an array of non-empty domain strings`)
+  if (!Array.isArray(value) || value.some((domain) => typeof domain !== 'string')) {
+    throw new TypeError(`${name} must be an array of domain strings`)
   }
   return value as string[]
 }
