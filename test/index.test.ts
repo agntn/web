@@ -5,7 +5,9 @@ import {
   create,
   createReadProvider,
   createSearchProvider,
+  readBatch,
   readUrl,
+  searchBatch,
   version,
   ReadNotSupportedError,
 } from "../src/index.ts";
@@ -47,7 +49,9 @@ describe("@agntn/web", () => {
     expect(() => createReadProvider("searxng")).toThrow(ReadNotSupportedError);
   });
 
-  it("should export readUrl", () => {
+  it("should export read and batch operations", () => {
     expect(readUrl).toBeTypeOf("function");
+    expect(searchBatch).toBeTypeOf("function");
+    expect(readBatch).toBeTypeOf("function");
   });
 });

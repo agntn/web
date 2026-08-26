@@ -11,8 +11,10 @@ import { builtinProviders } from "./core/providers.ts";
 import { createSearchProvider } from "./core/registry.ts";
 import { searchAll } from "./core/all.ts";
 import { readProviderNames, readUrl, type ReadProviderName } from "./core/read.ts";
+import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError } from "./core/errors.ts";
 import { resolveDefaultProviderAsync, listProvidersAsync } from "./core/resolve.ts";
+import type { SearchRequestOptions } from "./core/types.ts";
 import "./providers/index.ts";
 import { version } from "./version.ts";
 
@@ -35,9 +37,18 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_search",
       title: "Web Search",
       description:
-        'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+        'Search the web using multiple search engines (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
       inputSchema: Type.Object({
-        query: Type.String({ description: "Search query", minLength: 1 }),
+        query: Type.Union(
+          [
+            Type.String({ minLength: 1 }),
+            Type.Array(Type.String({ minLength: 1 }), {
+              minItems: 1,
+              maxItems: MAX_BATCH_ITEMS,
+            }),
+          ],
+          { description: "Search query, or a batch of search queries" },
+        ),
         provider: Type.Optional(
           Type.Union(
             providerNames.map((name) => Type.Literal(name)),
@@ -90,9 +101,18 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_read",
       title: "Web Read",
       description:
-        "Read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai). Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.",
+        "Read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
       inputSchema: Type.Object({
-        url: Type.String({ description: "URL to read", minLength: 1 }),
+        url: Type.Union(
+          [
+            Type.String({ minLength: 1 }),
+            Type.Array(Type.String({ minLength: 1 }), {
+              minItems: 1,
+              maxItems: MAX_BATCH_ITEMS,
+            }),
+          ],
+          { description: "URL to read, or a batch of URLs" },
+        ),
         provider: Type.Optional(
           Type.Union(
             readProviderNames.map((name) => Type.Literal(name)),
@@ -160,11 +180,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
  * @returns {Promise<unknown>} Search result payload.
  */
 export async function executeSearch(args: Readonly<Record<string, unknown>>): Promise<unknown> {
-  const query = typeof args.query === "string" ? args.query : "";
-  if (!query.trim()) {
-    throw new EmptyQueryError();
-  }
-
+  const query = searchInputArg(args.query);
   const maxResults = intArg("maxResults", args.maxResults);
   if (maxResults !== undefined && maxResults > MAX_RESULTS_HARD_CAP) {
     throw new TypeError(`maxResults must be at most ${MAX_RESULTS_HARD_CAP}`);
@@ -179,11 +195,22 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
     endPublishedDate: stringArg("endPublishedDate", args.endPublishedDate),
   };
 
-  if (args.provider === "all") {
+  return runSearch(query, searchProviderArg(args.provider), searchOptions);
+}
+
+async function runSearch(
+  query: string | readonly string[],
+  requestedProvider: (typeof providerNames)[number] | undefined,
+  searchOptions: SearchRequestOptions,
+): Promise<unknown> {
+  if (typeof query !== "string") {
+    return searchBatch(query, { provider: requestedProvider, ...searchOptions });
+  }
+  if (requestedProvider === "all") {
     return searchAll(query, searchOptions);
   }
 
-  const name = stringArg("provider", args.provider) ?? (await resolveDefaultProviderAsync());
+  const name = requestedProvider ?? (await resolveDefaultProviderAsync());
   return createSearchProvider(name).search(query, searchOptions);
 }
 
@@ -193,13 +220,15 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
  * @returns {Promise<unknown>} Read result payload.
  */
 export async function executeRead(args: Readonly<Record<string, unknown>>): Promise<unknown> {
-  const url = typeof args.url === "string" ? args.url : "";
+  const urlInput = args.url;
+  const urls = Array.isArray(urlInput) ? stringListArg("url", urlInput) : undefined;
+  const url = typeof urlInput === "string" ? urlInput : "";
   const format = stringArg("format", args.format);
   if (format !== undefined && format !== "markdown" && format !== "text" && format !== "html") {
     throw new TypeError("format must be one of: markdown, text, html");
   }
 
-  return readUrl(url, {
+  const readOptions = {
     provider: readProviderArg(args.provider),
     format: format as "markdown" | "text" | "html" | undefined,
     maxTokens: intArg("maxTokens", args.maxTokens),
@@ -207,7 +236,8 @@ export async function executeRead(args: Readonly<Record<string, unknown>>): Prom
     removeSelector: stringArg("removeSelector", args.removeSelector),
     timeout: intArg("timeout", args.timeout),
     noCache: boolArg("noCache", args.noCache),
-  });
+  };
+  return urls === undefined ? readUrl(url, readOptions) : readBatch(urls, readOptions);
 }
 
 /**
@@ -228,6 +258,23 @@ function stringArg(name: string, value: unknown): string | undefined {
     throw new TypeError(`${name} must be a string`);
   }
   return value;
+}
+
+function searchInputArg(value: unknown): string | readonly string[] {
+  if (Array.isArray(value)) return stringListArg("query", value);
+  if (typeof value !== "string" || !value.trim()) {
+    throw new EmptyQueryError();
+  }
+  return value;
+}
+
+function searchProviderArg(value: unknown): (typeof providerNames)[number] | undefined {
+  if (value === undefined) return undefined;
+  const provider = providerNames.find((name) => name === value);
+  if (!provider) {
+    throw new TypeError(`provider must be one of: ${providerNames.join(", ")}`);
+  }
+  return provider;
 }
 
 function readProviderArg(value: unknown): ReadProviderName | undefined {
@@ -257,10 +304,24 @@ function boolArg(name: string, value: unknown): boolean | undefined {
 
 function domainListArg(name: string, value: unknown): readonly string[] | undefined {
   if (value === undefined) return undefined;
-  if (!Array.isArray(value) || value.some((domain) => typeof domain !== "string")) {
+  if (!Array.isArray(value)) {
     throw new TypeError(`${name} must be an array of domain strings`);
   }
-  return value as string[];
+  return value.map((domain) => {
+    if (typeof domain !== "string") {
+      throw new TypeError(`${name} must be an array of domain strings`);
+    }
+    return domain;
+  });
+}
+
+function stringListArg(name: string, value: readonly unknown[]): readonly string[] {
+  return value.map((item) => {
+    if (typeof item !== "string") {
+      throw new TypeError(`${name} must be a string or an array of strings`);
+    }
+    return item;
+  });
 }
 
 /**
