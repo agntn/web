@@ -14,6 +14,7 @@ const main = defineCommand({
     search: () => import('./commands/search.ts').then(m => m.default),
     read: () => import('./commands/read.ts').then(m => m.default),
     providers: () => import('./commands/providers.ts').then(m => m.default),
+    mcp: () => import('./commands/mcp.ts').then(m => m.default),
   },
 })
 

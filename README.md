@@ -161,6 +161,23 @@ web providers
 | `web search <query>` | Search the web using a provider |
 | `web read <url>` | Read a URL into normalized content |
 | `web providers` | List built-in providers |
+| `web mcp` | Run the MCP server over stdio |
+
+### MCP server
+
+`web mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio exposing the same capabilities as the agent tools:
+
+- `web_search` - search with one provider, or `provider="all"` for parallel fan-out
+- `web_read` - read a URL into normalized content (default: Jina Reader)
+- `web_providers` - list providers and their configuration status
+
+Register it with any MCP client:
+
+```bash
+claude mcp add web --scope user -- web mcp
+```
+
+The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`createMcpServer()`) when your host provides its own transport.
 
 | Flag | Description |
 |------|-------------|
