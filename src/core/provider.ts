@@ -1,5 +1,5 @@
 import { defaultClient, type Client } from './client.ts'
-import type { ProviderConfig, ReadOptions, ReadResult, SearchOptions, SearchResult } from './types.ts'
+import type { ProviderConfig, ReadOptions, ReadResult, SearchOptions, SearchResponse, SearchResult } from './types.ts'
 import { InvalidProviderUrlError } from './errors.ts'
 
 export interface ProviderConstructor {
@@ -44,6 +44,10 @@ export interface SearchProvider {
   search(query: string, options?: SearchOptions): Promise<SearchResult[]>
 }
 
+export interface DetailedSearchProvider {
+  searchDetailed(query: string, options?: SearchOptions): Promise<SearchResponse>
+}
+
 export interface ReadProvider {
   read(url: string, options?: ReadOptions): Promise<ReadResult>
 }
@@ -54,6 +58,10 @@ export interface AvailabilityProvider {
 
 export function isSearchProvider(provider: Provider): provider is Provider & SearchProvider {
   return 'search' in provider && typeof provider.search === 'function'
+}
+
+export function isDetailedSearchProvider(provider: Provider): provider is Provider & DetailedSearchProvider {
+  return 'searchDetailed' in provider && typeof provider.searchDetailed === 'function'
 }
 
 export function isReadProvider(provider: Provider): provider is Provider & ReadProvider {

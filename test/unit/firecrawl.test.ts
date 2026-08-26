@@ -32,6 +32,9 @@ function createFirecrawlProvider(config: ProviderConfig = {}) {
 
 const firecrawlSearchResponse = {
   success: true,
+  id: 'search-job-123',
+  warning: 'One result was skipped',
+  creditsUsed: 2,
   data: {
     web: [
       {
@@ -123,6 +126,41 @@ describe('firecrawl provider', () => {
       expect(results[0].url).toBe('https://www.firecrawl.dev/')
       expect(results[0].title).toBe('Firecrawl - Web Scraping API')
       expect(results[0].snippet).toBe('Turn websites into LLM-ready data.')
+    })
+
+    it('preserves response metadata in detailed searches', async () => {
+      const provider = createFirecrawlProvider({ apiKey: 'test-key' })
+      expect('searchDetailed' in provider).toBe(true)
+      if (!('searchDetailed' in provider) || typeof provider.searchDetailed !== 'function') {
+        throw new Error('Firecrawl provider must support detailed search')
+      }
+
+      const response = await provider.searchDetailed('test query')
+
+      expect(response.results).toHaveLength(2)
+      expect(response.metadata).toEqual({
+        id: 'search-job-123',
+        warning: 'One result was skipped',
+        creditsUsed: 2,
+      })
+    })
+
+    it('keeps metadata for an empty detailed search', async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {},
+        id: 'empty-job',
+        creditsUsed: 1,
+      })
+      const provider = createFirecrawlProvider({ apiKey: 'test-key' })
+      if (!('searchDetailed' in provider) || typeof provider.searchDetailed !== 'function') {
+        throw new Error('Firecrawl provider must support detailed search')
+      }
+
+      await expect(provider.searchDetailed('no matches')).resolves.toEqual({
+        results: [],
+        metadata: { id: 'empty-job', creditsUsed: 1 },
+      })
     })
 
     it('maps markdown content to text field', async () => {

@@ -29,6 +29,7 @@ export default defineCommand({
   },
   async run({ args }) {
     const { createSearchProvider } = await import('../core/registry.ts')
+    const { isDetailedSearchProvider } = await import('../core/provider.ts')
     const { resolveDefaultProvider } = await import('../core/resolve.ts')
     const { AuthError, SearchNotSupportedError, UnknownProviderError, NoProviderConfiguredError } = await import('../core/errors.ts')
     let providerName = args.provider
@@ -48,10 +49,15 @@ export default defineCommand({
       providerName = args.provider || resolveDefaultProvider()
       await import('../providers/index.ts')
       const provider = createSearchProvider(providerName, {})
-      const results = await provider.search(args.query, {
-        maxResults: maxResults.value,
-      })
+      const options = { maxResults: maxResults.value }
 
+      if (args.json && isDetailedSearchProvider(provider)) {
+        const response = await provider.searchDetailed(args.query, options)
+        process.stdout.write(`${JSON.stringify(response, null, 2)}\n`)
+        return
+      }
+
+      const results = await provider.search(args.query, options)
       if (args.json) {
         process.stdout.write(`${JSON.stringify(results, null, 2)}\n`)
         return
