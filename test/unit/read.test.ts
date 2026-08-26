@@ -1,11 +1,74 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { readUrl } from '../../src/core/read.ts'
 import { register } from '../../src/core/registry.ts'
-import { EmptyUrlError, ReadNotSupportedError } from '../../src/core/errors.ts'
+import { EmptyUrlError, HTTPError, ReadNotSupportedError } from '../../src/core/errors.ts'
 import { Provider } from '../../src/core/provider.ts'
 import type { ProviderConfig, ReadOptions, ReadResult } from '../../src/core/types.ts'
 
+function registerReader(name: string, read: (url: string, options?: ReadOptions) => Promise<ReadResult>): void {
+  class ReaderProvider extends Provider {
+    static readonly providerName = name
+    static readonly defaultBaseURL = 'https://reader.example.com'
+
+    constructor(config: ProviderConfig) {
+      super(config, ReaderProvider)
+    }
+
+    async read(url: string, options?: ReadOptions): Promise<ReadResult> {
+      return read(url, options)
+    }
+  }
+
+  register(ReaderProvider)
+}
+
+const paymentRequired = async (): Promise<ReadResult> => {
+  throw new HTTPError(402, 'https://r.jina.ai/https%3A%2F%2Fexample.com', 'Payment required')
+}
+
 describe('readUrl', () => {
+  const savedFirecrawlApiKey = process.env.FIRECRAWL_API_KEY
+
+  afterEach(() => {
+    if (savedFirecrawlApiKey === undefined) {
+      delete process.env.FIRECRAWL_API_KEY
+    } else {
+      process.env.FIRECRAWL_API_KEY = savedFirecrawlApiKey
+    }
+  })
+
+  it('falls back to configured Firecrawl when default Jina requires payment', async () => {
+    const readFromFirecrawl = vi.fn().mockResolvedValue({ url: 'https://example.com', content: 'ok' })
+    registerReader('jina', paymentRequired)
+    registerReader('firecrawl', readFromFirecrawl)
+    process.env.FIRECRAWL_API_KEY = 'test-key'
+
+    await expect(readUrl('https://example.com', { format: 'text' })).resolves.toEqual({
+      url: 'https://example.com',
+      content: 'ok',
+    })
+    expect(readFromFirecrawl).toHaveBeenCalledWith('https://example.com', { format: 'text' })
+  })
+
+  it('treats a whitespace provider as the default and falls back', async () => {
+    const readFromFirecrawl = vi.fn().mockResolvedValue({ url: 'https://example.com', content: 'ok' })
+    registerReader('jina', paymentRequired)
+    registerReader('firecrawl', readFromFirecrawl)
+    process.env.FIRECRAWL_API_KEY = 'test-key'
+
+    await expect(readUrl('https://example.com', { provider: '   ' })).resolves.toMatchObject({ content: 'ok' })
+  })
+
+  it('does not fall back when Jina is explicitly requested', async () => {
+    const readFromFirecrawl = vi.fn().mockResolvedValue({ url: 'https://example.com', content: 'ok' })
+    registerReader('jina', paymentRequired)
+    registerReader('firecrawl', readFromFirecrawl)
+    process.env.FIRECRAWL_API_KEY = 'test-key'
+
+    await expect(readUrl('https://example.com', { provider: 'jina' })).rejects.toMatchObject({ statusCode: 402 })
+    expect(readFromFirecrawl).not.toHaveBeenCalled()
+  })
+
   it('passes explicit provider and read options through', async () => {
     const providerName = `reader-${Math.random().toString(36).slice(2)}`
     const read = vi.fn().mockResolvedValue({ url: 'https://example.com', content: 'ok' })
