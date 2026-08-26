@@ -2,6 +2,9 @@ name: Test
 
 on:
   push:
+    branches:
+      - main
+  pull_request:
 
 permissions:
   contents: read
@@ -16,7 +19,7 @@ jobs:
         with:
           node-version: lts/*
           cache: pnpm
-      - run: pnpm i
+      - run: pnpm i --frozen-lockfile
       - name: Typecheck
         run: pnpm typecheck
       - name: Build
@@ -25,5 +28,7 @@ jobs:
         run: pnpm --filter @agntn/web-opencode typecheck
       - name: Build (@agntn/web-opencode)
         run: pnpm --filter @agntn/web-opencode build
+      - name: Lint
+        run: pnpm exec oxlint . && pnpm exec oxfmt --check .
       - name: Test
         run: pnpm test:run

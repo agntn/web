@@ -1,12 +1,12 @@
 export const builtinProviders = [
-  'brave',
-  'exa',
-  'firecrawl',
-  'jina',
-  'searxng',
-  'serpapi',
-  'serpbase',
-  'tavily',
-] as const
+  "brave",
+  "exa",
+  "firecrawl",
+  "jina",
+  "searxng",
+  "serpapi",
+  "serpbase",
+  "tavily",
+] as const;
 
-export type WebSearchProviderName = typeof builtinProviders[number]
+export type WebSearchProviderName = (typeof builtinProviders)[number];

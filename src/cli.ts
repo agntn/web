@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 
-import { defineCommand, runMain } from 'citty'
-import { normalizeMainArgs } from './cli-args.ts'
-import { version } from './version.ts'
+import { defineCommand, runMain } from "citty";
+import { normalizeMainArgs } from "./cli-args.ts";
+import { version } from "./version.ts";
 
 const main = defineCommand({
   meta: {
-    name: 'web',
+    name: "web",
     version,
-    description: 'Unified web search and read provider for agents and CLI',
+    description: "Unified web search and read provider for agents and CLI",
   },
   subCommands: {
-    search: () => import('./commands/search.ts').then(m => m.default),
-    read: () => import('./commands/read.ts').then(m => m.default),
-    providers: () => import('./commands/providers.ts').then(m => m.default),
-    mcp: () => import('./commands/mcp.ts').then(m => m.default),
+    search: () => import("./commands/search.ts").then((m) => m.default),
+    read: () => import("./commands/read.ts").then((m) => m.default),
+    providers: () => import("./commands/providers.ts").then((m) => m.default),
+    mcp: () => import("./commands/mcp.ts").then((m) => m.default),
   },
-})
+});
 
-await runMain(main, { rawArgs: normalizeMainArgs(process.argv.slice(2)) })
+await runMain(main, { rawArgs: [...normalizeMainArgs(process.argv.slice(2))] });

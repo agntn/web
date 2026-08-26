@@ -2,18 +2,38 @@
   "name": "@agntn/web",
   "version": "0.2.0",
   "description": "Unified web search and read provider for agents and CLI.",
-  "type": "module",
-  "license": "MIT",
-  "sideEffects": [
-    "./dist/_chunks/providers.mjs"
+  "keywords": [
+    "agents",
+    "cli",
+    "pi-extension",
+    "pi-package",
+    "provider",
+    "search",
+    "typescript",
+    "unified",
+    "web-search"
   ],
+  "homepage": "https://github.com/agntn/web#readme",
+  "bugs": "https://github.com/agntn/web/issues",
+  "license": "MIT",
   "author": "oritwoen (https://github.com/oritwoen)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agntn/web.git"
   },
-  "homepage": "https://github.com/agntn/web#readme",
-  "bugs": "https://github.com/agntn/web/issues",
+  "bin": {
+    "web": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "packages/pi/extensions"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "./dist/_chunks/providers.mjs"
+  ],
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
@@ -32,24 +52,6 @@
       "import": "./dist/opencode.mjs"
     }
   },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
-  "bin": {
-    "web": "./dist/cli.mjs"
-  },
-  "files": [
-    "dist",
-    "packages/pi/extensions"
-  ],
-  "pi": {
-    "extensions": [
-      "./packages/pi/extensions/*.ts"
-    ]
-  },
-  "engines": {
-    "node": ">=22"
-  },
-  "packageManager": "pnpm@11.3.0",
   "scripts": {
     "build": "obuild",
     "dev": "obuild --stub",
@@ -57,29 +59,9 @@
     "test": "vitest",
     "test:run": "vitest --run",
     "prepack": "pnpm run build",
-    "release": "pnpm test:run && pnpm build && changelogen --release --push"
-  },
-  "keywords": [
-    "web-search",
-    "search",
-    "cli",
-    "agents",
-    "provider",
-    "unified",
-    "typescript",
-    "pi-extension",
-    "pi-package"
-  ],
-  "devDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*",
-    "@opencode-ai/plugin": "^1.2.23",
-    "@types/node": "latest",
-    "ai": "^6.0.116",
-    "changelogen": "latest",
-    "obuild": "latest",
-    "typescript": "latest",
-    "vitest": "latest"
+    "release": "pnpm test:run && pnpm build && changelogen --release --push",
+    "lint": "pnpm build && oxlint . && oxfmt --check .",
+    "lint:fix": "pnpm build && oxlint . --fix && oxfmt ."
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -89,6 +71,20 @@
     "ofetch": "^1.5.1",
     "typebox": "^1.1.38",
     "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "@opencode-ai/plugin": "^1.2.23",
+    "@types/node": "latest",
+    "ai": "^6.0.116",
+    "changelogen": "latest",
+    "obuild": "latest",
+    "oxfmt": "0.63.0",
+    "oxlint": "1.78.0",
+    "oxlint-tsgolint": "^7.0.2001",
+    "typescript": "7.0.2",
+    "vitest": "latest"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -117,5 +113,14 @@
     "zod": {
       "optional": true
     }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.3.0",
+  "pi": {
+    "extensions": [
+      "./packages/pi/extensions/*.ts"
+    ]
   }
 }

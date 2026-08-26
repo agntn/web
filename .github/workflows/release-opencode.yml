@@ -6,7 +6,7 @@ permissions:
 on:
   push:
     tags:
-      - 'web-opencode-v*'
+      - "web-opencode-v*"
 
 jobs:
   release:

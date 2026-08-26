@@ -2,30 +2,27 @@
   "name": "@agntn/web-opencode",
   "version": "0.1.2",
   "description": "OpenCode plugin for @agntn/web. Temporary standalone package until subpath imports land upstream.",
-  "type": "module",
+  "homepage": "https://github.com/agntn/web#readme",
+  "bugs": "https://github.com/agntn/web/issues",
   "license": "MIT",
-  "sideEffects": false,
   "author": "oritwoen (https://github.com/oritwoen)",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/agntn/web.git",
     "directory": "packages/web-opencode"
   },
-  "homepage": "https://github.com/agntn/web#readme",
-  "bugs": "https://github.com/agntn/web/issues",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
   "exports": {
     ".": {
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     }
-  },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
-  "files": [
-    "dist"
-  ],
-  "engines": {
-    "node": ">=22"
   },
   "scripts": {
     "build": "obuild",
@@ -46,5 +43,8 @@
     "@opencode-ai/plugin": {
       "optional": true
     }
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

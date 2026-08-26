@@ -1,6 +1,5 @@
 # Changelog
 
-
 ## v0.2.0
 
 [compare changes](https://github.com/agntn/web/compare/v0.1.2...v0.2.0)
@@ -43,7 +42,7 @@
 
 - **repo:** Remove redundant npmrc overrides ([28b8791](https://github.com/agntn/web/commit/28b8791))
 - Rename opencode plugin package ([#15](https://github.com/agntn/web/pull/15))
-- ⚠️  Rename to `askweb` ([#30](https://github.com/agntn/web/pull/30))
+- ⚠️ Rename to `askweb` ([#30](https://github.com/agntn/web/pull/30))
 
 ### ✅ Tests
 
@@ -51,7 +50,7 @@
 
 #### ⚠️ Breaking Changes
 
-- ⚠️  Rename to `askweb` ([#30](https://github.com/agntn/web/pull/30))
+- ⚠️ Rename to `askweb` ([#30](https://github.com/agntn/web/pull/30))
 
 ### ❤️ Contributors
 
@@ -71,4 +70,3 @@
 - Ori ([@oritwoen](https://github.com/oritwoen))
 
 ## v0.1.1
-

@@ -1,52 +1,51 @@
-import { Server } from '@modelcontextprotocol/sdk/server/index.js'
+import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
   type CallToolResult,
   type Tool,
-} from '@modelcontextprotocol/sdk/types.js'
-import { Type, type TSchema } from 'typebox'
-import { Value } from 'typebox/value'
-import { builtinProviders } from './core/providers.ts'
-import { createSearchProvider } from './core/registry.ts'
-import { searchAll } from './core/all.ts'
-import {
-  readProviderNames,
-  readUrl,
-  type ReadProviderName,
-} from './core/read.ts'
-import { EmptyQueryError } from './core/errors.ts'
-import { resolveDefaultProviderAsync, listProvidersAsync } from './core/resolve.ts'
-import './providers/index.ts'
-import { version } from './version.ts'
+} from "@modelcontextprotocol/sdk/types.js";
+import { Type, type TSchema } from "typebox";
+import { Value } from "typebox/value";
+import { builtinProviders } from "./core/providers.ts";
+import { createSearchProvider } from "./core/registry.ts";
+import { searchAll } from "./core/all.ts";
+import { readProviderNames, readUrl, type ReadProviderName } from "./core/read.ts";
+import { EmptyQueryError } from "./core/errors.ts";
+import { resolveDefaultProviderAsync, listProvidersAsync } from "./core/resolve.ts";
+import "./providers/index.ts";
+import { version } from "./version.ts";
 
-const MAX_RESULTS_HARD_CAP = 20
+const MAX_RESULTS_HARD_CAP = 20;
 
-const providerNames = [...builtinProviders, 'all'] as const
+const providerNames = [...builtinProviders, "all"] as const;
 
 interface ToolDefinition {
-  name: string
-  title: string
-  description: string
-  inputSchema: TSchema
-  annotations: Tool['annotations']
-  execute(args: Record<string, unknown>): unknown | Promise<unknown>
+  readonly name: string;
+  readonly title: string;
+  readonly description: string;
+  readonly inputSchema: TSchema;
+  readonly annotations: Tool["annotations"];
+  execute(args: Readonly<Record<string, unknown>>): unknown;
 }
 
 const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
   [
     {
-      name: 'web_search',
-      title: 'Web Search',
+      name: "web_search",
+      title: "Web Search",
       description:
         'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
       inputSchema: Type.Object({
-        query: Type.String({ description: 'Search query', minLength: 1 }),
+        query: Type.String({ description: "Search query", minLength: 1 }),
         provider: Type.Optional(
-          Type.Union(providerNames.map(name => Type.Literal(name)), {
-            description:
-              'Provider to use. Defaults to first available from env. Use "all" for parallel search.',
-          }),
+          Type.Union(
+            providerNames.map((name) => Type.Literal(name)),
+            {
+              description:
+                'Provider to use. Defaults to first available from env. Use "all" for parallel search.',
+            },
+          ),
         ),
         maxResults: Type.Optional(
           Type.Integer({
@@ -62,7 +61,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           }),
         ),
         excludeDomains: Type.Optional(
-          Type.Array(Type.String(), { description: 'Exclude results from these domains' }),
+          Type.Array(Type.String(), { description: "Exclude results from these domains" }),
         ),
         category: Type.Optional(
           Type.String({
@@ -75,11 +74,11 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           }),
         ),
         endPublishedDate: Type.Optional(
-          Type.String({ description: 'Filter results published before this date (ISO 8601)' }),
+          Type.String({ description: "Filter results published before this date (ISO 8601)" }),
         ),
       }),
       annotations: {
-        title: 'Web Search',
+        title: "Web Search",
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
@@ -88,41 +87,46 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       execute: executeSearch,
     },
     {
-      name: 'web_read',
-      title: 'Web Read',
+      name: "web_read",
+      title: "Web Read",
       description:
-        'Read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai). Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.',
+        "Read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai). Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.",
       inputSchema: Type.Object({
-        url: Type.String({ description: 'URL to read', minLength: 1 }),
+        url: Type.String({ description: "URL to read", minLength: 1 }),
         provider: Type.Optional(
-          Type.Union(readProviderNames.map(name => Type.Literal(name)), {
-            description: 'Read provider to use. Defaults to Jina.',
-          }),
+          Type.Union(
+            readProviderNames.map((name) => Type.Literal(name)),
+            {
+              description: "Read provider to use. Defaults to Jina.",
+            },
+          ),
         ),
         format: Type.Optional(
-          Type.Union([Type.Literal('markdown'), Type.Literal('text'), Type.Literal('html')], {
-            description: 'Preferred content format.',
+          Type.Union([Type.Literal("markdown"), Type.Literal("text"), Type.Literal("html")], {
+            description: "Preferred content format.",
           }),
         ),
         maxTokens: Type.Optional(
           Type.Integer({
-            description: 'Maximum tokens to return when supported by the provider.',
+            description: "Maximum tokens to return when supported by the provider.",
             minimum: 1,
           }),
         ),
         targetSelector: Type.Optional(
-          Type.String({ description: 'CSS selector to target when supported by the provider.' }),
+          Type.String({ description: "CSS selector to target when supported by the provider." }),
         ),
         removeSelector: Type.Optional(
-          Type.String({ description: 'CSS selector to remove when supported by the provider.' }),
+          Type.String({ description: "CSS selector to remove when supported by the provider." }),
         ),
         timeout: Type.Optional(
-          Type.Integer({ description: 'Provider timeout in seconds when supported.', minimum: 1 }),
+          Type.Integer({ description: "Provider timeout in seconds when supported.", minimum: 1 }),
         ),
-        noCache: Type.Optional(Type.Boolean({ description: 'Bypass provider cache when supported.' })),
+        noCache: Type.Optional(
+          Type.Boolean({ description: "Bypass provider cache when supported." }),
+        ),
       }),
       annotations: {
-        title: 'Web Read',
+        title: "Web Read",
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
@@ -131,12 +135,12 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       execute: executeRead,
     },
     {
-      name: 'web_providers',
-      title: 'Web Providers',
-      description: 'List available web search providers and their configuration status.',
+      name: "web_providers",
+      title: "Web Providers",
+      description: "List available web search providers and their configuration status.",
       inputSchema: Type.Object({}),
       annotations: {
-        title: 'Web Providers',
+        title: "Web Providers",
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
@@ -144,60 +148,66 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       },
       execute: () => listProvidersAsync(),
     },
-  ].map(tool => [tool.name, tool]),
-)
+  ].map((tool) => [tool.name, tool]),
+);
 
 /**
  * Resolves search arguments against the same contract the AI SDK tool enforces.
  *
  * A host may skip schema validation, so the executor re-checks the boundaries
  * that would otherwise reach a provider malformed.
+ * @param {Readonly<Record<string, unknown>>} args - Untrusted tool arguments.
+ * @returns {Promise<unknown>} Search result payload.
  */
-export async function executeSearch(args: Record<string, unknown>): Promise<unknown> {
-  const query = typeof args.query === 'string' ? args.query : ''
+export async function executeSearch(args: Readonly<Record<string, unknown>>): Promise<unknown> {
+  const query = typeof args.query === "string" ? args.query : "";
   if (!query.trim()) {
-    throw new EmptyQueryError()
+    throw new EmptyQueryError();
   }
 
-  const maxResults = intArg('maxResults', args.maxResults)
+  const maxResults = intArg("maxResults", args.maxResults);
   if (maxResults !== undefined && maxResults > MAX_RESULTS_HARD_CAP) {
-    throw new TypeError(`maxResults must be at most ${MAX_RESULTS_HARD_CAP}`)
+    throw new TypeError(`maxResults must be at most ${MAX_RESULTS_HARD_CAP}`);
   }
 
   const searchOptions = {
     maxResults,
-    includeDomains: domainListArg('includeDomains', args.includeDomains),
-    excludeDomains: domainListArg('excludeDomains', args.excludeDomains),
-    category: stringArg('category', args.category),
-    startPublishedDate: stringArg('startPublishedDate', args.startPublishedDate),
-    endPublishedDate: stringArg('endPublishedDate', args.endPublishedDate),
+    includeDomains: domainListArg("includeDomains", args.includeDomains),
+    excludeDomains: domainListArg("excludeDomains", args.excludeDomains),
+    category: stringArg("category", args.category),
+    startPublishedDate: stringArg("startPublishedDate", args.startPublishedDate),
+    endPublishedDate: stringArg("endPublishedDate", args.endPublishedDate),
+  };
+
+  if (args.provider === "all") {
+    return searchAll(query, searchOptions);
   }
 
-  if (args.provider === 'all') {
-    return searchAll(query, searchOptions)
-  }
-
-  const name = stringArg('provider', args.provider) ?? await resolveDefaultProviderAsync()
-  return createSearchProvider(name).search(query, searchOptions)
+  const name = stringArg("provider", args.provider) ?? (await resolveDefaultProviderAsync());
+  return createSearchProvider(name).search(query, searchOptions);
 }
 
-/** Mirrors {@link executeSearch}: guards the read contract when validation was skipped. */
-export async function executeRead(args: Record<string, unknown>): Promise<unknown> {
-  const url = typeof args.url === 'string' ? args.url : ''
-  const format = stringArg('format', args.format)
-  if (format !== undefined && format !== 'markdown' && format !== 'text' && format !== 'html') {
-    throw new TypeError('format must be one of: markdown, text, html')
+/**
+ * Mirrors {@link executeSearch}: guards the read contract when validation was skipped.
+ * @param {Readonly<Record<string, unknown>>} args - Untrusted tool arguments.
+ * @returns {Promise<unknown>} Read result payload.
+ */
+export async function executeRead(args: Readonly<Record<string, unknown>>): Promise<unknown> {
+  const url = typeof args.url === "string" ? args.url : "";
+  const format = stringArg("format", args.format);
+  if (format !== undefined && format !== "markdown" && format !== "text" && format !== "html") {
+    throw new TypeError("format must be one of: markdown, text, html");
   }
 
   return readUrl(url, {
     provider: readProviderArg(args.provider),
-    format: format as 'markdown' | 'text' | 'html' | undefined,
-    maxTokens: intArg('maxTokens', args.maxTokens),
-    targetSelector: stringArg('targetSelector', args.targetSelector),
-    removeSelector: stringArg('removeSelector', args.removeSelector),
-    timeout: intArg('timeout', args.timeout),
-    noCache: boolArg('noCache', args.noCache),
-  })
+    format: format as "markdown" | "text" | "html" | undefined,
+    maxTokens: intArg("maxTokens", args.maxTokens),
+    targetSelector: stringArg("targetSelector", args.targetSelector),
+    removeSelector: stringArg("removeSelector", args.removeSelector),
+    timeout: intArg("timeout", args.timeout),
+    noCache: boolArg("noCache", args.noCache),
+  });
 }
 
 /**
@@ -208,53 +218,61 @@ export async function executeRead(args: Record<string, unknown>): Promise<unknow
  * so a bare string would reach the API as one `site=` param per character,
  * and fractional maxTokens would become an X-Token-Budget header. The MCP
  * handler wraps these in errorResult.
+ * @param {string} name - Argument name used in errors.
+ * @param {*} value - Untrusted argument value.
+ * @returns {string | undefined} Parsed optional string.
  */
 function stringArg(name: string, value: unknown): string | undefined {
-  if (value === undefined) return undefined
-  if (typeof value !== 'string') {
-    throw new TypeError(`${name} must be a string`)
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") {
+    throw new TypeError(`${name} must be a string`);
   }
-  return value
+  return value;
 }
 
 function readProviderArg(value: unknown): ReadProviderName | undefined {
-  if (value === undefined) return undefined
-  const provider = readProviderNames.find((name) => name === value)
+  if (value === undefined) return undefined;
+  const provider = readProviderNames.find((name) => name === value);
   if (!provider) {
-    throw new TypeError(`provider must be one of: ${readProviderNames.join(', ')}`)
+    throw new TypeError(`provider must be one of: ${readProviderNames.join(", ")}`);
   }
-  return provider
+  return provider;
 }
 
 function intArg(name: string, value: unknown): number | undefined {
-  if (value === undefined) return undefined
-  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
-    throw new TypeError(`${name} must be an integer >= 1`)
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1) {
+    throw new TypeError(`${name} must be an integer >= 1`);
   }
-  return value
+  return value;
 }
 
 function boolArg(name: string, value: unknown): boolean | undefined {
-  if (value === undefined) return undefined
-  if (typeof value !== 'boolean') {
-    throw new TypeError(`${name} must be a boolean`)
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw new TypeError(`${name} must be a boolean`);
   }
-  return value
+  return value;
 }
 
-function domainListArg(name: string, value: unknown): string[] | undefined {
-  if (value === undefined) return undefined
-  if (!Array.isArray(value) || value.some((domain) => typeof domain !== 'string')) {
-    throw new TypeError(`${name} must be an array of domain strings`)
+function domainListArg(name: string, value: unknown): readonly string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.some((domain) => typeof domain !== "string")) {
+    throw new TypeError(`${name} must be an array of domain strings`);
   }
-  return value as string[]
+  return value as string[];
 }
 
-/** Formats the first TypeBox validation failure for an MCP client. */
+/**
+ * Formats the first TypeBox validation failure for an MCP client.
+ * @param {TSchema} schema - Tool input schema.
+ * @param {*} value - Value rejected by the schema.
+ * @returns {string} Client-facing validation message.
+ */
 function validationError(schema: TSchema, value: unknown): string {
-  const first = Value.Errors(schema, value)[0]
-  if (!first) return 'Invalid arguments'
-  return `Invalid arguments at ${first.instancePath || '/'}: ${first.message}`
+  const first = Value.Errors(schema, value)[0];
+  if (!first) return "Invalid arguments";
+  return `Invalid arguments at ${first.instancePath || "/"}: ${first.message}`;
 }
 
 /**
@@ -264,12 +282,14 @@ function validationError(schema: TSchema, value: unknown): string {
  * client-controlled values (a tool name, an argument) or downstream error
  * messages: one raw newline or escape byte would forge extra lines that read
  * as the server's own answer.
+ * @param {string} text - Error text to sanitize.
+ * @returns {CallToolResult} MCP error envelope.
  */
 function errorResult(text: string): CallToolResult {
   return {
-    content: [{ type: 'text', text: text.replace(/\p{Cc}/gu, ' ') }],
+    content: [{ type: "text", text: text.replaceAll(/\p{Cc}/gu, " ") }],
     isError: true,
-  }
+  };
 }
 
 /**
@@ -281,41 +301,42 @@ function errorResult(text: string): CallToolResult {
  * TypeBox. The high-level API would force a second definition of every parameter.
  * Results stay in text content because clients prefer structuredContent over the
  * readable response when both are present.
+ * @returns {Server} Unconnected MCP server.
  */
 export function createMcpServer(): Server {
-  const server = new Server({ name: 'web', version }, { capabilities: { tools: {} } })
+  const server = new Server({ name: "web", version }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: Object.values(toolsByName).map((tool): Tool => ({
       name: tool.name,
       title: tool.title,
       description: tool.description,
-      inputSchema: tool.inputSchema as Tool['inputSchema'],
+      inputSchema: tool.inputSchema as Tool["inputSchema"],
       annotations: tool.annotations,
     })),
-  }))
+  }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const name = request.params.name
+    const name = request.params.name;
     if (!Object.hasOwn(toolsByName, name)) {
-      return errorResult(`Unknown web tool: ${JSON.stringify(name)}`)
+      return errorResult(`Unknown web tool: ${JSON.stringify(name)}`);
     }
-    const tool = toolsByName[name]
+    const tool = toolsByName[name];
 
-    const args = request.params.arguments ?? {}
+    const args = request.params.arguments ?? {};
     if (!Value.Check(tool.inputSchema, args)) {
-      return errorResult(validationError(tool.inputSchema, args))
+      return errorResult(validationError(tool.inputSchema, args));
     }
 
     try {
-      const result = await tool.execute(args)
-      return { content: [{ type: 'text', text: JSON.stringify(result) }] }
+      const result = await tool.execute(args);
+      return { content: [{ type: "text", text: JSON.stringify(result) }] };
     } catch (error) {
       return errorResult(
         `${tool.name} failed: ${error instanceof Error ? error.message : String(error)}`,
-      )
+      );
     }
-  })
+  });
 
-  return server
+  return server;
 }
