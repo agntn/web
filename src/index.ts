@@ -4,9 +4,9 @@ export { version } from './version.ts'
 
 export { builtinProviders, type WebSearchProviderName } from './core/providers.ts'
 
-export type { SearchResult, SearchOptions, ReadResult, ReadOptions, ProviderConfig, ClientOptions } from './core/types.ts'
-export { Provider, isSearchProvider, isReadProvider, isAvailabilityProvider } from './core/provider.ts'
-export type { ProviderConstructor, SearchProvider, ReadProvider, AvailabilityProvider } from './core/provider.ts'
+export type { SearchResult, SearchResponse, SearchOptions, ReadResult, ReadOptions, ProviderConfig, ClientOptions } from './core/types.ts'
+export { Provider, isSearchProvider, isDetailedSearchProvider, isReadProvider, isAvailabilityProvider } from './core/provider.ts'
+export type { ProviderConstructor, SearchProvider, DetailedSearchProvider, ReadProvider, AvailabilityProvider } from './core/provider.ts'
 
 export { WebError, HTTPError, AuthError, RateLimitError, UnknownProviderError, InvalidProviderUrlError, SearchNotSupportedError, NoProviderConfiguredError, NoProviderAvailableError, EmptyQueryError, EmptyUrlError, ReadNotSupportedError, InvalidDateFilterError, normalizeError, validateDateFilters } from './core/errors.ts'
 

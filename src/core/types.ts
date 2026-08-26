@@ -13,6 +13,11 @@ export interface SearchResult {
   metadata?: Record<string, unknown>
 }
 
+export interface SearchResponse {
+  results: SearchResult[]
+  metadata?: Record<string, unknown>
+}
+
 export interface SearchOptions {
   maxResults?: number
   includeDomains?: string[]

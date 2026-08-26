@@ -6,12 +6,12 @@ const mockInfo = vi.fn()
 const mockError = vi.fn()
 
 const mockSearch = vi.fn()
+const mockSearchDetailed = vi.fn()
 const mockCreate = vi.fn((name: string, config: Record<string, unknown>) => {
-  void name
   void config
-  return {
-  search: mockSearch,
-  }
+  return name === 'firecrawl'
+    ? { search: mockSearch, searchDetailed: mockSearchDetailed }
+    : { search: mockSearch }
 })
 const mockResolveDefaultProvider = vi.fn(() => 'brave')
 
@@ -68,15 +68,18 @@ function runSearch(overrides: Partial<SearchRunArgs> = {}) {
 
 describe('search command', () => {
   let exitSpy: ReturnType<typeof vi.spyOn>
+  let stdoutSpy: ReturnType<typeof vi.spyOn> | undefined
 
   beforeEach(() => {
     mockLog.mockReset()
     mockInfo.mockReset()
     mockError.mockReset()
     mockSearch.mockReset()
+    mockSearchDetailed.mockReset()
     mockCreate.mockClear()
     mockResolveDefaultProvider.mockClear()
     mockSearch.mockResolvedValue([])
+    mockSearchDetailed.mockResolvedValue({ results: [], metadata: { id: 'job-1', creditsUsed: 1 } })
     exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => {
       throw new Error('__EXIT__')
     }) as never)
@@ -84,6 +87,8 @@ describe('search command', () => {
 
   afterEach(() => {
     exitSpy.mockRestore()
+    stdoutSpy?.mockRestore()
+    stdoutSpy = undefined
   })
 
   it('uses resolved default provider when provider arg is omitted', async () => {
@@ -98,6 +103,31 @@ describe('search command', () => {
 
     expect(mockResolveDefaultProvider).not.toHaveBeenCalled()
     expect(mockCreate).toHaveBeenCalledWith('exa', {})
+  })
+
+  it('prints detailed provider metadata in JSON output', async () => {
+    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSearch({ provider: 'firecrawl', json: true })
+
+    expect(mockSearchDetailed).toHaveBeenCalledWith('test query', { maxResults: 10 })
+    expect(mockSearch).not.toHaveBeenCalled()
+    expect(stdoutSpy).toHaveBeenCalledWith(`${JSON.stringify({
+      results: [],
+      metadata: { id: 'job-1', creditsUsed: 1 },
+    }, null, 2)}\n`)
+  })
+
+  it('keeps list JSON for providers without detailed search', async () => {
+    const results = [{ url: 'https://example.com', title: 'Example', snippet: 'Result' }]
+    mockSearch.mockResolvedValueOnce(results)
+    stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+
+    await runSearch({ provider: 'exa', json: true })
+
+    expect(mockSearch).toHaveBeenCalledWith('test query', { maxResults: 10 })
+    expect(mockSearchDetailed).not.toHaveBeenCalled()
+    expect(stdoutSpy).toHaveBeenCalledWith(`${JSON.stringify(results, null, 2)}\n`)
   })
 
   it('treats empty string provider as omitted', async () => {

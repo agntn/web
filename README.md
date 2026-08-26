@@ -101,6 +101,20 @@ const results = await searchAll('query', {
 })
 ```
 
+Firecrawl exposes response-level diagnostics through its detailed search capability. `search()` still returns the normalized result list:
+
+```typescript
+import { create, isDetailedSearchProvider } from '@agntn/web'
+
+const firecrawl = create('firecrawl')
+if (isDetailedSearchProvider(firecrawl)) {
+  const { results, metadata } = await firecrawl.searchDetailed('query')
+  console.log(results, metadata?.id, metadata?.warning, metadata?.creditsUsed)
+}
+```
+
+`web search --provider firecrawl --json "query"` prints the same `{ results, metadata }` envelope.
+
 ### Read a URL
 
 Use `readUrl` when you already have a URL and want normalized page content:

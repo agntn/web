@@ -1,4 +1,4 @@
-import type { SearchResult, SearchOptions, ReadResult, ReadOptions, ProviderConfig } from '../core/types.ts'
+import type { SearchResult, SearchOptions, SearchResponse, ReadResult, ReadOptions, ProviderConfig } from '../core/types.ts'
 import { Provider } from '../core/provider.ts'
 import { AuthError, normalizeError } from '../core/errors.ts'
 import { register } from '../core/registry.ts'
@@ -25,8 +25,10 @@ interface FirecrawlSearchResponse {
   data?: {
     web?: FirecrawlWebResult[]
     news?: FirecrawlWebResult[]
-    warning?: string
   }
+  id?: string
+  warning?: string | null
+  creditsUsed?: number
 }
 
 interface FirecrawlScrapeResponse {
@@ -74,6 +76,11 @@ class FirecrawlProvider extends Provider {
   }
 
   async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+    const response = await this.searchDetailed(query, options)
+    return response.results
+  }
+
+  async searchDetailed(query: string, options?: SearchOptions): Promise<SearchResponse> {
     const body: Record<string, unknown> = {
       query,
       limit: clampMaxResults(options?.maxResults),
@@ -100,7 +107,15 @@ class FirecrawlProvider extends Provider {
       const web = response.data?.web ?? []
       const news = response.data?.news ?? []
       const allResults = news.length > 0 ? [...web, ...news] : web
-      return allResults.slice(0, clampMaxResults(options?.maxResults)).map(mapSearchResult)
+      const metadata: Record<string, unknown> = {}
+      if (response.id !== undefined) metadata.id = response.id
+      if (response.warning != null) metadata.warning = response.warning
+      if (response.creditsUsed !== undefined) metadata.creditsUsed = response.creditsUsed
+
+      return {
+        results: allResults.slice(0, clampMaxResults(options?.maxResults)).map(mapSearchResult),
+        ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+      }
     }
     catch (error) {
       throw normalizeError(error, 'firecrawl')
