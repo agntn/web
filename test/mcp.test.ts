@@ -28,6 +28,7 @@ async function connectTestClient(): Promise<Client> {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(openConnections.splice(0).map((connection) => connection.close()))
 })
 
@@ -49,7 +50,7 @@ describe('web MCP server', () => {
   })
 
   it('returns provider results as JSON text for web_search', async () => {
-    process.env.JINA_API_KEY = 'test-key'
+    vi.stubEnv('JINA_API_KEY', 'test-key')
     mockGetJSON.mockReset()
     mockGetJSON.mockResolvedValue({
       code: 200,
@@ -117,7 +118,7 @@ describe('web MCP executors', () => {
   })
 
   it('clamps maxResults to the hard cap even without schema validation', async () => {
-    process.env.JINA_API_KEY = 'test-key'
+    vi.stubEnv('JINA_API_KEY', 'test-key')
     await executeSearch({ query: 'test', provider: 'jina', maxResults: 10.9 })
 
     const requestUrl = String(mockGetJSON.mock.calls[0]?.[0])
@@ -125,7 +126,7 @@ describe('web MCP executors', () => {
   })
 
   it('rejects a string includeDomains before it iterates per character', async () => {
-    process.env.JINA_API_KEY = 'test-key'
+    vi.stubEnv('JINA_API_KEY', 'test-key')
     await expect(
       executeSearch({ query: 'test', provider: 'jina', includeDomains: 'github.com' }),
     ).rejects.toBeInstanceOf(TypeError)
