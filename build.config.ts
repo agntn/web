@@ -15,12 +15,17 @@ export default defineBuildConfig({
   ],
   hooks: {
     rolldownConfig(config) {
-      config.external = config.external.filter(
-        (entry) =>
-          typeof entry === 'string'
-            ? entry !== '@opencode-ai/plugin' && entry !== 'typebox'
-            : !entry.test('@opencode-ai/plugin/tool'),
-      )
+      config.external = config.external.filter((entry) => {
+        if (typeof entry === 'string') {
+          return (
+            entry !== '@opencode-ai/plugin' &&
+            entry !== 'typebox' &&
+            !entry.startsWith('typebox/')
+          )
+        }
+
+        return !entry.test('@opencode-ai/plugin/tool') && !entry.test('typebox/value')
+      })
     },
   },
 })
