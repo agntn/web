@@ -1,2 +1,8 @@
+allowBuilds:
+  "@google/genai": false
+  esbuild: true
+  koffi: false
+  protobufjs: false
+
 packages:
   - packages/*
