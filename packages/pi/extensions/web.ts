@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import type { AgentToolResult, ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
@@ -60,10 +63,20 @@ type ReadDetails =
 
 type WebModule = typeof import("@agntn/web");
 
+const sourceModuleUrl = new URL("../../../src/index.ts", import.meta.url);
+const distributionModuleUrl = new URL("../../../dist/index.mjs", import.meta.url);
 let webModulePromise: Promise<WebModule> | undefined;
 
+/** @returns {string} Live source in a checkout, otherwise the built distribution module. */
+export function resolveWebModuleUrl(): string {
+  return existsSync(fileURLToPath(sourceModuleUrl))
+    ? sourceModuleUrl.href
+    : distributionModuleUrl.href;
+}
+
+/** @returns {Promise<WebModule>} The cached module from the resolved live runtime. */
 function loadWeb(): Promise<WebModule> {
-  webModulePromise ??= import("@agntn/web").catch(() => import("../../../src/index.ts"));
+  webModulePromise ??= import(resolveWebModuleUrl()) as Promise<WebModule>;
   return webModulePromise;
 }
 
