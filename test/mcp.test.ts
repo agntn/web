@@ -3,6 +3,15 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mockGetJSON = vi.fn()
+const providerEnvKeys = [
+  'EXA_API_KEY',
+  'BRAVE_API_KEY',
+  'FIRECRAWL_API_KEY',
+  'JINA_API_KEY',
+  'TAVILY_API_KEY',
+  'SERPAPI_API_KEY',
+  'SERPBASE_API_KEY',
+] as const
 
 vi.mock('../src/core/client.ts', () => ({
   Client: vi.fn(),
@@ -13,7 +22,11 @@ vi.mock('../src/core/client.ts', () => ({
 }))
 
 import { createMcpServer, executeRead, executeSearch } from '../src/mcp.ts'
-import { EmptyQueryError, EmptyUrlError } from '../src/core/errors.ts'
+import {
+  EmptyQueryError,
+  EmptyUrlError,
+  NoProviderAvailableError,
+} from '../src/core/errors.ts'
 import '../src/providers/index.ts'
 
 const openConnections: Array<{ close(): Promise<void> }> = []
@@ -27,8 +40,13 @@ async function connectTestClient(): Promise<Client> {
   return client
 }
 
+beforeEach(() => {
+  for (const key of providerEnvKeys) vi.stubEnv(key, '')
+})
+
 afterEach(async () => {
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
   await Promise.all(openConnections.splice(0).map((connection) => connection.close()))
 })
 
@@ -71,6 +89,22 @@ describe('web MCP server', () => {
     ])
   })
 
+  it('reports an unreachable local SearXNG instance', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')))
+    const client = await connectTestClient()
+
+    const response = await client.callTool({ name: 'web_providers', arguments: {} })
+
+    expect(response.isError).toBeUndefined()
+    const payload = JSON.parse((response.content as Array<{ type: string; text: string }>)[0]?.text ?? '')
+    expect(payload).toContainEqual({
+      name: 'searxng',
+      configured: true,
+      envVar: null,
+      reachable: false,
+    })
+  })
+
   it('rejects arguments that miss the schema', async () => {
     const client = await connectTestClient()
 
@@ -106,6 +140,13 @@ describe('web MCP executors', () => {
   beforeEach(() => {
     mockGetJSON.mockReset()
     mockGetJSON.mockResolvedValue({ code: 200, status: 20000, data: [] })
+  })
+
+  it('does not select an unreachable local SearXNG instance by default', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('ECONNREFUSED')))
+
+    await expect(executeSearch({ query: 'test' })).rejects.toBeInstanceOf(NoProviderAvailableError)
+    expect(mockGetJSON).not.toHaveBeenCalled()
   })
 
   it('guards the empty-query contract when a host skips validation', async () => {

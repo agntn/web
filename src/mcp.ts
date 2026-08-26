@@ -16,7 +16,7 @@ import {
   type ReadProviderName,
 } from './core/read.ts'
 import { EmptyQueryError } from './core/errors.ts'
-import { resolveDefaultProvider, listProviders } from './core/resolve.ts'
+import { resolveDefaultProviderAsync, listProvidersAsync } from './core/resolve.ts'
 import './providers/index.ts'
 import { version } from './version.ts'
 
@@ -142,7 +142,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         idempotentHint: true,
         openWorldHint: false,
       },
-      execute: () => listProviders(),
+      execute: () => listProvidersAsync(),
     },
   ].map(tool => [tool.name, tool]),
 )
@@ -177,7 +177,7 @@ export async function executeSearch(args: Record<string, unknown>): Promise<unkn
     return searchAll(query, searchOptions)
   }
 
-  const name = stringArg('provider', args.provider) ?? resolveDefaultProvider()
+  const name = stringArg('provider', args.provider) ?? await resolveDefaultProviderAsync()
   return createSearchProvider(name).search(query, searchOptions)
 }
 
