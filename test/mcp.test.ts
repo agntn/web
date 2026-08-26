@@ -123,4 +123,28 @@ describe('web MCP executors', () => {
     const requestUrl = String(mockGetJSON.mock.calls[0]?.[0])
     expect(requestUrl).toContain('count=10')
   })
+
+  it('rejects a string includeDomains before it iterates per character', async () => {
+    process.env.JINA_API_KEY = 'test-key'
+    await expect(
+      executeSearch({ query: 'test', provider: 'jina', includeDomains: 'github.com' }),
+    ).rejects.toBeInstanceOf(TypeError)
+
+    await executeSearch({
+      query: 'test',
+      provider: 'jina',
+      includeDomains: ['github.com'],
+    })
+    const requestUrl = String(mockGetJSON.mock.calls[0]?.[0])
+    expect(requestUrl).toContain('site=github.com')
+  })
+
+  it('rejects fractional maxTokens and a non-boolean noCache at the boundary', async () => {
+    await expect(executeRead({ url: 'https://example.com', maxTokens: 10.5 })).rejects.toBeInstanceOf(
+      TypeError,
+    )
+    await expect(executeRead({ url: 'https://example.com', noCache: 'yes' })).rejects.toBeInstanceOf(
+      TypeError,
+    )
+  })
 })

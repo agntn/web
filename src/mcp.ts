@@ -162,33 +162,81 @@ export async function executeSearch(args: Record<string, unknown>): Promise<unkn
 
   const searchOptions = {
     maxResults,
-    includeDomains: args.includeDomains as string[] | undefined,
-    excludeDomains: args.excludeDomains as string[] | undefined,
-    category: args.category as string | undefined,
-    startPublishedDate: args.startPublishedDate as string | undefined,
-    endPublishedDate: args.endPublishedDate as string | undefined,
+    includeDomains: domainListArg('includeDomains', args.includeDomains),
+    excludeDomains: domainListArg('excludeDomains', args.excludeDomains),
+    category: stringArg('category', args.category),
+    startPublishedDate: stringArg('startPublishedDate', args.startPublishedDate),
+    endPublishedDate: stringArg('endPublishedDate', args.endPublishedDate),
   }
 
   if (args.provider === 'all') {
     return searchAll(query, searchOptions)
   }
 
-  const name = (args.provider as string | undefined) ?? resolveDefaultProvider()
+  const name = stringArg('provider', args.provider) ?? resolveDefaultProvider()
   return createSearchProvider(name).search(query, searchOptions)
 }
 
 /** Mirrors {@link executeSearch}: guards the read contract when validation was skipped. */
 export async function executeRead(args: Record<string, unknown>): Promise<unknown> {
   const url = typeof args.url === 'string' ? args.url : ''
+  const format = stringArg('format', args.format)
+  if (format !== undefined && format !== 'markdown' && format !== 'text' && format !== 'html') {
+    throw new TypeError('format must be one of: markdown, text, html')
+  }
+
   return readUrl(url, {
-    provider: args.provider as string | undefined,
-    format: args.format as 'markdown' | 'text' | 'html' | undefined,
-    maxTokens: typeof args.maxTokens === 'number' ? args.maxTokens : undefined,
-    targetSelector: args.targetSelector as string | undefined,
-    removeSelector: args.removeSelector as string | undefined,
-    timeout: typeof args.timeout === 'number' ? args.timeout : undefined,
-    noCache: typeof args.noCache === 'boolean' ? args.noCache : undefined,
+    provider: stringArg('provider', args.provider),
+    format: format as 'markdown' | 'text' | 'html' | undefined,
+    maxTokens: intArg('maxTokens', args.maxTokens),
+    targetSelector: stringArg('targetSelector', args.targetSelector),
+    removeSelector: stringArg('removeSelector', args.removeSelector),
+    timeout: intArg('timeout', args.timeout),
+    noCache: boolArg('noCache', args.noCache),
   })
+}
+
+/**
+ * Boundary guards for typed options when a host skips schema validation.
+ *
+ * They throw instead of silently dropping or coercing: jina iterates
+ * includeDomains with for...of, so a bare string would reach the API as one
+ * `site=` param per character, and fractional maxTokens would become an
+ * X-Token-Budget header. The MCP handler wraps these in errorResult.
+ */
+function stringArg(name: string, value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new TypeError(`${name} must be a non-empty string`)
+  }
+  return value
+}
+
+function intArg(name: string, value: unknown): number | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1) {
+    throw new TypeError(`${name} must be an integer >= 1`)
+  }
+  return value
+}
+
+function boolArg(name: string, value: unknown): boolean | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'boolean') {
+    throw new TypeError(`${name} must be a boolean`)
+  }
+  return value
+}
+
+function domainListArg(name: string, value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (
+    !Array.isArray(value) ||
+    value.some((domain) => typeof domain !== 'string' || !domain.trim())
+  ) {
+    throw new TypeError(`${name} must be an array of non-empty domain strings`)
+  }
+  return value as string[]
 }
 
 /** Formats the first TypeBox validation failure for an MCP client. */
