@@ -117,12 +117,12 @@ describe('web MCP executors', () => {
     await expect(executeRead({ url: '' })).rejects.toBeInstanceOf(EmptyUrlError)
   })
 
-  it('clamps maxResults to the hard cap even without schema validation', async () => {
+  it('accepts maxResults at the declared hard cap', async () => {
     vi.stubEnv('JINA_API_KEY', 'test-key')
-    await executeSearch({ query: 'test', provider: 'jina', maxResults: 10.9 })
+    await executeSearch({ query: 'test', provider: 'jina', maxResults: 20 })
 
     const requestUrl = String(mockGetJSON.mock.calls[0]?.[0])
-    expect(requestUrl).toContain('count=10')
+    expect(requestUrl).toContain('count=20')
   })
 
   it('rejects a string includeDomains before it iterates per character', async () => {
@@ -149,12 +149,20 @@ describe('web MCP executors', () => {
     )
   })
 
-  it('rejects malformed maxResults instead of silently using the default', async () => {
+  it('rejects malformed maxResults instead of silently changing the request', async () => {
+    for (const maxResults of ['5', Number.NaN, 10.9, 21]) {
+      await expect(
+        executeSearch({ query: 'test', provider: 'jina', maxResults }),
+      ).rejects.toBeInstanceOf(TypeError)
+    }
+  })
+
+  it('rejects blank read providers before the default-provider fallback', async () => {
     await expect(
-      executeSearch({ query: 'test', provider: 'jina', maxResults: '5' }),
+      executeRead({ url: 'https://example.com', provider: '' }),
     ).rejects.toBeInstanceOf(TypeError)
     await expect(
-      executeSearch({ query: 'test', provider: 'jina', maxResults: Number.NaN }),
+      executeRead({ url: 'https://example.com', provider: '   ' }),
     ).rejects.toBeInstanceOf(TypeError)
   })
 

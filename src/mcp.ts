@@ -10,7 +10,11 @@ import { Value } from 'typebox/value'
 import { builtinProviders } from './core/providers.ts'
 import { createSearchProvider } from './core/registry.ts'
 import { searchAll } from './core/all.ts'
-import { readProviderNames, readUrl } from './core/read.ts'
+import {
+  readProviderNames,
+  readUrl,
+  type ReadProviderName,
+} from './core/read.ts'
 import { EmptyQueryError } from './core/errors.ts'
 import { resolveDefaultProvider, listProviders } from './core/resolve.ts'
 import './providers/index.ts'
@@ -155,12 +159,9 @@ export async function executeSearch(args: Record<string, unknown>): Promise<unkn
     throw new EmptyQueryError()
   }
 
-  let maxResults: number | undefined
-  if (args.maxResults !== undefined) {
-    if (typeof args.maxResults !== 'number' || !Number.isFinite(args.maxResults)) {
-      throw new TypeError('maxResults must be a finite number')
-    }
-    maxResults = Math.min(Math.max(1, Math.trunc(args.maxResults)), MAX_RESULTS_HARD_CAP)
+  const maxResults = intArg('maxResults', args.maxResults)
+  if (maxResults !== undefined && maxResults > MAX_RESULTS_HARD_CAP) {
+    throw new TypeError(`maxResults must be at most ${MAX_RESULTS_HARD_CAP}`)
   }
 
   const searchOptions = {
@@ -189,7 +190,7 @@ export async function executeRead(args: Record<string, unknown>): Promise<unknow
   }
 
   return readUrl(url, {
-    provider: stringArg('provider', args.provider),
+    provider: readProviderArg(args.provider),
     format: format as 'markdown' | 'text' | 'html' | undefined,
     maxTokens: intArg('maxTokens', args.maxTokens),
     targetSelector: stringArg('targetSelector', args.targetSelector),
@@ -214,6 +215,15 @@ function stringArg(name: string, value: unknown): string | undefined {
     throw new TypeError(`${name} must be a string`)
   }
   return value
+}
+
+function readProviderArg(value: unknown): ReadProviderName | undefined {
+  if (value === undefined) return undefined
+  const provider = readProviderNames.find((name) => name === value)
+  if (!provider) {
+    throw new TypeError(`provider must be one of: ${readProviderNames.join(', ')}`)
+  }
+  return provider
 }
 
 function intArg(name: string, value: unknown): number | undefined {
@@ -269,6 +279,8 @@ function errorResult(text: string): CallToolResult {
  * because `McpServer.registerTool` accepts Standard Schema (Zod) only. TypeBox 1.x
  * does not implement Standard Schema, and this package's Pi extension schemas are
  * TypeBox. The high-level API would force a second definition of every parameter.
+ * Results stay in text content because clients prefer structuredContent over the
+ * readable response when both are present.
  */
 export function createMcpServer(): Server {
   const server = new Server({ name: 'web', version }, { capabilities: { tools: {} } })
@@ -297,9 +309,6 @@ export function createMcpServer(): Server {
 
     try {
       const result = await tool.execute(args)
-      // Text-result contract: the payload is JSON-encoded text and
-      // structuredContent stays unset, because clients that see structured
-      // output prefer it over content and would hide the readable answer.
       return { content: [{ type: 'text', text: JSON.stringify(result) }] }
     } catch (error) {
       return errorResult(
