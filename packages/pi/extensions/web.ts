@@ -3,10 +3,12 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 import type {
   ProviderStatus,
+  ReadBatchItem,
   ReadOptions,
   ReadProviderName,
   ReadResult,
   SearchAllResult,
+  SearchBatchItem,
   SearchRequestOptions,
   SearchResult,
   WebSearchProviderName,
@@ -30,15 +32,31 @@ type SearchAllDetails = {
   readonly errors: { provider: string; error: string }[];
 };
 
-type SearchDetails = SearchSingleDetails | SearchAllDetails;
-
-type ReadDetails = {
-  readonly mode: "read";
-  readonly url: string;
-  readonly provider: ReadProviderName;
-  readonly options: ReadOptions;
-  readonly result: ReadResult;
+type SearchBatchDetails = {
+  readonly mode: "batch";
+  readonly queries: readonly string[];
+  readonly provider?: "all" | WebSearchProviderName;
+  readonly options: SearchRequestOptions;
+  readonly outcomes: readonly SearchBatchItem[];
 };
+
+type SearchDetails = SearchSingleDetails | SearchAllDetails | SearchBatchDetails;
+
+type ReadDetails =
+  | {
+      readonly mode: "read";
+      readonly url: string;
+      readonly provider: ReadProviderName;
+      readonly options: ReadOptions;
+      readonly result: ReadResult;
+    }
+  | {
+      readonly mode: "batch";
+      readonly urls: readonly string[];
+      readonly provider: ReadProviderName;
+      readonly options: ReadOptions;
+      readonly outcomes: readonly ReadBatchItem[];
+    };
 
 type WebModule = typeof import("@agntn/web");
 
@@ -66,10 +84,16 @@ const READ_PROVIDER_HINT =
   "Read provider to use. Defaults to Jina and is validated against web.readProviderNames at execution time.";
 
 const MAX_RESULTS_HARD_CAP = 20;
+const MAX_BATCH_ITEMS_HARD_CAP = 10;
 const DEFAULT_MAX_RESULTS = 10;
 
 const searchParameters = Type.Object({
-  query: Type.String({ description: "Search query." }),
+  query: Type.Union(
+    [Type.String(), Type.Array(Type.String(), { minItems: 1, maxItems: MAX_BATCH_ITEMS_HARD_CAP })],
+    {
+      description: "Search query, or a batch of search queries.",
+    },
+  ),
   provider: Type.Optional(Type.String({ description: PROVIDER_HINT })),
   maxResults: Type.Optional(
     Type.Number({
@@ -107,7 +131,12 @@ const searchParameters = Type.Object({
 });
 
 const readParameters = Type.Object({
-  url: Type.String({ description: "URL to read." }),
+  url: Type.Union(
+    [Type.String(), Type.Array(Type.String(), { minItems: 1, maxItems: MAX_BATCH_ITEMS_HARD_CAP })],
+    {
+      description: "URL to read, or a batch of URLs.",
+    },
+  ),
   provider: Type.Optional(Type.String({ description: READ_PROVIDER_HINT })),
   format: Type.Optional(
     Type.String({ description: 'Preferred content format: "markdown", "text", or "html".' }),
@@ -131,6 +160,13 @@ const emptyParameters = Type.Object({});
 
 type SearchParams = Static<typeof searchParameters>;
 type ReadParams = Static<typeof readParameters>;
+type SearchRenderParams = SearchOptionValues & {
+  readonly query: string | readonly string[];
+  readonly provider?: string;
+};
+type ReadRenderParams = Readonly<Omit<ReadParams, "url">> & {
+  readonly url: string | readonly string[];
+};
 type EmptyParams = Static<typeof emptyParameters>;
 type ProviderInput = (typeof PROVIDERS)[number];
 type ReadProviderInput = ReadProviderName;
@@ -140,9 +176,9 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_search",
     label: "Web Search",
     description:
-      "Read-only/open-world network search: query one configured provider (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Firecrawl adds markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata. Pick provider for the shape you need.",
+      "Read-only/open-world network search: query one configured provider (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Firecrawl adds markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata.",
     promptSnippet:
-      "Search the web with web_search. Use provider=all to query every configured provider in parallel.",
+      "Search the web with web_search. Pass a query array for independent batch results, or use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
       "Use web_search when the user explicitly asks for fresh web information, news, references, or links.",
       "Prefer a single provider when the user names one; use provider=all when freshness or coverage matters and at least two providers are configured.",
@@ -155,22 +191,7 @@ export default function webExtension(pi: ExtensionAPI) {
       return new Text(renderSearchCall(args, theme), 0, 0);
     },
     async execute(_toolCallId, params): Promise<AgentToolResult<SearchDetails>> {
-      const query = params.query.trim();
-      if (!query) {
-        throw new Error("Query cannot be empty");
-      }
-
-      const rawProvider = (params.provider ?? "").trim() || undefined;
-      let providerName: "all" | WebSearchProviderName | undefined;
-      if (rawProvider === undefined) {
-        providerName = undefined;
-      } else {
-        if (!isKnownProvider(rawProvider)) {
-          throw new Error(`Unknown provider "${rawProvider}". Available: ${PROVIDERS.join(", ")}.`);
-        }
-        providerName = normalizeProvider(rawProvider);
-      }
-
+      const providerName = normalizeSearchProviderInput(params.provider);
       const searchOptions: SearchRequestOptions = stripUndefined({
         maxResults: params.maxResults,
         includeDomains: params.includeDomains,
@@ -182,6 +203,27 @@ export default function webExtension(pi: ExtensionAPI) {
 
       const web = await loadWeb();
 
+      if (Array.isArray(params.query)) {
+        const outcomes = await web.searchBatch(params.query, {
+          provider: providerName,
+          ...searchOptions,
+        });
+        return {
+          content: [{ type: "text", text: formatSearchBatch(outcomes) }],
+          details: {
+            mode: "batch",
+            queries: params.query,
+            provider: providerName,
+            options: searchOptions,
+            outcomes,
+          },
+        };
+      }
+
+      const query = params.query.trim();
+      if (!query) {
+        throw new Error("Query cannot be empty");
+      }
       if (providerName === "all") {
         const response = await web.searchAllDetailed(query, searchOptions);
         const results = response.results;
@@ -241,8 +283,9 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_read",
     label: "Web Read",
     description:
-      "Read-only/open-world network fetch: read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai); Firecrawl is also available for JS-rendered pages, PDFs, and structured extraction. Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.",
-    promptSnippet: "Read a URL with web_read when page content is needed, not just search results.",
+      "Read-only/open-world network fetch: read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item has its own result or error. Defaults to Jina Reader (r.jina.ai); Firecrawl is also available for JS-rendered pages, PDFs, and structured extraction.",
+    promptSnippet:
+      "Read one URL with web_read, or pass a URL array when several pages are needed independently.",
     promptGuidelines: [
       "Use web_read after search when the user needs the contents of a specific URL.",
       "Use web_search for query-to-URL search; use web_read for URL-to-content reading.",
@@ -252,20 +295,8 @@ export default function webExtension(pi: ExtensionAPI) {
       return new Text(renderReadCall(args, theme), 0, 0);
     },
     async execute(_toolCallId, params): Promise<AgentToolResult<ReadDetails>> {
-      const url = params.url.trim();
-      if (!url) {
-        throw new Error("URL cannot be empty");
-      }
-
       const web = await loadWeb();
-      const defaultReadProvider: ReadProviderName = web.readProviderNames[0] ?? "jina";
-      const rawProvider = (params.provider ?? defaultReadProvider).trim() || defaultReadProvider;
-      if (!isKnownReadProvider(rawProvider, web.readProviderNames)) {
-        throw new Error(
-          `Unknown read provider "${rawProvider}". Available: ${web.readProviderNames.join(", ")}.`,
-        );
-      }
-
+      const readProvider = normalizeReadProviderInput(params.provider, web.readProviderNames);
       const format = normalizeReadFormat(params.format);
       const readOptions: ReadOptions = stripUndefinedRead({
         format,
@@ -276,14 +307,35 @@ export default function webExtension(pi: ExtensionAPI) {
         noCache: params.noCache,
       });
 
-      const result = await web.readUrl(url, { provider: rawProvider, ...readOptions });
-      const header = `[provider=${rawProvider}] read ${result.url}`;
+      if (Array.isArray(params.url)) {
+        const outcomes = await web.readBatch(params.url, {
+          provider: readProvider,
+          ...readOptions,
+        });
+        return {
+          content: [{ type: "text", text: formatReadBatch(outcomes) }],
+          details: {
+            mode: "batch",
+            urls: params.url,
+            provider: readProvider,
+            options: readOptions,
+            outcomes,
+          },
+        };
+      }
+
+      const url = params.url.trim();
+      if (!url) {
+        throw new Error("URL cannot be empty");
+      }
+      const result = await web.readUrl(url, { provider: readProvider, ...readOptions });
+      const header = `[provider=${readProvider}] read ${result.url}`;
       return {
         content: [{ type: "text", text: withHeader(header, formatReadResult(result)) }],
         details: {
           mode: "read",
           url,
-          provider: rawProvider,
+          provider: readProvider,
           options: readOptions,
           result,
         },
@@ -403,6 +455,31 @@ function isKnownReadProvider(
   return readProviderNames.some((provider) => provider === name);
 }
 
+function normalizeSearchProviderInput(
+  provider: string | undefined,
+): "all" | WebSearchProviderName | undefined {
+  const rawProvider = (provider ?? "").trim() || undefined;
+  if (rawProvider === undefined) return undefined;
+  if (!isKnownProvider(rawProvider)) {
+    throw new Error(`Unknown provider "${rawProvider}". Available: ${PROVIDERS.join(", ")}.`);
+  }
+  return normalizeProvider(rawProvider);
+}
+
+function normalizeReadProviderInput(
+  provider: string | undefined,
+  readProviderNames: readonly ReadProviderName[],
+): ReadProviderName {
+  const defaultProvider: ReadProviderName = readProviderNames[0] ?? "jina";
+  const rawProvider = (provider ?? defaultProvider).trim() || defaultProvider;
+  if (!isKnownReadProvider(rawProvider, readProviderNames)) {
+    throw new Error(
+      `Unknown read provider "${rawProvider}". Available: ${readProviderNames.join(", ")}.`,
+    );
+  }
+  return rawProvider;
+}
+
 function normalizeReadFormat(format: string | undefined): ReadOptions["format"] {
   if (format === undefined || format === "") return undefined;
   if (format === "markdown" || format === "text" || format === "html") return format;
@@ -502,6 +579,15 @@ function formatProviderStatus(s: Readonly<ProviderStatus>): string {
 
 type SearchResultView = Readonly<Pick<SearchResult, "url" | "title" | "snippet">>;
 type SearchAllResultView = SearchResultView & Readonly<Pick<SearchAllResult, "provider">>;
+type SearchBatchItemView =
+  | { readonly query: string; readonly error: string }
+  | { readonly query: string; readonly results: readonly SearchResultView[] };
+type ReadBatchItemView =
+  | { readonly url: string; readonly error: string }
+  | {
+      readonly url: string;
+      readonly result: Readonly<Pick<ReadResult, "title" | "url" | "description" | "content">>;
+    };
 type ProviderErrorView = { readonly provider: string; readonly error: Readonly<Error> };
 
 function formatResult(result: SearchResultView, index?: number): string {
@@ -529,6 +615,28 @@ function formatAllResults(
   return lines;
 }
 
+function formatSearchBatch(outcomes: readonly SearchBatchItemView[]): string {
+  return outcomes
+    .map((outcome, index) => {
+      const header = `[${index + 1}] ${outcome.query}`;
+      return "error" in outcome
+        ? `${header}\nError: ${outcome.error}`
+        : withHeader(header, formatResults(outcome.results));
+    })
+    .join("\n\n");
+}
+
+function formatReadBatch(outcomes: readonly ReadBatchItemView[]): string {
+  return outcomes
+    .map((outcome, index) => {
+      const header = `[${index + 1}] ${outcome.url}`;
+      return "error" in outcome
+        ? `${header}\nError: ${outcome.error}`
+        : withHeader(header, formatReadResult(outcome.result));
+    })
+    .join("\n\n");
+}
+
 function formatReadResult(
   result: Readonly<Pick<ReadResult, "title" | "url" | "description" | "content">>,
 ): readonly string[] {
@@ -539,12 +647,16 @@ function formatReadResult(
 }
 
 function renderSearchCall(
-  params: SearchOptionValues & Readonly<Pick<SearchParams, "query" | "provider">>,
+  params: SearchRenderParams,
   theme: Readonly<Pick<Theme, "bold" | "fg">>,
 ): string {
+  const queryLabel =
+    typeof params.query !== "string"
+      ? `${params.query.length} queries`
+      : `"${truncateSingleLine(params.query, 120)}"`;
   return [
     theme.fg("toolTitle", theme.bold("web_search")),
-    theme.fg("dim", `"${truncateSingleLine(params.query, 120)}"`),
+    theme.fg("dim", queryLabel),
     ...searchCallOptions(params).map((option) => theme.fg("muted", option)),
   ].join(" ");
 }
@@ -579,13 +691,14 @@ function isDefined(value: string | undefined): value is string {
 }
 
 function renderReadCall(
-  params: Readonly<ReadParams>,
+  params: ReadRenderParams,
   theme: Readonly<Pick<Theme, "bold" | "fg">>,
 ): string {
-  const parts = [
-    theme.fg("toolTitle", theme.bold("web_read")),
-    theme.fg("dim", truncateSingleLine(params.url, 120)),
-  ];
+  const urlLabel =
+    typeof params.url !== "string"
+      ? `${params.url.length} URLs`
+      : truncateSingleLine(params.url, 120);
+  const parts = [theme.fg("toolTitle", theme.bold("web_read")), theme.fg("dim", urlLabel)];
   if (params.provider) parts.push(theme.fg("muted", `provider=${params.provider}`));
   if (params.format) parts.push(theme.fg("muted", `format=${params.format}`));
   if (params.maxTokens !== undefined)

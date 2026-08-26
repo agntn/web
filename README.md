@@ -21,8 +21,8 @@ pi install git:github.com/agntn/web
 
 Provided tools:
 
-- `web_search` - search the web with a single provider, or `provider="all"` to fan out across every configured/reachable provider in parallel
-- `web_read` - read a URL into normalized content with a read-capable provider (currently Jina Reader)
+- `web_search` - search one query or a batch of queries with a single provider, or use `provider="all"` for provider fan-out
+- `web_read` - read one URL or a batch of URLs with Jina Reader or Firecrawl
 - `web_providers` - list built-in providers, env-var configuration, and reachability status
 
 Provided slash commands:
@@ -133,6 +133,21 @@ console.log(page.title, page.content);
 
 Jina read uses `r.jina.ai` and does not require an API key for basic reads; if `JINA_API_KEY` is present it is sent as Bearer auth.
 
+### Batch operations
+
+`searchBatch` and `readBatch` run up to 10 independent operations in parallel. Input order is preserved, and one failure does not discard the other outcomes:
+
+```typescript
+import { readBatch, searchBatch } from "@agntn/web";
+
+const searches = await searchBatch(["TypeScript 7", "Node.js releases"], {
+  provider: "exa",
+});
+const pages = await readBatch(["https://example.com/one", "https://example.com/two"]);
+```
+
+Each search outcome is `{ query, results }` or `{ query, error }`. Each read outcome is `{ url, result }` or `{ url, error }`.
+
 ### AI SDK tool
 
 The `@agntn/web/ai` subpath exports ready-made tools compatible with [Vercel AI SDK](https://ai-sdk.dev/docs/foundations/tools):
@@ -148,13 +163,13 @@ const { text } = await generateText({
 });
 ```
 
-`searchTool` accepts an optional `provider` parameter. Set it to `"all"` to query all available providers in parallel. `readTool` accepts a URL and reads page content with a read-capable provider:
+`searchTool` accepts one query or an array of queries. `readTool` accepts one URL or an array of URLs. Batch calls use the outcome shapes above, while scalar calls keep their original result shape:
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
 tools: { web_search: searchTool, web_read: readTool }
-// searchTool input: { query: string, provider?: "brave" | "exa" | ... | "all", maxResults?: number }
-// readTool input: { url: string, provider?: "jina", format?: "markdown" | "text" | "html" }
+// searchTool input: { query: string | string[], provider?: "brave" | "exa" | ... | "all", maxResults?: number }
+// readTool input: { url: string | string[], provider?: "jina" | "firecrawl", format?: "markdown" | "text" | "html" }
 ```
 
 For `searchTool`, when no provider is specified, the tool auto-detects the first available one from environment variables. `readTool` defaults to Jina Reader.
@@ -181,8 +196,8 @@ web providers
 
 `web mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio exposing the same capabilities as the agent tools:
 
-- `web_search` - search with one provider, or `provider="all"` for parallel fan-out
-- `web_read` - read a URL into normalized content (default: Jina Reader)
+- `web_search` - search one query or a batch, or use `provider="all"` for provider fan-out
+- `web_read` - read one URL or a batch (default: Jina Reader)
 - `web_providers` - list providers and their configuration status
 
 Register it with any MCP client:

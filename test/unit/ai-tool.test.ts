@@ -104,6 +104,7 @@ describe("searchTool", () => {
         delete process.env[key];
       }
     }
+    vi.unstubAllGlobals();
   });
 
   it("has correct description", () => {
@@ -132,6 +133,36 @@ describe("searchTool", () => {
     expect(results).toHaveLength(1);
     expect(results[0].url).toBe("https://example.com");
     expect(results[0].title).toBe("Test Result");
+  });
+
+  it("returns one ordered outcome per query in a batch", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    mockPostJSON
+      .mockResolvedValueOnce(exaResponse)
+      .mockRejectedValueOnce(new Error("second query failed"));
+
+    const outcomes = await searchTool.execute!(
+      { query: ["first query", "second query"], provider: "exa" },
+      { toolCallId: "call-batch", messages: [] },
+    );
+
+    expect(outcomes).toEqual([
+      { query: "first query", results: [expect.objectContaining({ title: "Test Result" })] },
+      { query: "second query", error: "second query failed" },
+    ]);
+  });
+
+  it("rejects oversized batches before starting requests", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    const queries = Array.from({ length: 11 }, (_, index) => `query ${index}`);
+
+    await expect(
+      searchTool.execute!(
+        { query: queries, provider: "exa" },
+        { toolCallId: "call-large-batch", messages: [] },
+      ),
+    ).rejects.toThrow("Batch cannot contain more than 10 items");
+    expect(mockPostJSON).not.toHaveBeenCalled();
   });
 
   it("execute resolves default provider from env", async () => {
@@ -275,6 +306,21 @@ describe("searchTool", () => {
     expect(results[0]).toHaveProperty("url");
     expect(results[0]).toHaveProperty("title");
   });
+
+  it("returns a query error when all batch providers fail", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
+    mockPostJSON.mockRejectedValue(new Error("Exa unavailable"));
+
+    const outcomes = await searchTool.execute!(
+      { query: ["test"], provider: "all" },
+      { toolCallId: "call-all-batch-failure", messages: [] },
+    );
+
+    expect(outcomes).toEqual([
+      { query: "test", error: "Search providers failed: exa: Exa unavailable" },
+    ]);
+  });
 });
 
 describe("readTool", () => {
@@ -316,6 +362,41 @@ describe("readTool", () => {
     const [url, headers] = mockGetJSON.mock.calls[0];
     expect(url).toBe("https://r.jina.ai/https%3A%2F%2Fexample.com");
     expect(headers).toEqual({ Accept: "application/json", "X-Return-Format": "markdown" });
+  });
+
+  it("returns one ordered outcome per URL in a batch", async () => {
+    mockGetJSON
+      .mockResolvedValueOnce({
+        code: 200,
+        status: 20000,
+        data: {
+          url: "https://example.com/one",
+          content: "First page",
+        },
+      })
+      .mockRejectedValueOnce(new Error("second read failed"));
+
+    const outcomes = await readTool.execute!(
+      { url: ["https://example.com/one", "https://example.com/two"] },
+      { toolCallId: "read-batch", messages: [] },
+    );
+
+    expect(outcomes).toEqual([
+      {
+        url: "https://example.com/one",
+        result: { url: "https://example.com/one", content: "First page" },
+      },
+      { url: "https://example.com/two", error: "second read failed" },
+    ]);
+  });
+
+  it("rejects oversized read batches before starting requests", async () => {
+    const urls = Array.from({ length: 11 }, (_, index) => `https://example.com/${index}`);
+
+    await expect(
+      readTool.execute!({ url: urls }, { toolCallId: "read-large-batch", messages: [] }),
+    ).rejects.toThrow("Batch cannot contain more than 10 items");
+    expect(mockGetJSON).not.toHaveBeenCalled();
   });
 
   it("rejects empty URL", async () => {

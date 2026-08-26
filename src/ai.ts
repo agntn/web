@@ -4,6 +4,7 @@ import { builtinProviders } from "./core/providers.ts";
 import { createSearchProvider } from "./core/registry.ts";
 import { searchAll } from "./core/all.ts";
 import { readProviderNames, readUrl } from "./core/read.ts";
+import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
 import { resolveDefaultProvider, listProviders } from "./core/resolve.ts";
 import "./providers/index.ts";
@@ -12,9 +13,11 @@ const providerNames = [...builtinProviders, "all"] as const;
 
 export const searchTool = tool({
   description:
-    'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+    'Search the web using multiple search engines (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
   inputSchema: z.object({
-    query: z.string().describe("Search query"),
+    query: z
+      .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
+      .describe("Search query, or a batch of search queries"),
     provider: z
       .enum(providerNames)
       .optional()
@@ -52,10 +55,6 @@ export const searchTool = tool({
     startPublishedDate,
     endPublishedDate,
   }) => {
-    if (!query.trim()) {
-      throw new EmptyQueryError();
-    }
-
     const searchOptions = {
       maxResults,
       includeDomains,
@@ -65,6 +64,12 @@ export const searchTool = tool({
       endPublishedDate,
     };
 
+    if (Array.isArray(query)) {
+      return searchBatch(query, { provider: providerName, ...searchOptions });
+    }
+    if (!query.trim()) {
+      throw new EmptyQueryError();
+    }
     if (providerName === "all") {
       return searchAll(query, searchOptions);
     }
@@ -76,9 +81,11 @@ export const searchTool = tool({
 
 export const readTool = tool({
   description:
-    "Read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai). Returns URL, title/description when available, canonical content, and optional text/html/images/metadata.",
+    "Read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
   inputSchema: z.object({
-    url: z.string().describe("URL to read"),
+    url: z
+      .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
+      .describe("URL to read, or a batch of URLs"),
     provider: z
       .enum(readProviderNames)
       .optional()
@@ -110,11 +117,7 @@ export const readTool = tool({
     timeout,
     noCache,
   }) => {
-    if (!url.trim()) {
-      throw new EmptyUrlError();
-    }
-
-    return readUrl(url, {
+    const readOptions = {
       provider,
       format,
       maxTokens,
@@ -122,7 +125,15 @@ export const readTool = tool({
       removeSelector,
       timeout,
       noCache,
-    });
+    };
+    if (Array.isArray(url)) {
+      return readBatch(url, readOptions);
+    }
+    if (!url.trim()) {
+      throw new EmptyUrlError();
+    }
+
+    return readUrl(url, readOptions);
   },
 });
 

@@ -89,6 +89,65 @@ describe("web MCP server", () => {
     ]);
   });
 
+  it("keeps separate ordered results for batched searches", async () => {
+    vi.stubEnv("JINA_API_KEY", "test-key");
+    mockGetJSON.mockReset();
+    mockGetJSON
+      .mockResolvedValueOnce({
+        code: 200,
+        status: 20000,
+        data: [{ title: "First", url: "https://example.com/one", description: "one" }],
+      })
+      .mockRejectedValueOnce(new Error("second query failed"));
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search",
+      arguments: { query: ["first query", "second query"], provider: "jina" },
+    });
+
+    expect(response.isError).toBeUndefined();
+    const payload = JSON.parse(
+      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
+    ) as readonly unknown[];
+    expect(payload).toEqual([
+      {
+        query: "first query",
+        results: [{ title: "First", url: "https://example.com/one", snippet: "one" }],
+      },
+      { query: "second query", error: "second query failed" },
+    ]);
+  });
+
+  it("keeps separate ordered results for batched reads", async () => {
+    mockGetJSON.mockReset();
+    mockGetJSON
+      .mockResolvedValueOnce({
+        code: 200,
+        status: 20000,
+        data: { url: "https://example.com/one", content: "one" },
+      })
+      .mockRejectedValueOnce(new Error("second read failed"));
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_read",
+      arguments: { url: ["https://example.com/one", "https://example.com/two"] },
+    });
+
+    expect(response.isError).toBeUndefined();
+    const payload = JSON.parse(
+      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
+    ) as readonly unknown[];
+    expect(payload).toEqual([
+      {
+        url: "https://example.com/one",
+        result: { url: "https://example.com/one", content: "one" },
+      },
+      { url: "https://example.com/two", error: "second read failed" },
+    ]);
+  });
+
   it("reports an unreachable local SearXNG instance", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
     const client = await connectTestClient();

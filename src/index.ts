@@ -69,6 +69,9 @@ export type {
 export { readProviderNames, readUrl } from "./core/read.ts";
 export type { ReadProviderName, ReadUrlOptions } from "./core/read.ts";
 
+export { MAX_BATCH_ITEMS, searchBatch, readBatch } from "./core/batch.ts";
+export type { SearchBatchOptions, SearchBatchItem, ReadBatchItem } from "./core/batch.ts";
+
 export {
   resolveDefaultProvider,
   resolveDefaultProviderAsync,

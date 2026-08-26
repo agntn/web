@@ -5,6 +5,7 @@ import { builtinProviders } from "./core/providers.ts";
 import { createSearchProvider } from "./core/registry.ts";
 import { searchAll } from "./core/all.ts";
 import { readProviderNames, readUrl } from "./core/read.ts";
+import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { resolveDefaultProvider, listProviders } from "./core/resolve.ts";
 import "./providers/index.ts";
 
@@ -15,9 +16,11 @@ const WebPlugin: Plugin = async () => ({
   tool: {
     web_search: tool({
       description:
-        'Search the web using multiple search engines (Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Returns relevant web pages with titles, URLs, snippets, and optional metadata. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+        'Search the web using multiple search engines (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
       args: {
-        query: z.string().describe("Search query"),
+        query: z
+          .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
+          .describe("Search query, or a batch of search queries"),
         provider: z
           .enum(providerNames)
           .optional()
@@ -29,6 +32,9 @@ const WebPlugin: Plugin = async () => ({
       async execute(args) {
         const { query, provider: providerName, maxResults } = args;
 
+        if (Array.isArray(query)) {
+          return encode(await searchBatch(query, { provider: providerName, maxResults }));
+        }
         if (providerName === "all") {
           return encode(await searchAll(query, { maxResults }));
         }
@@ -39,9 +45,11 @@ const WebPlugin: Plugin = async () => ({
     }),
     web_read: tool({
       description:
-        "Read a URL into normalized content using a read-capable provider. Defaults to Jina Reader (r.jina.ai).",
+        "Read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
       args: {
-        url: z.string().describe("URL to read"),
+        url: z
+          .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
+          .describe("URL to read, or a batch of URLs"),
         provider: z
           .enum(readProviderNames)
           .optional()
@@ -58,7 +66,10 @@ const WebPlugin: Plugin = async () => ({
       },
       async execute(args) {
         const { url, provider, format, maxTokens } = args;
-        return encode(await readUrl(url, { provider, format, maxTokens }));
+        const readOptions = { provider, format, maxTokens };
+        return encode(
+          Array.isArray(url) ? await readBatch(url, readOptions) : await readUrl(url, readOptions),
+        );
       },
     }),
     web_providers: tool({
