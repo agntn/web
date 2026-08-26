@@ -1,12 +1,12 @@
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { defineCommand } from 'citty'
-import { consola, LogLevels } from 'consola'
-import { createMcpServer } from '../mcp.ts'
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { defineCommand } from "citty";
+import { consola, LogLevels } from "consola";
+import { createMcpServer } from "../mcp.ts";
 
 export default defineCommand({
   meta: {
-    name: 'mcp',
-    description: 'Run the @agntn/web MCP server over stdio',
+    name: "mcp",
+    description: "Run the @agntn/web MCP server over stdio",
   },
   /**
    * stdout carries the JSON-RPC frames. consola's default reporter sends
@@ -15,8 +15,8 @@ export default defineCommand({
    * the stream. Warnings and errors still reach stderr.
    */
   async run() {
-    consola.level = LogLevels.warn
+    consola.level = LogLevels.warn;
 
-    await createMcpServer().connect(new StdioServerTransport())
+    await createMcpServer().connect(new StdioServerTransport());
   },
-})
+});

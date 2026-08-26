@@ -1,35 +1,35 @@
-import type { SearchResult, SearchOptions, ProviderConfig } from '../core/types.ts'
-import { Provider } from '../core/provider.ts'
-import { normalizeError } from '../core/errors.ts'
-import { register } from '../core/registry.ts'
+import type { SearchResult, SearchRequestOptions, ProviderConfig } from "../core/types.ts";
+import { Provider } from "../core/provider.ts";
+import { normalizeError } from "../core/errors.ts";
+import { register } from "../core/registry.ts";
 
 interface SearXNGResult {
-  title: string
-  url: string
-  content: string
-  engine: string
-  engines: string[]
-  score: number
-  category: string
-  publishedDate?: string
-  img_src?: string
-  thumbnail?: string
+  readonly title: string;
+  readonly url: string;
+  readonly content: string;
+  readonly engine: string;
+  readonly engines: readonly string[];
+  readonly score: number;
+  readonly category: string;
+  readonly publishedDate?: string;
+  readonly img_src?: string;
+  readonly thumbnail?: string;
 }
 
 interface SearXNGSearchResponse {
-  results: SearXNGResult[]
-  number_of_results?: number
-  query: string
+  readonly results: readonly SearXNGResult[];
+  readonly number_of_results?: number;
+  readonly query: string;
 }
 
-const SEARXNG_PROBE_TIMEOUT_MS = 2000
+const SEARXNG_PROBE_TIMEOUT_MS = 2000;
 
 class SearXNGProvider extends Provider {
-  static readonly providerName = 'searxng'
-  static readonly defaultBaseURL = 'http://localhost:8080'
+  static readonly providerName = "searxng";
+  static readonly defaultBaseURL = "http://localhost:8080";
 
-  constructor(config: ProviderConfig) {
-    super(config, SearXNGProvider)
+  constructor(config: Readonly<ProviderConfig>) {
+    super(config, SearXNGProvider);
   }
 
   /**
@@ -37,51 +37,49 @@ class SearXNGProvider extends Provider {
    * of throwing so {@link searchAll} can skip an unreachable instance silently.
    * Treats any HTTP response (even 4xx) as reachable — the host is up.
    * Uses a <=2s timeout so a dead endpoint does not stall fan-out.
+   * @returns {Promise<boolean>} Whether the endpoint responds.
    */
   async isAvailable(): Promise<boolean> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), SEARXNG_PROBE_TIMEOUT_MS)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SEARXNG_PROBE_TIMEOUT_MS);
     try {
       const response = await fetch(this.baseURL, {
-        method: 'GET',
+        method: "GET",
         signal: controller.signal,
-      })
+      });
       // Any HTTP status means the host responded; treat as reachable.
-      return typeof response.status === 'number'
-    }
-    catch {
-      return false
-    }
-    finally {
-      clearTimeout(timer)
+      return typeof response.status === "number";
+    } catch {
+      return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
-  async search(query: string, options?: SearchOptions): Promise<SearchResult[]> {
+  async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
     try {
       const params = new URLSearchParams({
         q: query,
-        format: 'json',
-        pageno: '1',
-      })
+        format: "json",
+        pageno: "1",
+      });
 
       if (options?.category) {
-        params.append('categories', options.category)
+        params.append("categories", options.category);
       }
 
-      const url = `${this.baseURL}/search?${params.toString()}`
-      const response = await this.client.getJSON<SearXNGSearchResponse>(url)
+      const url = `${this.baseURL}/search?${params.toString()}`;
+      const response = await this.client.getJSON<SearXNGSearchResponse>(url);
 
-      let results = response.results.map(mapResult)
+      let results = response.results.map(mapResult);
 
       if (options?.maxResults) {
-        results = results.slice(0, options.maxResults)
+        results = results.slice(0, options.maxResults);
       }
 
-      return results
-    }
-    catch (error) {
-      throw normalizeError(error, 'searxng')
+      return results;
+    } catch (error) {
+      throw normalizeError(error, "searxng");
     }
   }
 }
@@ -99,7 +97,7 @@ function mapResult(result: SearXNGResult): SearchResult {
       engines: result.engines,
       category: result.category,
     },
-  }
+  };
 }
 
-register(SearXNGProvider)
+register(SearXNGProvider);

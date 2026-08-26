@@ -49,30 +49,30 @@ pnpm add ai zod
 Set your API key as an environment variable and create a provider:
 
 ```typescript
-import { create } from '@agntn/web'
+import { create } from "@agntn/web";
 
 // Reads EXA_API_KEY from process.env
-const exa = create('exa')
+const exa = create("exa");
 
-const results = await exa.search('typescript runtime benchmarks', { maxResults: 5 })
+const results = await exa.search("typescript runtime benchmarks", { maxResults: 5 });
 
 for (const result of results) {
-  console.log(result.title, result.url)
+  console.log(result.title, result.url);
 }
 ```
 
 Swap the provider string, same code:
 
 ```typescript
-const brave = create('brave')   // reads BRAVE_API_KEY
-const jina = create('jina')     // reads JINA_API_KEY
-const tavily = create('tavily') // reads TAVILY_API_KEY
+const brave = create("brave"); // reads BRAVE_API_KEY
+const jina = create("jina"); // reads JINA_API_KEY
+const tavily = create("tavily"); // reads TAVILY_API_KEY
 ```
 
 You can also pass the key explicitly:
 
 ```typescript
-const exa = create('exa', { apiKey: 'your-key-here' })
+const exa = create("exa", { apiKey: "your-key-here" });
 ```
 
 ### Search all providers
@@ -80,13 +80,13 @@ const exa = create('exa', { apiKey: 'your-key-here' })
 Query all available providers in parallel and get deduplicated results:
 
 ```typescript
-import { searchAll } from '@agntn/web'
+import { searchAll } from "@agntn/web";
 
 // Detects providers from env vars, queries them in parallel
-const results = await searchAll('latest node.js release')
+const results = await searchAll("latest node.js release");
 
 for (const result of results) {
-  console.log(`[${result.provider}]`, result.title, result.url)
+  console.log(`[${result.provider}]`, result.title, result.url);
 }
 ```
 
@@ -95,21 +95,21 @@ for (const result of results) {
 You can also specify which providers to query:
 
 ```typescript
-const results = await searchAll('query', {
-  providers: ['exa', 'brave'],
+const results = await searchAll("query", {
+  providers: ["exa", "brave"],
   maxResults: 5,
-})
+});
 ```
 
 Firecrawl exposes response-level diagnostics through its detailed search capability. `search()` still returns the normalized result list:
 
 ```typescript
-import { create, isDetailedSearchProvider } from '@agntn/web'
+import { create, isDetailedSearchProvider } from "@agntn/web";
 
-const firecrawl = create('firecrawl')
+const firecrawl = create("firecrawl");
 if (isDetailedSearchProvider(firecrawl)) {
-  const { results, metadata } = await firecrawl.searchDetailed('query')
-  console.log(results, metadata?.id, metadata?.warning, metadata?.creditsUsed)
+  const { results, metadata } = await firecrawl.searchDetailed("query");
+  console.log(results, metadata?.id, metadata?.warning, metadata?.creditsUsed);
 }
 ```
 
@@ -120,15 +120,15 @@ if (isDetailedSearchProvider(firecrawl)) {
 Use `readUrl` when you already have a URL and want normalized page content:
 
 ```typescript
-import { readUrl } from '@agntn/web'
+import { readUrl } from "@agntn/web";
 
-const page = await readUrl('https://example.com/article', {
-  provider: 'jina',
-  format: 'markdown',
+const page = await readUrl("https://example.com/article", {
+  provider: "jina",
+  format: "markdown",
   maxTokens: 4000,
-})
+});
 
-console.log(page.title, page.content)
+console.log(page.title, page.content);
 ```
 
 Jina read uses `r.jina.ai` and does not require an API key for basic reads; if `JINA_API_KEY` is present it is sent as Bearer auth.
@@ -138,14 +138,14 @@ Jina read uses `r.jina.ai` and does not require an API key for basic reads; if `
 The `@agntn/web/ai` subpath exports ready-made tools compatible with [Vercel AI SDK](https://ai-sdk.dev/docs/foundations/tools):
 
 ```typescript
-import { generateText } from 'ai'
-import { readTool, searchTool } from '@agntn/web/ai'
+import { generateText } from "ai";
+import { readTool, searchTool } from "@agntn/web/ai";
 
 const { text } = await generateText({
   model: yourModel,
   tools: { web_search: searchTool, web_read: readTool },
-  prompt: 'Find the latest TypeScript release notes',
-})
+  prompt: "Find the latest TypeScript release notes",
+});
 ```
 
 `searchTool` accepts an optional `provider` parameter. Set it to `"all"` to query all available providers in parallel. `readTool` accepts a URL and reads page content with a read-capable provider:
@@ -169,13 +169,13 @@ web read https://example.com --format markdown --json
 web providers
 ```
 
-| Command | Description |
-|---------|-------------|
-| `web <query>` | Search the web using the default provider |
-| `web search <query>` | Search the web using a provider |
-| `web read <url>` | Read a URL into normalized content |
-| `web providers` | List built-in providers |
-| `web mcp` | Run the MCP server over stdio |
+| Command              | Description                               |
+| -------------------- | ----------------------------------------- |
+| `web <query>`        | Search the web using the default provider |
+| `web search <query>` | Search the web using a provider           |
+| `web read <url>`     | Read a URL into normalized content        |
+| `web providers`      | List built-in providers                   |
+| `web mcp`            | Run the MCP server over stdio             |
 
 ### MCP server
 
@@ -193,39 +193,39 @@ claude mcp add web --scope user -- web mcp
 
 The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`createMcpServer()`) when your host provides its own transport.
 
-| Flag | Description |
-|------|-------------|
-| `--provider <name>` | Provider to use (search default: first configured; read default: `jina`) |
-| `--max-results <n>` | Maximum search results to return (default: `10`) |
-| `--format <markdown\|text\|html>` | Preferred read format |
-| `--max-tokens <n>` | Maximum read tokens when supported |
-| `--json` | Output as JSON |
+| Flag                              | Description                                                              |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `--provider <name>`               | Provider to use (search default: first configured; read default: `jina`) |
+| `--max-results <n>`               | Maximum search results to return (default: `10`)                         |
+| `--format <markdown\|text\|html>` | Preferred read format                                                    |
+| `--max-tokens <n>`                | Maximum read tokens when supported                                       |
+| `--json`                          | Output as JSON                                                           |
 
 ## Providers
 
-| Provider | Env var | Auth | Free tier |
-|----------|---------|------|-----------|
-| Brave | `BRAVE_API_KEY` | Header | 2k queries/mo |
-| Exa | `EXA_API_KEY` | Header | 1k queries/mo |
-| Jina | `JINA_API_KEY` | Bearer header | Required for search; optional for read |
-| SearXNG | - | None | Self-hosted |
-| SerpAPI | `SERPAPI_API_KEY` | Query param | 100 queries/mo |
-| SerpBase | `SERPBASE_API_KEY` | `X-API-Key` header | 100 searches to start |
-| Tavily | `TAVILY_API_KEY` | Body | 1k queries/mo |
+| Provider | Env var            | Auth               | Free tier                              |
+| -------- | ------------------ | ------------------ | -------------------------------------- |
+| Brave    | `BRAVE_API_KEY`    | Header             | 2k queries/mo                          |
+| Exa      | `EXA_API_KEY`      | Header             | 1k queries/mo                          |
+| Jina     | `JINA_API_KEY`     | Bearer header      | Required for search; optional for read |
+| SearXNG  | -                  | None               | Self-hosted                            |
+| SerpAPI  | `SERPAPI_API_KEY`  | Query param        | 100 queries/mo                         |
+| SerpBase | `SERPBASE_API_KEY` | `X-API-Key` header | 100 searches to start                  |
+| Tavily   | `TAVILY_API_KEY`   | Body               | 1k queries/mo                          |
 
 ### Result shape
 
 All search providers always return `{ url, title, snippet }`. Optional fields depend on what each provider's native API exposes; `@agntn/web` passes them through without flattening:
 
-| Provider | Optional fields populated |
-|----------|---------------------------|
-| Exa     | `text` (full page), `highlights[]`, `summary` (AI), `score`, `publishedDate`, `author`, `image`, `favicon` |
-| Jina    | `text` (`content`/`text`), `publishedDate`, `image`, `metadata` |
-| Tavily  | `text` (raw_content, full HTML/markdown), `score`, `publishedDate` |
-| Brave   | `text` (joined `extra_snippets`), `favicon` |
-| SerpAPI | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}` |
+| Provider | Optional fields populated                                                                                                                 |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Exa      | `text` (full page), `highlights[]`, `summary` (AI), `score`, `publishedDate`, `author`, `image`, `favicon`                                |
+| Jina     | `text` (`content`/`text`), `publishedDate`, `image`, `metadata`                                                                           |
+| Tavily   | `text` (raw_content, full HTML/markdown), `score`, `publishedDate`                                                                        |
+| Brave    | `text` (joined `extra_snippets`), `favicon`                                                                                               |
+| SerpAPI  | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}`                                             |
 | SerpBase | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}` |
-| SearXNG | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}` |
+| SearXNG  | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}`                                                                 |
 
 Pick the provider that fits the shape you want. Exa is closest to "AI search" (summary + highlights + full text on request). Jina uses Jina Search Foundation and can return result content plus metadata. Tavily is best when you want the raw page content. Brave/SerpAPI/SerpBase/SearXNG are classic SERP-style metadata.
 
@@ -234,7 +234,7 @@ SerpBase uses Google SERP endpoints. `category: "images"`, `"news"`, or `"videos
 SearXNG requires no API key. It's a self-hosted metasearch engine. By default `@agntn/web` connects to `http://localhost:8080`. Override with `baseURL`:
 
 ```typescript
-const searx = create('searxng', { baseURL: 'https://searx.example.com' })
+const searx = create("searxng", { baseURL: "https://searx.example.com" });
 ```
 
 ## Errors
@@ -242,16 +242,16 @@ const searx = create('searxng', { baseURL: 'https://searx.example.com' })
 All providers throw the same error types:
 
 ```typescript
-import { AuthError, RateLimitError, HTTPError, UnknownProviderError } from '@agntn/web'
+import { AuthError, RateLimitError, HTTPError, UnknownProviderError } from "@agntn/web";
 
 try {
-  const results = await provider.search('query')
+  const results = await provider.search("query");
 } catch (err) {
   if (err instanceof AuthError) {
     // Missing or invalid API key
   }
   if (err instanceof RateLimitError) {
-    console.log(`Retry after ${err.retryAfter}s`)
+    console.log(`Retry after ${err.retryAfter}s`);
   }
   if (err instanceof UnknownProviderError) {
     // Provider name not recognized
@@ -269,18 +269,18 @@ Every search provider returns the same normalized type:
 
 ```typescript
 interface SearchResult {
-  url: string
-  title: string
-  snippet: string
-  score?: number
-  publishedDate?: string
-  author?: string
-  image?: string
-  favicon?: string
-  text?: string
-  highlights?: string[]
-  summary?: string
-  metadata?: Record<string, unknown>
+  url: string;
+  title: string;
+  snippet: string;
+  score?: number;
+  publishedDate?: string;
+  author?: string;
+  image?: string;
+  favicon?: string;
+  text?: string;
+  highlights?: string[];
+  summary?: string;
+  metadata?: Record<string, unknown>;
 }
 ```
 
@@ -290,17 +290,17 @@ Read results use the same naming for URL-to-content:
 
 ```typescript
 interface ReadResult {
-  url: string
-  title?: string
-  description?: string
-  content: string
-  text?: string
-  html?: string
-  publishedDate?: string
-  image?: string
-  links?: string[]
-  images?: string[]
-  metadata?: Record<string, unknown>
+  url: string;
+  title?: string;
+  description?: string;
+  content: string;
+  text?: string;
+  html?: string;
+  publishedDate?: string;
+  image?: string;
+  links?: string[];
+  images?: string[];
+  metadata?: Record<string, unknown>;
 }
 ```
 
@@ -308,12 +308,12 @@ Search options you can pass to `.search()` or `searchAll`:
 
 ```typescript
 interface SearchOptions {
-  maxResults?: number
-  includeDomains?: string[]
-  excludeDomains?: string[]
-  startPublishedDate?: string
-  endPublishedDate?: string
-  category?: string
+  maxResults?: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  startPublishedDate?: string;
+  endPublishedDate?: string;
+  category?: string;
 }
 ```
 
@@ -323,13 +323,13 @@ Read options you can pass to `readUrl`:
 
 ```typescript
 interface ReadUrlOptions {
-  provider?: 'jina' // custom registered provider names are also accepted at runtime
-  format?: 'markdown' | 'text' | 'html'
-  maxTokens?: number
-  targetSelector?: string
-  removeSelector?: string
-  timeout?: number
-  noCache?: boolean
+  provider?: "jina"; // custom registered provider names are also accepted at runtime
+  format?: "markdown" | "text" | "html";
+  maxTokens?: number;
+  targetSelector?: string;
+  removeSelector?: string;
+  timeout?: number;
+  noCache?: boolean;
 }
 ```
 

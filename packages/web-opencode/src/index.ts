@@ -1,1 +1,1 @@
-export { default, WebPlugin } from '@agntn/web/opencode'
+export { default, WebPlugin } from "@agntn/web/opencode";

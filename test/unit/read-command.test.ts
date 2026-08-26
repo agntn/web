@@ -1,178 +1,188 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { EmptyUrlError, ReadNotSupportedError, UnknownProviderError } from '../../src/core/errors.ts'
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
+import {
+  EmptyUrlError,
+  ReadNotSupportedError,
+  UnknownProviderError,
+} from "../../src/core/errors.ts";
 
-const mockLog = vi.fn()
-const mockInfo = vi.fn()
-const mockError = vi.fn()
-const mockReadUrl = vi.fn()
+const mockLog = vi.fn<(message: unknown) => void>();
+const mockInfo = vi.fn<(message: unknown) => void>();
+const mockError = vi.fn<(message: unknown) => void>();
+const mockReadUrl =
+  vi.fn<(url: string, options: Readonly<Record<string, unknown>>) => Promise<unknown>>();
 
-vi.mock('consola', () => ({
+vi.mock("consola", () => ({
   consola: {
-    log: (...args: unknown[]) => mockLog(...args),
-    info: (...args: unknown[]) => mockInfo(...args),
-    error: (...args: unknown[]) => mockError(...args),
+    log: (message: unknown) => mockLog(message),
+    info: (message: unknown) => mockInfo(message),
+    error: (message: unknown) => mockError(message),
   },
-}))
+}));
 
-vi.mock('../../src/core/read.ts', () => ({
-  readProviderNames: ['jina'],
-  readUrl: (...args: unknown[]) => mockReadUrl(...args),
-}))
+vi.mock("../../src/core/read.ts", () => ({
+  readProviderNames: ["jina"],
+  readUrl: (url: string, options: Readonly<Record<string, unknown>>) => mockReadUrl(url, options),
+}));
 
-vi.mock('../../src/core/registry.ts', () => ({
-  providers: vi.fn(() => ['jina']),
-}))
+vi.mock("../../src/core/registry.ts", () => ({
+  providers: vi.fn(() => ["jina"]),
+}));
 
-vi.mock('../../src/providers/index.ts', () => ({}))
+vi.mock("../../src/providers/index.ts", () => ({}));
 
-import readCommand from '../../src/commands/read.ts'
+import readCommand from "../../src/commands/read.ts";
 
-type ReadRunInput = Parameters<NonNullable<typeof readCommand.run>>[0]
+type ReadRunInput = Parameters<NonNullable<typeof readCommand.run>>[0];
 type ReadRunArgs = {
-  _: string[]
-  url: string
-  provider?: string
-  format?: string
-  'max-tokens'?: string
-  json: boolean
-  [key: string]: string | number | boolean | string[] | undefined
-}
+  readonly _: readonly string[];
+  readonly url: string;
+  readonly provider?: string;
+  readonly format?: string;
+  readonly "max-tokens"?: string;
+  readonly json: boolean;
+  [key: string]: string | number | boolean | readonly string[] | undefined;
+};
 
 const defaultArgs: ReadRunArgs = {
   _: [],
-  url: 'https://example.com',
-  provider: 'jina',
+  url: "https://example.com",
+  provider: "jina",
   json: false,
+};
+
+function makeArgs(overrides: Readonly<Partial<ReadRunArgs>> = {}): ReadRunArgs {
+  return { ...defaultArgs, ...overrides };
 }
 
-function makeArgs(overrides: Partial<ReadRunArgs> = {}): ReadRunArgs {
-  return { ...defaultArgs, ...overrides }
-}
-
-function runRead(overrides: Partial<ReadRunArgs> = {}) {
+function runRead(overrides: Readonly<Partial<ReadRunArgs>> = {}) {
   const context = {
     args: makeArgs(overrides),
     rawArgs: [],
     cmd: readCommand,
-  } satisfies ReadRunInput
-  if (!readCommand.run) throw new Error('readCommand.run is not defined')
-  return readCommand.run(context)
+  } satisfies ReadRunInput;
+  if (!readCommand.run) throw new Error("readCommand.run is not defined");
+  return Promise.resolve(readCommand.run(context) as unknown);
 }
 
-describe('read command', () => {
-  let exitSpy: ReturnType<typeof vi.spyOn>
-  let writeSpy: ReturnType<typeof vi.spyOn>
+describe("read command", () => {
+  let exitSpy: MockInstance<typeof process.exit>;
+  let writeSpy: MockInstance<typeof process.stdout.write>;
 
   beforeEach(() => {
-    mockLog.mockReset()
-    mockInfo.mockReset()
-    mockError.mockReset()
-    mockReadUrl.mockReset()
+    mockLog.mockReset();
+    mockInfo.mockReset();
+    mockError.mockReset();
+    mockReadUrl.mockReset();
     mockReadUrl.mockResolvedValue({
-      url: 'https://example.com',
-      title: 'Example',
-      description: 'Example description',
-      content: 'Example content',
-    })
-    exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null) => {
-      throw new Error('__EXIT__')
-    })
-    writeSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
-  })
+      url: "https://example.com",
+      title: "Example",
+      description: "Example description",
+      content: "Example content",
+    });
+    exitSpy = vi.spyOn(process, "exit").mockImplementation((_code?: string | number | null) => {
+      throw new Error("__EXIT__");
+    });
+    writeSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+  });
 
   afterEach(() => {
-    exitSpy.mockRestore()
-    writeSpy.mockRestore()
-  })
+    exitSpy.mockRestore();
+    writeSpy.mockRestore();
+  });
 
-  it('uses jina provider by default', async () => {
-    await runRead({ provider: undefined })
+  it("uses jina provider by default", async () => {
+    await runRead({ provider: undefined });
 
-    expect(mockReadUrl).toHaveBeenCalledWith('https://example.com', {
-      provider: 'jina',
+    expect(mockReadUrl).toHaveBeenCalledWith("https://example.com", {
+      provider: "jina",
       format: undefined,
       maxTokens: undefined,
-    })
-  })
+    });
+  });
 
-  it('passes format and max tokens', async () => {
-    await runRead({ format: 'text', 'max-tokens': '500' })
+  it("passes format and max tokens", async () => {
+    await runRead({ format: "text", "max-tokens": "500" });
 
-    expect(mockReadUrl).toHaveBeenCalledWith('https://example.com', {
-      provider: 'jina',
-      format: 'text',
+    expect(mockReadUrl).toHaveBeenCalledWith("https://example.com", {
+      provider: "jina",
+      format: "text",
       maxTokens: 500,
-    })
-  })
+    });
+  });
 
-  it('outputs JSON when --json is set', async () => {
-    await runRead({ json: true })
+  it("outputs JSON when --json is set", async () => {
+    await runRead({ json: true });
 
-    expect(writeSpy).toHaveBeenCalledOnce()
-    const parsed = JSON.parse(String(writeSpy.mock.calls[0][0]))
-    expect(parsed.content).toBe('Example content')
-  })
+    expect(writeSpy).toHaveBeenCalledOnce();
+    const parsed = JSON.parse(String(writeSpy.mock.calls[0][0])) as { readonly content: string };
+    expect(parsed.content).toBe("Example content");
+  });
 
-  it('strips terminal control sequences from human output', async () => {
+  it("strips terminal control sequences from human output", async () => {
     mockReadUrl.mockResolvedValueOnce({
-      url: 'https://example.com',
-      title: 'Example \x1B[31mTitle\x1B[0m',
-      description: 'Description \x1B]0;bad\x07ok',
-      content: 'Hello \x1B[31mred\x1B[0m \x01world',
-    })
+      url: "https://example.com",
+      title: "Example \x1B[31mTitle\x1B[0m",
+      description: "Description \x1B]0;bad\x07ok",
+      content: "Zażółć \x1B[31mred\x1B[0m \x01world",
+    });
 
-    await runRead()
+    await runRead();
 
-    const contentLine = String(mockLog.mock.calls.at(-1)?.[0])
-    expect(contentLine).not.toContain('\x1B')
-    expect(contentLine).not.toContain('\x01')
-    expect(contentLine).toBe('Hello red world')
-  })
+    const contentLine = String(mockLog.mock.calls.at(-1)?.[0]);
+    expect(contentLine).not.toContain("\x1B");
+    expect(contentLine).not.toContain("\x01");
+    expect(contentLine).toBe("Zażółć red world");
+  });
 
-  it('exits with a helpful message for empty URL', async () => {
-    await expect(runRead({ url: '   ' })).rejects.toThrow('__EXIT__')
+  it("exits with a helpful message for empty URL", async () => {
+    await expect(runRead({ url: "   " })).rejects.toThrow("__EXIT__");
 
-    expect(mockError).toHaveBeenCalledWith('Read URL cannot be empty.')
-    expect(mockReadUrl).not.toHaveBeenCalled()
-    expect(exitSpy).toHaveBeenCalledWith(1)
-  })
+    expect(mockError).toHaveBeenCalledWith("Read URL cannot be empty.");
+    expect(mockReadUrl).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
 
-  it('exits with a helpful message for invalid format', async () => {
-    await expect(runRead({ format: 'pdf' })).rejects.toThrow('__EXIT__')
+  it("exits with a helpful message for invalid format", async () => {
+    await expect(runRead({ format: "pdf" })).rejects.toThrow("__EXIT__");
 
-    expect(mockError).toHaveBeenCalledWith('Invalid --format value. Expected markdown, text, or html.')
-    expect(mockReadUrl).not.toHaveBeenCalled()
-  })
+    expect(mockError).toHaveBeenCalledWith(
+      "Invalid --format value. Expected markdown, text, or html.",
+    );
+    expect(mockReadUrl).not.toHaveBeenCalled();
+  });
 
-  it('exits with a helpful message for invalid max tokens', async () => {
-    await expect(runRead({ 'max-tokens': '0' })).rejects.toThrow('__EXIT__')
+  it("exits with a helpful message for invalid max tokens", async () => {
+    await expect(runRead({ "max-tokens": "0" })).rejects.toThrow("__EXIT__");
 
-    expect(mockError).toHaveBeenCalledWith('Invalid --max-tokens value. Expected a positive integer.')
-    expect(mockReadUrl).not.toHaveBeenCalled()
-  })
+    expect(mockError).toHaveBeenCalledWith(
+      "Invalid --max-tokens value. Expected a positive integer.",
+    );
+    expect(mockReadUrl).not.toHaveBeenCalled();
+  });
 
-  it('handles EmptyUrlError from core', async () => {
-    mockReadUrl.mockRejectedValueOnce(new EmptyUrlError())
+  it("handles EmptyUrlError from core", async () => {
+    mockReadUrl.mockRejectedValueOnce(new EmptyUrlError());
 
-    await expect(runRead()).rejects.toThrow('__EXIT__')
+    await expect(runRead()).rejects.toThrow("__EXIT__");
 
-    expect(mockError).toHaveBeenCalledWith('Read URL cannot be empty.')
-  })
+    expect(mockError).toHaveBeenCalledWith("Read URL cannot be empty.");
+  });
 
-  it('handles ReadNotSupportedError from core', async () => {
-    mockReadUrl.mockRejectedValueOnce(new ReadNotSupportedError('brave'))
+  it("handles ReadNotSupportedError from core", async () => {
+    mockReadUrl.mockRejectedValueOnce(new ReadNotSupportedError("brave"));
 
-    await expect(runRead({ provider: 'brave' })).rejects.toThrow('__EXIT__')
+    await expect(runRead({ provider: "brave" })).rejects.toThrow("__EXIT__");
 
-    expect(mockError).toHaveBeenCalledWith('Provider does not support read: brave')
-  })
+    expect(mockError).toHaveBeenCalledWith("Provider does not support read: brave");
+  });
 
-  it('shows read-capable providers for unknown read providers', async () => {
-    mockReadUrl.mockRejectedValueOnce(new UnknownProviderError('missing'))
+  it("shows read-capable providers for unknown read providers", async () => {
+    mockReadUrl.mockRejectedValueOnce(new UnknownProviderError("missing"));
 
-    await expect(runRead({ provider: 'missing' })).rejects.toThrow('__EXIT__')
+    await expect(runRead({ provider: "missing" })).rejects.toThrow("__EXIT__");
 
-    expect(mockError).toHaveBeenCalledWith('Unknown provider: missing')
-    expect(mockInfo).toHaveBeenCalledWith('Read-capable providers: jina')
-  })
-})
+    expect(mockError).toHaveBeenCalledWith("Unknown provider: missing");
+    expect(mockInfo).toHaveBeenCalledWith("Read-capable providers: jina");
+  });
+});

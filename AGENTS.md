@@ -32,19 +32,19 @@ test/unit/                # Public behavior and provider contract tests
 
 ## WHERE TO LOOK
 
-| Task | Location | Notes |
-|------|----------|-------|
-| Add public exports | `src/index.ts` | Keep the public surface small and explicit |
-| Add/extend providers | `src/providers/` | Keep provider-shaped responses inside the adapter |
-| Add search behavior | `src/core/all.ts` + provider adapter | Preserve query → results semantics |
-| Add read behavior | `src/core/read.ts` + provider adapter + `src/commands/read.ts` | Preserve URL → content semantics |
-| Extend CLI | `src/commands/` + `src/cli.ts` | Add subcommands with `citty`; keep text and JSON output stable |
-| Extend agent tools | `src/ai.ts`, `src/opencode.ts`, `packages/pi/extensions/web.ts`, `src/mcp.ts` | Keep names capability-specific (`searchTool`, `readTool`, `web_search`, `web_read`); MCP mirrors the provider enums from `core/providers.ts` and `core/read.ts`, never a frozen copy |
-| Extend MCP server | `src/mcp.ts` + `src/commands/mcp.ts` | Low-level SDK `Server` with TypeBox schemas; every error branch goes through `errorResult`; executor guards re-check boundaries for hosts that skip validation |
-| Add tests | `test/` | Mirror public behavior, not implementation details |
-| Change build outputs | `build.config.ts` + `package.json` | Keep `entries` and `exports` aligned |
-| Change CI flow | `.github/workflows/test.yml` | Order stays `typecheck -> build -> test` |
-| Change release flow | `.github/workflows/release.yml` | Publish only from `v*` tags |
+| Task                 | Location                                                                      | Notes                                                                                                                                                                                |
+| -------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Add public exports   | `src/index.ts`                                                                | Keep the public surface small and explicit                                                                                                                                           |
+| Add/extend providers | `src/providers/`                                                              | Keep provider-shaped responses inside the adapter                                                                                                                                    |
+| Add search behavior  | `src/core/all.ts` + provider adapter                                          | Preserve query → results semantics                                                                                                                                                   |
+| Add read behavior    | `src/core/read.ts` + provider adapter + `src/commands/read.ts`                | Preserve URL → content semantics                                                                                                                                                     |
+| Extend CLI           | `src/commands/` + `src/cli.ts`                                                | Add subcommands with `citty`; keep text and JSON output stable                                                                                                                       |
+| Extend agent tools   | `src/ai.ts`, `src/opencode.ts`, `packages/pi/extensions/web.ts`, `src/mcp.ts` | Keep names capability-specific (`searchTool`, `readTool`, `web_search`, `web_read`); MCP mirrors the provider enums from `core/providers.ts` and `core/read.ts`, never a frozen copy |
+| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                                          | Low-level SDK `Server` with TypeBox schemas; every error branch goes through `errorResult`; executor guards re-check boundaries for hosts that skip validation                       |
+| Add tests            | `test/`                                                                       | Mirror public behavior, not implementation details                                                                                                                                   |
+| Change build outputs | `build.config.ts` + `package.json`                                            | Keep `entries` and `exports` aligned                                                                                                                                                 |
+| Change CI flow       | `.github/workflows/test.yml`                                                  | Order stays `typecheck -> build -> test`                                                                                                                                             |
+| Change release flow  | `.github/workflows/release.yml`                                               | Publish only from `v*` tags                                                                                                                                                          |
 
 ## CONVENTIONS
 

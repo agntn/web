@@ -1,9 +1,17 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const mockPostJSON = vi.fn()
-const mockGetJSON = vi.fn()
+const mockPostJSON =
+  vi.fn<
+    (
+      url: string,
+      body: Readonly<Record<string, unknown>>,
+      headers?: Readonly<Record<string, string>>,
+    ) => Promise<unknown>
+  >();
+const mockGetJSON =
+  vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();
 
-vi.mock('../../src/core/client.ts', () => ({
+vi.mock("../../src/core/client.ts", () => ({
   Client: vi.fn(),
   defaultClient: vi.fn(() => ({
     postJSON: mockPostJSON,
@@ -11,468 +19,499 @@ vi.mock('../../src/core/client.ts', () => ({
     maxRetries: 5,
     baseDelay: 50,
     timeout: 30000,
-    userAgent: 'agntn-web/0.0.1',
+    userAgent: "agntn-web/0.0.1",
   })),
-}))
+}));
 
-import { searchAll, searchAllDetailed } from '../../src/core/all.ts'
-import { UnknownProviderError, NoProviderConfiguredError, EmptyQueryError, InvalidDateFilterError } from '../../src/core/errors.ts'
+import { searchAll, searchAllDetailed } from "../../src/core/all.ts";
+import {
+  UnknownProviderError,
+  NoProviderConfiguredError,
+  EmptyQueryError,
+  InvalidDateFilterError,
+} from "../../src/core/errors.ts";
 
-import '../../src/providers/index.ts'
+import "../../src/providers/index.ts";
 
 const exaResponse = {
-  requestId: 'test-req',
-  results: [{
-    id: '1',
-    url: 'https://a.com',
-    title: 'Exa Result',
-    score: 0.9,
-    text: 'Exa text',
-    highlights: ['Exa highlight'],
-  }],
-}
+  requestId: "test-req",
+  results: [
+    {
+      id: "1",
+      url: "https://a.com",
+      title: "Exa Result",
+      score: 0.9,
+      text: "Exa text",
+      highlights: ["Exa highlight"],
+    },
+  ],
+};
 
 const braveResponse = {
   web: {
-    results: [{
-      url: 'https://b.com',
-      title: 'Brave Result',
-      description: 'Brave description',
-      extra_snippets: [],
-      meta_url: { favicon: 'https://b.com/favicon.ico' },
-    }],
+    results: [
+      {
+        url: "https://b.com",
+        title: "Brave Result",
+        description: "Brave description",
+        extra_snippets: [],
+        meta_url: { favicon: "https://b.com/favicon.ico" },
+      },
+    ],
   },
-}
+};
 
-describe('searchAll', () => {
+describe("searchAll", () => {
   beforeEach(() => {
-    mockPostJSON.mockReset()
-    mockGetJSON.mockReset()
-    delete process.env.EXA_API_KEY
-    delete process.env.BRAVE_API_KEY
-    delete process.env.JINA_API_KEY
-    delete process.env.TAVILY_API_KEY
-    delete process.env.SERPAPI_API_KEY
-    delete process.env.SERPBASE_API_KEY
-  })
+    mockPostJSON.mockReset();
+    mockGetJSON.mockReset();
+    delete process.env.EXA_API_KEY;
+    delete process.env.BRAVE_API_KEY;
+    delete process.env.JINA_API_KEY;
+    delete process.env.TAVILY_API_KEY;
+    delete process.env.SERPAPI_API_KEY;
+    delete process.env.SERPBASE_API_KEY;
+  });
 
-  it('queries multiple providers and merges results', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
-    mockPostJSON.mockResolvedValue(exaResponse)
-    mockGetJSON.mockResolvedValue(braveResponse)
+  it("queries multiple providers and merges results", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockPostJSON.mockResolvedValue(exaResponse);
+    mockGetJSON.mockResolvedValue(braveResponse);
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(2)
-    expect(results.map(r => r.provider)).toContain('exa')
-    expect(results.map(r => r.provider)).toContain('brave')
-  })
+    expect(results).toHaveLength(2);
+    expect(results.map((r) => r.provider)).toContain("exa");
+    expect(results.map((r) => r.provider)).toContain("brave");
+  });
 
-  it('deduplicates by URL keeping higher score', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("deduplicates by URL keeping higher score", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
     mockPostJSON.mockResolvedValue({
-      requestId: 'test-req',
-      results: [{
-        id: '1',
-        url: 'https://example.com',
-        title: 'From Exa',
-        score: 0.9,
-        text: 'text',
-        highlights: ['highlight'],
-      }],
-    })
+      requestId: "test-req",
+      results: [
+        {
+          id: "1",
+          url: "https://example.com",
+          title: "From Exa",
+          score: 0.9,
+          text: "text",
+          highlights: ["highlight"],
+        },
+      ],
+    });
 
     mockGetJSON.mockResolvedValue({
       web: {
-        results: [{
-          url: 'https://example.com',
-          title: 'From Brave',
-          description: 'desc',
-          extra_snippets: [],
-          meta_url: { favicon: '' },
-        }],
+        results: [
+          {
+            url: "https://example.com",
+            title: "From Brave",
+            description: "desc",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
       },
-    })
+    });
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(1)
-    expect(results[0].provider).toBe('exa')
-    expect(results[0].score).toBe(0.9)
-  })
+    expect(results).toHaveLength(1);
+    expect(results[0].provider).toBe("exa");
+    expect(results[0].score).toBe(0.9);
+  });
 
-  it('handles provider failures gracefully', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("handles provider failures gracefully", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
-    mockPostJSON.mockRejectedValue(new Error('exa down'))
-    mockGetJSON.mockResolvedValue(braveResponse)
+    mockPostJSON.mockRejectedValue(new Error("exa down"));
+    mockGetJSON.mockResolvedValue(braveResponse);
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(1)
-    expect(results[0].provider).toBe('brave')
-  })
+    expect(results).toHaveLength(1);
+    expect(results[0].provider).toBe("brave");
+  });
 
-  it('detects available providers from env', async () => {
-    process.env.BRAVE_API_KEY = 'test-brave'
-    mockGetJSON.mockResolvedValue(braveResponse)
+  it("detects available providers from env", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON.mockResolvedValue(braveResponse);
 
-    const results = await searchAll('test')
+    const results = await searchAll("test");
 
-    expect(results.length).toBeGreaterThanOrEqual(1)
-    const providers = results.map(r => r.provider)
-    expect(providers).toContain('brave')
-  })
+    expect(results.length).toBeGreaterThanOrEqual(1);
+    const providers = results.map((r) => r.provider);
+    expect(providers).toContain("brave");
+  });
 
-  it('normalizes URLs for dedup (trailing slash)', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("normalizes URLs for dedup (trailing slash)", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
     mockPostJSON.mockResolvedValue({
-      requestId: 'test-req',
-      results: [{
-        id: '1',
-        url: 'https://example.com/page/',
-        title: 'With slash',
-        score: 0.5,
-        text: 'text',
-        highlights: ['hl'],
-      }],
-    })
+      requestId: "test-req",
+      results: [
+        {
+          id: "1",
+          url: "https://example.com/page/",
+          title: "With slash",
+          score: 0.5,
+          text: "text",
+          highlights: ["hl"],
+        },
+      ],
+    });
 
     mockGetJSON.mockResolvedValue({
       web: {
-        results: [{
-          url: 'https://example.com/page',
-          title: 'Without slash',
-          description: 'desc',
-          extra_snippets: [],
-          meta_url: { favicon: '' },
-        }],
+        results: [
+          {
+            url: "https://example.com/page",
+            title: "Without slash",
+            description: "desc",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
       },
-    })
+    });
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(1)
-  })
+    expect(results).toHaveLength(1);
+  });
 
-  it('deduplicates URLs when query parameter order differs', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("deduplicates URLs when query parameter order differs", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
     mockPostJSON.mockResolvedValue({
-      requestId: 'test-req',
-      results: [{
-        id: '1',
-        url: 'https://example.com/page?a=1&b=2',
-        title: 'Ordered A then B',
-        score: 0.8,
-        text: 'text',
-        highlights: ['hl'],
-      }],
-    })
+      requestId: "test-req",
+      results: [
+        {
+          id: "1",
+          url: "https://example.com/page?a=1&b=2",
+          title: "Ordered A then B",
+          score: 0.8,
+          text: "text",
+          highlights: ["hl"],
+        },
+      ],
+    });
 
     mockGetJSON.mockResolvedValue({
       web: {
-        results: [{
-          url: 'https://example.com/page?b=2&a=1',
-          title: 'Ordered B then A',
-          description: 'desc',
-          extra_snippets: [],
-          meta_url: { favicon: '' },
-        }],
+        results: [
+          {
+            url: "https://example.com/page?b=2&a=1",
+            title: "Ordered B then A",
+            description: "desc",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
       },
-    })
+    });
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(1)
-    expect(results[0].provider).toBe('exa')
-  })
+    expect(results).toHaveLength(1);
+    expect(results[0].provider).toBe("exa");
+  });
 
-  it('ignores all utm_* params regardless of suffix or case', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("ignores all utm_* params regardless of suffix or case", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
     mockPostJSON.mockResolvedValue({
-      requestId: 'test-req',
-      results: [{
-        id: '1',
-        url: 'https://example.com/page?a=1&utm_id=xyz&utm_source=newsletter',
-        title: 'Exa with tracking params',
-        score: 0.9,
-        text: 'text',
-        highlights: ['hl'],
-      }],
-    })
+      requestId: "test-req",
+      results: [
+        {
+          id: "1",
+          url: "https://example.com/page?a=1&utm_id=xyz&utm_source=newsletter",
+          title: "Exa with tracking params",
+          score: 0.9,
+          text: "text",
+          highlights: ["hl"],
+        },
+      ],
+    });
 
     mockGetJSON.mockResolvedValue({
       web: {
-        results: [{
-          url: 'https://example.com/page?a=1&UTM_MEDIUM=email',
-          title: 'Brave with tracking params',
-          description: 'desc',
-          extra_snippets: [],
-          meta_url: { favicon: '' },
-        }],
+        results: [
+          {
+            url: "https://example.com/page?a=1&UTM_MEDIUM=email",
+            title: "Brave with tracking params",
+            description: "desc",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
       },
-    })
+    });
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(1)
-    expect(results[0].provider).toBe('exa')
-  })
+    expect(results).toHaveLength(1);
+    expect(results[0].provider).toBe("exa");
+  });
 
-  it('does not deduplicate URLs when duplicate-key value order differs', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("does not deduplicate URLs when duplicate-key value order differs", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
     mockPostJSON.mockResolvedValue({
-      requestId: 'test-req',
-      results: [{
-        id: '1',
-        url: 'https://example.com/page?tag=a&tag=b',
-        title: 'Ordered tags A then B',
-        score: 0.8,
-        text: 'text',
-        highlights: ['hl'],
-      }],
-    })
+      requestId: "test-req",
+      results: [
+        {
+          id: "1",
+          url: "https://example.com/page?tag=a&tag=b",
+          title: "Ordered tags A then B",
+          score: 0.8,
+          text: "text",
+          highlights: ["hl"],
+        },
+      ],
+    });
 
     mockGetJSON.mockResolvedValue({
       web: {
-        results: [{
-          url: 'https://example.com/page?tag=b&tag=a',
-          title: 'Ordered tags B then A',
-          description: 'desc',
-          extra_snippets: [],
-          meta_url: { favicon: '' },
-        }],
+        results: [
+          {
+            url: "https://example.com/page?tag=b&tag=a",
+            title: "Ordered tags B then A",
+            description: "desc",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
       },
-    })
+    });
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(2)
-  })
+    expect(results).toHaveLength(2);
+  });
 
-  it('keeps scored result over unscored duplicate', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("keeps scored result over unscored duplicate", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
     mockPostJSON.mockResolvedValue({
-      requestId: 'test-req',
-      results: [{
-        id: '1',
-        url: 'https://example.com/page?b=2&a=1',
-        title: 'Exa result',
-        score: 0.7,
-        text: 'text',
-        highlights: ['hl'],
-      }],
-    })
+      requestId: "test-req",
+      results: [
+        {
+          id: "1",
+          url: "https://example.com/page?b=2&a=1",
+          title: "Exa result",
+          score: 0.7,
+          text: "text",
+          highlights: ["hl"],
+        },
+      ],
+    });
 
     mockGetJSON.mockResolvedValue({
       web: {
-        results: [{
-          url: 'https://example.com/page?a=1&b=2',
-          title: 'Brave result',
-          description: 'desc',
-          extra_snippets: [],
-          meta_url: { favicon: '' },
-        }],
+        results: [
+          {
+            url: "https://example.com/page?a=1&b=2",
+            title: "Brave result",
+            description: "desc",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
       },
-    })
+    });
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(1)
-    expect(results[0].provider).toBe('exa')
-    expect(results[0].score).toBe(0.7)
-  })
+    expect(results).toHaveLength(1);
+    expect(results[0].provider).toBe("exa");
+    expect(results[0].score).toBe(0.7);
+  });
 
-  it('keeps first provider result when duplicate URLs have no scores', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("keeps first provider result when duplicate URLs have no scores", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
     mockPostJSON.mockResolvedValue({
-      requestId: 'test-req',
-      results: [{
-        id: '1',
-        url: 'https://example.com/page?b=2&a=1',
-        title: 'Exa no score',
-        text: 'text',
-        highlights: ['hl'],
-      }],
-    })
+      requestId: "test-req",
+      results: [
+        {
+          id: "1",
+          url: "https://example.com/page?b=2&a=1",
+          title: "Exa no score",
+          text: "text",
+          highlights: ["hl"],
+        },
+      ],
+    });
 
     mockGetJSON.mockResolvedValue({
       web: {
-        results: [{
-          url: 'https://example.com/page?a=1&b=2',
-          title: 'Brave no score',
-          description: 'desc',
-          extra_snippets: [],
-          meta_url: { favicon: '' },
-        }],
+        results: [
+          {
+            url: "https://example.com/page?a=1&b=2",
+            title: "Brave no score",
+            description: "desc",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
       },
-    })
+    });
 
-    const results = await searchAll('test', { providers: ['exa', 'brave'] })
+    const results = await searchAll("test", { providers: ["exa", "brave"] });
 
-    expect(results).toHaveLength(1)
-    expect(results[0].provider).toBe('exa')
-  })
+    expect(results).toHaveLength(1);
+    expect(results[0].provider).toBe("exa");
+  });
 
-  it('returns empty array when all providers fail', async () => {
-    mockGetJSON.mockRejectedValue(new Error('searxng down'))
+  it("returns empty array when all providers fail", async () => {
+    mockGetJSON.mockRejectedValue(new Error("searxng down"));
 
-    const results = await searchAll('test', { providers: ['searxng'] })
+    const results = await searchAll("test", { providers: ["searxng"] });
 
-    expect(results).toEqual([])
-  })
+    expect(results).toEqual([]);
+  });
 
-  it('throws UnknownProviderError for explicit unknown providers', async () => {
-    await expect(
-      searchAll('test', { providers: ['not-real-provider'] }),
-    ).rejects.toThrow(UnknownProviderError)
-  })
+  it("throws UnknownProviderError for explicit unknown providers", async () => {
+    await expect(searchAll("test", { providers: ["not-real-provider"] })).rejects.toThrow(
+      UnknownProviderError,
+    );
+  });
 
-  it('throws NoProviderConfiguredError when explicit providers list is empty', async () => {
-    await expect(
-      searchAll('test', { providers: [] }),
-    ).rejects.toThrow(NoProviderConfiguredError)
-  })
+  it("throws NoProviderConfiguredError when explicit providers list is empty", async () => {
+    await expect(searchAll("test", { providers: [] })).rejects.toThrow(NoProviderConfiguredError);
+  });
 
-  it('throws EmptyQueryError for empty string query', async () => {
-    await expect(
-      searchAll('', { providers: ['exa'] }),
-    ).rejects.toThrow(EmptyQueryError)
+  it("throws EmptyQueryError for empty string query", async () => {
+    await expect(searchAll("", { providers: ["exa"] })).rejects.toThrow(EmptyQueryError);
 
-    expect(mockPostJSON).not.toHaveBeenCalled()
-    expect(mockGetJSON).not.toHaveBeenCalled()
-  })
+    expect(mockPostJSON).not.toHaveBeenCalled();
+    expect(mockGetJSON).not.toHaveBeenCalled();
+  });
 
-  it('throws EmptyQueryError for whitespace-only query', async () => {
-    await expect(
-      searchAll('   ', { providers: ['exa'] }),
-    ).rejects.toThrow(EmptyQueryError)
+  it("throws EmptyQueryError for whitespace-only query", async () => {
+    await expect(searchAll("   ", { providers: ["exa"] })).rejects.toThrow(EmptyQueryError);
 
-    expect(mockPostJSON).not.toHaveBeenCalled()
-    expect(mockGetJSON).not.toHaveBeenCalled()
-  })
-})
+    expect(mockPostJSON).not.toHaveBeenCalled();
+    expect(mockGetJSON).not.toHaveBeenCalled();
+  });
+});
 
-describe('searchAllDetailed', () => {
+describe("searchAllDetailed", () => {
   beforeEach(() => {
-    mockPostJSON.mockReset()
-    mockGetJSON.mockReset()
-    delete process.env.EXA_API_KEY
-    delete process.env.BRAVE_API_KEY
-    delete process.env.JINA_API_KEY
-    delete process.env.TAVILY_API_KEY
-    delete process.env.SERPAPI_API_KEY
-    delete process.env.SERPBASE_API_KEY
-  })
+    mockPostJSON.mockReset();
+    mockGetJSON.mockReset();
+    delete process.env.EXA_API_KEY;
+    delete process.env.BRAVE_API_KEY;
+    delete process.env.JINA_API_KEY;
+    delete process.env.TAVILY_API_KEY;
+    delete process.env.SERPAPI_API_KEY;
+    delete process.env.SERPBASE_API_KEY;
+  });
 
-  it('returns results and empty errors when all providers succeed', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    mockPostJSON.mockResolvedValue(exaResponse)
+  it("returns results and empty errors when all providers succeed", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    mockPostJSON.mockResolvedValue(exaResponse);
 
-    const response = await searchAllDetailed('test', { providers: ['exa'] })
+    const response = await searchAllDetailed("test", { providers: ["exa"] });
 
-    expect(response.results).toHaveLength(1)
-    expect(response.errors).toHaveLength(0)
-  })
+    expect(response.results).toHaveLength(1);
+    expect(response.errors).toHaveLength(0);
+  });
 
-  it('reports failed providers in errors array', async () => {
-    process.env.EXA_API_KEY = 'test-exa'
-    process.env.BRAVE_API_KEY = 'test-brave'
+  it("reports failed providers in errors array", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
 
-    mockPostJSON.mockRejectedValue(new Error('exa auth failed'))
-    mockGetJSON.mockResolvedValue(braveResponse)
+    mockPostJSON.mockRejectedValue(new Error("exa auth failed"));
+    mockGetJSON.mockResolvedValue(braveResponse);
 
-    const response = await searchAllDetailed('test', { providers: ['exa', 'brave'] })
+    const response = await searchAllDetailed("test", { providers: ["exa", "brave"] });
 
-    expect(response.results).toHaveLength(1)
-    expect(response.results[0].provider).toBe('brave')
-    expect(response.errors).toHaveLength(1)
-    expect(response.errors[0].provider).toBe('exa')
-    expect(response.errors[0].error.message).toBe('exa auth failed')
-  })
+    expect(response.results).toHaveLength(1);
+    expect(response.results[0].provider).toBe("brave");
+    expect(response.errors).toHaveLength(1);
+    expect(response.errors[0].provider).toBe("exa");
+    expect(response.errors[0].error.message).toBe("exa auth failed");
+  });
 
-  it('reports all providers as errors when all fail', async () => {
-    mockGetJSON.mockRejectedValue(new Error('searxng down'))
+  it("reports all providers as errors when all fail", async () => {
+    mockGetJSON.mockRejectedValue(new Error("searxng down"));
 
-    const response = await searchAllDetailed('test', { providers: ['searxng'] })
+    const response = await searchAllDetailed("test", { providers: ["searxng"] });
 
-    expect(response.results).toHaveLength(0)
-    expect(response.errors).toHaveLength(1)
-    expect(response.errors[0].provider).toBe('searxng')
-  })
+    expect(response.results).toHaveLength(0);
+    expect(response.errors).toHaveLength(1);
+    expect(response.errors[0].provider).toBe("searxng");
+  });
 
-  it('wraps non-Error rejections in Error objects', async () => {
-    mockGetJSON.mockRejectedValue('string rejection')
+  it("wraps non-Error rejections in Error objects", async () => {
+    mockGetJSON.mockRejectedValue("string rejection");
 
-    const response = await searchAllDetailed('test', { providers: ['searxng'] })
+    const response = await searchAllDetailed("test", { providers: ["searxng"] });
 
-    expect(response.errors).toHaveLength(1)
-    expect(response.errors[0].error).toBeInstanceOf(Error)
-    expect(response.errors[0].error.message).toBe('string rejection')
-  })
+    expect(response.errors).toHaveLength(1);
+    expect(response.errors[0].error).toBeInstanceOf(Error);
+    expect(response.errors[0].error.message).toBe("string rejection");
+  });
 
-  it('throws InvalidDateFilterError for malformed startPublishedDate', async () => {
+  it("throws InvalidDateFilterError for malformed startPublishedDate", async () => {
     await expect(
-      searchAllDetailed('test', { providers: ['searxng'], startPublishedDate: 'not-a-date' }),
-    ).rejects.toThrow(InvalidDateFilterError)
+      searchAllDetailed("test", { providers: ["searxng"], startPublishedDate: "not-a-date" }),
+    ).rejects.toThrow(InvalidDateFilterError);
 
-    expect(mockPostJSON).not.toHaveBeenCalled()
-    expect(mockGetJSON).not.toHaveBeenCalled()
-  })
+    expect(mockPostJSON).not.toHaveBeenCalled();
+    expect(mockGetJSON).not.toHaveBeenCalled();
+  });
 
-  it('throws InvalidDateFilterError for malformed endPublishedDate', async () => {
+  it("throws InvalidDateFilterError for malformed endPublishedDate", async () => {
     await expect(
-      searchAllDetailed('test', { providers: ['searxng'], endPublishedDate: '13/01/2024' }),
-    ).rejects.toThrow(InvalidDateFilterError)
-  })
+      searchAllDetailed("test", { providers: ["searxng"], endPublishedDate: "13/01/2024" }),
+    ).rejects.toThrow(InvalidDateFilterError);
+  });
 
-  it('throws InvalidDateFilterError when start is after end', async () => {
+  it("throws InvalidDateFilterError when start is after end", async () => {
     await expect(
-      searchAllDetailed('test', {
-        providers: ['searxng'],
-        startPublishedDate: '2025-06-01',
-        endPublishedDate: '2025-01-01',
+      searchAllDetailed("test", {
+        providers: ["searxng"],
+        startPublishedDate: "2025-06-01",
+        endPublishedDate: "2025-01-01",
       }),
-    ).rejects.toThrow(InvalidDateFilterError)
-  })
+    ).rejects.toThrow(InvalidDateFilterError);
+  });
 
-  it('accepts valid ISO 8601 date strings', async () => {
-    mockGetJSON.mockResolvedValue({ results: [] })
-
-    await expect(
-      searchAllDetailed('test', {
-        providers: ['searxng'],
-        startPublishedDate: '2024-01-01',
-        endPublishedDate: '2024-12-31',
-      }),
-    ).resolves.toBeDefined()
-  })
-
-  it('accepts ISO 8601 datetime with timezone', async () => {
-    mockGetJSON.mockResolvedValue({ results: [] })
+  it("accepts valid ISO 8601 date strings", async () => {
+    mockGetJSON.mockResolvedValue({ results: [] });
 
     await expect(
-      searchAllDetailed('test', {
-        providers: ['searxng'],
-        startPublishedDate: '2024-01-01T00:00:00Z',
-        endPublishedDate: '2024-12-31T23:59:59+02:00',
+      searchAllDetailed("test", {
+        providers: ["searxng"],
+        startPublishedDate: "2024-01-01",
+        endPublishedDate: "2024-12-31",
       }),
-    ).resolves.toBeDefined()
-  })
-})
+    ).resolves.toBeDefined();
+  });
+
+  it("accepts ISO 8601 datetime with timezone", async () => {
+    mockGetJSON.mockResolvedValue({ results: [] });
+
+    await expect(
+      searchAllDetailed("test", {
+        providers: ["searxng"],
+        startPublishedDate: "2024-01-01T00:00:00Z",
+        endPublishedDate: "2024-12-31T23:59:59+02:00",
+      }),
+    ).resolves.toBeDefined();
+  });
+});
