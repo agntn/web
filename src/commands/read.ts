@@ -10,12 +10,12 @@ import {
 export default defineCommand({
   meta: {
     name: "read",
-    description: "Read a URL using a provider",
+    description: "Read one or more URLs using a provider",
   },
   args: {
     url: {
       type: "positional",
-      description: "URL to read",
+      description: "URL to read; pass more URLs for a batch",
       required: true,
     },
     provider: {
@@ -39,11 +39,19 @@ export default defineCommand({
   },
   async run({ args }) {
     const read = await import("../core/read.ts");
-    const parsed = parseReadArguments(args);
+    const batch = await import("../core/batch.ts");
+    const parsed = parseReadArguments(args, batch.MAX_BATCH_ITEMS);
     try {
       await import("../providers/index.ts");
-      const result = await read.readUrl(parsed.url, parsed.options);
-      writeReadResult(result, args.json);
+      if (parsed.urls.length === 1) {
+        const result = await read.readUrl(parsed.urls[0], parsed.options);
+        writeReadResult(result, args.json);
+        return;
+      }
+
+      const outcomes = await batch.readBatch(parsed.urls, parsed.options);
+      writeReadBatch(outcomes, args.json);
+      if (outcomes.some((outcome) => "error" in outcome)) process.exitCode = 1;
     } catch (error) {
       handleReadError(error, parsed.options.provider ?? "jina", read.readProviderNames);
     }
@@ -51,6 +59,7 @@ export default defineCommand({
 });
 
 type ReadCommandArgs = {
+  readonly _: readonly string[];
   readonly url: string;
   readonly provider?: string;
   readonly format?: string;
@@ -59,7 +68,7 @@ type ReadCommandArgs = {
 };
 
 type ParsedReadArguments = {
-  readonly url: string;
+  readonly urls: readonly string[];
   readonly options: {
     readonly provider: string;
     readonly format?: "markdown" | "text" | "html";
@@ -67,14 +76,18 @@ type ParsedReadArguments = {
   };
 };
 
-function parseReadArguments(args: ReadCommandArgs): ParsedReadArguments {
-  if (!args.url.trim()) return exitWithError("Read URL cannot be empty.");
+function parseReadArguments(args: ReadCommandArgs, maxBatchItems: number): ParsedReadArguments {
+  const urls = args._.length > 0 ? args._ : [args.url];
+  if (urls.some((url) => !url.trim())) return exitWithError("Read URL cannot be empty.");
+  if (urls.length > maxBatchItems) {
+    return exitWithError(`Cannot read more than ${maxBatchItems} URLs at once.`);
+  }
   const format = parseFormat(args.format);
   if (!format.ok) return exitWithError(format.message);
   const maxTokens = parseOptionalPositiveInt(args["max-tokens"], "--max-tokens");
   if (!maxTokens.ok) return exitWithError(maxTokens.message);
   return {
-    url: args.url,
+    urls,
     options: {
       provider: args.provider || "jina",
       format: format.value,
@@ -102,6 +115,32 @@ function writeReadResult(
   }
   consola.log("");
   consola.log(sanitizeTerminalText(result.content));
+}
+
+type ReadBatchItemView =
+  | { readonly url: string; readonly error: string }
+  | {
+      readonly url: string;
+      readonly result: Readonly<
+        Pick<import("../core/types.ts").ReadResult, "url" | "title" | "description" | "content">
+      >;
+    };
+
+function writeReadBatch(outcomes: readonly ReadBatchItemView[], json: boolean): void {
+  if (json) {
+    process.stdout.write(`${JSON.stringify(outcomes, null, 2)}\n`);
+    return;
+  }
+
+  for (const [index, outcome] of outcomes.entries()) {
+    consola.log(`[${index + 1}] ${sanitizeTerminalText(outcome.url)}`);
+    if ("error" in outcome) {
+      consola.error(`  ${sanitizeTerminalText(outcome.error)}`);
+    } else {
+      writeReadResult(outcome.result, false);
+    }
+    if (index < outcomes.length - 1) consola.log("");
+  }
 }
 
 function handleReadError(
