@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockGetJSON =
+const mockReadGetJSON =
+  vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();
+const mockDefaultGetJSON =
   vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();
 const mockPostJSON =
   vi.fn<
@@ -11,8 +13,8 @@ const mockPostJSON =
     ) => Promise<unknown>
   >();
 
-const mockClient = {
-  getJSON: mockGetJSON,
+const mockDefaultClient = {
+  getJSON: mockDefaultGetJSON,
   postJSON: mockPostJSON,
   maxRetries: 5,
   baseDelay: 50,
@@ -20,11 +22,16 @@ const mockClient = {
   userAgent: "agntn-web/0.0.1",
 };
 
+const mockReadClient = {
+  ...mockDefaultClient,
+  getJSON: mockReadGetJSON,
+};
+
 vi.mock("../../src/core/client.ts", () => ({
   Client: vi.fn(function ClientMock() {
-    return mockClient;
+    return mockReadClient;
   }),
-  defaultClient: vi.fn(() => mockClient),
+  defaultClient: vi.fn(() => mockDefaultClient),
 }));
 
 import { Client } from "../../src/core/client.ts";
@@ -87,9 +94,11 @@ const readResponse = {
 
 describe("context provider", () => {
   beforeEach(() => {
-    mockGetJSON.mockReset();
+    mockReadGetJSON.mockReset();
+    mockDefaultGetJSON.mockReset();
     mockPostJSON.mockReset();
-    mockGetJSON.mockResolvedValue(readResponse);
+    mockReadGetJSON.mockResolvedValue(readResponse);
+    mockDefaultGetJSON.mockResolvedValue(readResponse);
     mockPostJSON.mockResolvedValue(searchResponse);
     vi.mocked(Client).mockClear();
     delete process.env.CONTEXT_DEV_API_KEY;
@@ -164,8 +173,9 @@ describe("context provider", () => {
       noCache: true,
     });
 
-    expect(mockGetJSON).toHaveBeenCalledOnce();
-    const [url, headers] = mockGetJSON.mock.calls[0];
+    expect(mockReadGetJSON).toHaveBeenCalledOnce();
+    expect(mockDefaultGetJSON).not.toHaveBeenCalled();
+    const [url, headers] = mockReadGetJSON.mock.calls[0];
     const requestUrl = new URL(url);
     expect(`${requestUrl.origin}${requestUrl.pathname}`).toBe(
       "https://api.context.dev/v1/web/scrape/markdown",
