@@ -1,3 +1,4 @@
+import { runCommand } from "citty";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import {
@@ -11,6 +12,13 @@ const mockInfo = vi.fn<(message: unknown) => void>();
 const mockError = vi.fn<(message: unknown) => void>();
 const mockReadUrl =
   vi.fn<(url: string, options: Readonly<Record<string, unknown>>) => Promise<unknown>>();
+const mockReadBatch =
+  vi.fn<
+    (
+      urls: readonly string[],
+      options: Readonly<Record<string, unknown>>,
+    ) => Promise<readonly unknown[]>
+  >();
 
 vi.mock("consola", () => ({
   consola: {
@@ -23,6 +31,12 @@ vi.mock("consola", () => ({
 vi.mock("../../src/core/read.ts", () => ({
   readProviderNames: ["jina"],
   readUrl: (url: string, options: Readonly<Record<string, unknown>>) => mockReadUrl(url, options),
+}));
+
+vi.mock("../../src/core/batch.ts", () => ({
+  MAX_BATCH_ITEMS: 10,
+  readBatch: (urls: readonly string[], options: Readonly<Record<string, unknown>>) =>
+    mockReadBatch(urls, options),
 }));
 
 vi.mock("../../src/core/registry.ts", () => ({
@@ -68,12 +82,16 @@ function runRead(overrides: Readonly<Partial<ReadRunArgs>> = {}) {
 describe("read command", () => {
   let exitSpy: MockInstance<typeof process.exit>;
   let writeSpy: MockInstance<typeof process.stdout.write>;
+  let previousExitCode: typeof process.exitCode;
 
   beforeEach(() => {
     mockLog.mockReset();
     mockInfo.mockReset();
     mockError.mockReset();
     mockReadUrl.mockReset();
+    mockReadBatch.mockReset();
+    previousExitCode = process.exitCode;
+    process.exitCode = undefined;
     mockReadUrl.mockResolvedValue({
       url: "https://example.com",
       title: "Example",
@@ -87,6 +105,7 @@ describe("read command", () => {
   });
 
   afterEach(() => {
+    process.exitCode = previousExitCode;
     exitSpy.mockRestore();
     writeSpy.mockRestore();
   });
@@ -117,6 +136,52 @@ describe("read command", () => {
     expect(writeSpy).toHaveBeenCalledOnce();
     const parsed = JSON.parse(String(writeSpy.mock.calls[0][0])) as { readonly content: string };
     expect(parsed.content).toBe("Example content");
+  });
+
+  it("keeps ordered batch JSON and exits non-zero after a partial failure", async () => {
+    const urls = ["https://example.com/one", "https://example.com/two"];
+    const outcomes = [
+      {
+        url: urls[0],
+        result: { url: urls[0], content: "First page" },
+      },
+      { url: urls[1], error: "second read failed" },
+    ];
+    mockReadBatch.mockResolvedValueOnce(outcomes);
+
+    await runCommand(readCommand, { rawArgs: [...urls, "--json"] });
+
+    expect(mockReadUrl).not.toHaveBeenCalled();
+    expect(mockReadBatch).toHaveBeenCalledWith(urls, {
+      provider: "jina",
+      format: undefined,
+      maxTokens: undefined,
+    });
+    expect(writeSpy).toHaveBeenCalledOnce();
+    expect(JSON.parse(String(writeSpy.mock.calls[0][0]))).toEqual(outcomes);
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("keeps a successful batch at exit zero", async () => {
+    const urls = ["https://example.com/one", "https://example.com/two"];
+    mockReadBatch.mockResolvedValueOnce(
+      urls.map((url) => ({ url, result: { url, content: "Page" } })),
+    );
+
+    await runCommand(readCommand, { rawArgs: urls });
+
+    expect(mockReadBatch).toHaveBeenCalledOnce();
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it("rejects more than ten URLs before reading any of them", async () => {
+    const urls = Array.from({ length: 11 }, (_, index) => `https://example.com/${index}`);
+
+    await expect(runCommand(readCommand, { rawArgs: urls })).rejects.toThrow("__EXIT__");
+
+    expect(mockError).toHaveBeenCalledWith("Cannot read more than 10 URLs at once.");
+    expect(mockReadUrl).not.toHaveBeenCalled();
+    expect(mockReadBatch).not.toHaveBeenCalled();
   });
 
   it("strips terminal control sequences from human output", async () => {

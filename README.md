@@ -181,16 +181,19 @@ web "your query"
 web --provider brave "your query" --max-results 5
 web search "your query" --json
 web read https://example.com --format markdown --json
+web read https://example.com/one https://example.com/two --json
 web providers
 ```
 
-| Command              | Description                               |
-| -------------------- | ----------------------------------------- |
-| `web <query>`        | Search the web using the default provider |
-| `web search <query>` | Search the web using a provider           |
-| `web read <url>`     | Read a URL into normalized content        |
-| `web providers`      | List built-in providers                   |
-| `web mcp`            | Run the MCP server over stdio             |
+| Command              | Description                                   |
+| -------------------- | --------------------------------------------- |
+| `web <query>`        | Search the web using the default provider     |
+| `web search <query>` | Search the web using a provider               |
+| `web read <url...>`  | Read one or more URLs into normalized content |
+| `web providers`      | List built-in providers                       |
+| `web mcp`            | Run the MCP server over stdio                 |
+
+Passing 2-10 URLs returns one ordered outcome per URL. Batch JSON is an array of `{ url, result }` or `{ url, error }`; any failed read makes the command exit 1 without discarding successes.
 
 ### MCP server
 
