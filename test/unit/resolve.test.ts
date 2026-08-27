@@ -12,6 +12,7 @@ const envKeys = [
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
   "TAVILY_API_KEY",
+  "TINYFISH_API_KEY",
   "SERPAPI_API_KEY",
   "SERPBASE_API_KEY",
 ] as const;
@@ -47,10 +48,12 @@ describe("resolve", () => {
       process.env.EXA_API_KEY = "test-key";
       process.env.BRAVE_API_KEY = "test-key";
       process.env.JINA_API_KEY = "test-key";
+      process.env.TINYFISH_API_KEY = "test-key";
       const available = detectAvailableProviders();
       expect(available).toContain("exa");
       expect(available).toContain("brave");
       expect(available).toContain("jina");
+      expect(available).toContain("tinyfish");
     });
 
     it("should always include searxng when registered", () => {
@@ -64,6 +67,7 @@ describe("resolve", () => {
       expect(available).not.toContain("brave");
       expect(available).not.toContain("jina");
       expect(available).not.toContain("tavily");
+      expect(available).not.toContain("tinyfish");
       expect(available).not.toContain("serpapi");
       expect(available).not.toContain("serpbase");
     });
@@ -97,6 +101,7 @@ describe("resolve", () => {
       expect(names).toContain("serpapi");
       expect(names).toContain("serpbase");
       expect(names).toContain("tavily");
+      expect(names).toContain("tinyfish");
     });
 
     it("should mark configured providers correctly", () => {
@@ -117,7 +122,9 @@ describe("resolve", () => {
     it("should set correct envVar for api-key providers", () => {
       const list = listProviders();
       const brave = list.find((p) => p.name === "brave");
+      const tinyfish = list.find((p) => p.name === "tinyfish");
       expect(brave?.envVar).toBe("BRAVE_API_KEY");
+      expect(tinyfish?.envVar).toBe("TINYFISH_API_KEY");
     });
   });
 });

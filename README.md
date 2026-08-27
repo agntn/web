@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/github/license/agntn/web?style=flat&colorA=130f40&colorB=474787)](https://github.com/agntn/web/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/agntn/web)
 
-One API for Brave, Exa, Jina, Tavily, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
+One API for Brave, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
 
 If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
 
@@ -22,7 +22,7 @@ pi install git:github.com/agntn/web
 Provided tools:
 
 - `web_search` - search one query or a batch of queries with a single provider, or use `provider="all"` for provider fan-out
-- `web_read` - read one URL or a batch of URLs with Jina Reader or Firecrawl
+- `web_read` - read one URL or a batch of URLs with Jina Reader, Firecrawl, or TinyFish
 - `web_providers` - list built-in providers, env-var configuration, and reachability status
 
 Provided slash commands:
@@ -30,7 +30,7 @@ Provided slash commands:
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` - show provider configuration and reachability status
 
-The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
+The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
 
 ## Install
 
@@ -67,6 +67,7 @@ Swap the provider string, same code:
 const brave = create("brave"); // reads BRAVE_API_KEY
 const jina = create("jina"); // reads JINA_API_KEY
 const tavily = create("tavily"); // reads TAVILY_API_KEY
+const tinyfish = create("tinyfish");
 ```
 
 You can also pass the key explicitly:
@@ -131,7 +132,7 @@ const page = await readUrl("https://example.com/article", {
 console.log(page.title, page.content);
 ```
 
-Jina read uses `r.jina.ai` and does not require an API key for basic reads; if `JINA_API_KEY` is present it is sent as Bearer auth.
+Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Firecrawl and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`.
 
 ### Batch operations
 
@@ -169,7 +170,7 @@ const { text } = await generateText({
 // The AI can choose: a specific provider, or "all" for parallel search
 tools: { web_search: searchTool, web_read: readTool }
 // searchTool input: { query: string | string[], provider?: "brave" | "exa" | ... | "all", maxResults?: number }
-// readTool input: { url: string | string[], provider?: "jina" | "firecrawl", format?: "markdown" | "text" | "html" }
+// readTool input: { url: string | string[], provider?: "jina" | "firecrawl" | "tinyfish", format?: "markdown" | "text" | "html" }
 ```
 
 For `searchTool`, when no provider is specified, the tool auto-detects the first available one from environment variables. `readTool` defaults to Jina Reader.
@@ -221,33 +222,37 @@ The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`
 
 ## Providers
 
-| Provider | Env var            | Auth               | Free tier                              |
-| -------- | ------------------ | ------------------ | -------------------------------------- |
-| Brave    | `BRAVE_API_KEY`    | Header             | 2k queries/mo                          |
-| Exa      | `EXA_API_KEY`      | Header             | 1k queries/mo                          |
-| Jina     | `JINA_API_KEY`     | Bearer header      | Required for search; optional for read |
-| SearXNG  | -                  | None               | Self-hosted                            |
-| SerpAPI  | `SERPAPI_API_KEY`  | Query param        | 100 queries/mo                         |
-| SerpBase | `SERPBASE_API_KEY` | `X-API-Key` header | 100 searches to start                  |
-| Tavily   | `TAVILY_API_KEY`   | Body               | 1k queries/mo                          |
+| Provider  | Env var             | Auth               | Free tier                                  |
+| --------- | ------------------- | ------------------ | ------------------------------------------ |
+| Brave     | `BRAVE_API_KEY`     | Header             | 2k queries/mo                              |
+| Exa       | `EXA_API_KEY`       | Header             | 1k queries/mo                              |
+| Firecrawl | `FIRECRAWL_API_KEY` | Bearer header      | Credit-based free tier                     |
+| Jina      | `JINA_API_KEY`      | Bearer header      | Required for search; optional for read     |
+| SearXNG   | -                   | None               | Self-hosted                                |
+| SerpAPI   | `SERPAPI_API_KEY`   | Query param        | 100 queries/mo                             |
+| SerpBase  | `SERPBASE_API_KEY`  | `X-API-Key` header | 100 searches to start                      |
+| Tavily    | `TAVILY_API_KEY`    | Body               | 1k queries/mo                              |
+| TinyFish  | `TINYFISH_API_KEY`  | `X-API-Key` header | Free Fetch; Search requires account access |
 
 ### Result shape
 
 All search providers always return `{ url, title, snippet }`. Optional fields depend on what each provider's native API exposes; `@agntn/web` passes them through without flattening:
 
-| Provider | Optional fields populated                                                                                                                 |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| Exa      | `text` (full page), `highlights[]`, `summary` (AI), `score`, `publishedDate`, `author`, `image`, `favicon`                                |
-| Jina     | `text` (`content`/`text`), `publishedDate`, `image`, `metadata`                                                                           |
-| Tavily   | `text` (raw_content, full HTML/markdown), `score`, `publishedDate`                                                                        |
-| Brave    | `text` (joined `extra_snippets`), `favicon`                                                                                               |
-| SerpAPI  | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}`                                             |
-| SerpBase | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}` |
-| SearXNG  | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}`                                                                 |
+| Provider  | Optional fields populated                                                                                                                 |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Exa       | `text` (full page), `highlights[]`, `summary` (AI), `score`, `publishedDate`, `author`, `image`, `favicon`                                |
+| Firecrawl | `text` (markdown from the scraped page)                                                                                                   |
+| Jina      | `text` (`content`/`text`), `publishedDate`, `image`, `metadata`                                                                           |
+| Tavily    | `text` (raw_content, full HTML/markdown), `score`, `publishedDate`                                                                        |
+| TinyFish  | `publishedDate`, `author`, `metadata.{position, siteName, publisher, authors, venue, year, citedByCount, pdfUrl}`                         |
+| Brave     | `text` (joined `extra_snippets`), `favicon`                                                                                               |
+| SerpAPI   | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}`                                             |
+| SerpBase  | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}` |
+| SearXNG   | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}`                                                                 |
 
-Pick the provider that fits the shape you want. Exa is closest to "AI search" (summary + highlights + full text on request). Jina uses Jina Search Foundation and can return result content plus metadata. Tavily is best when you want the raw page content. Brave/SerpAPI/SerpBase/SearXNG are classic SERP-style metadata.
+Pick the provider that fits the shape you want. Exa is closest to "AI search" (summary + highlights + full text on request). TinyFish carries useful news and research metadata. Jina and Tavily are strong when page content matters. Brave, SerpAPI, SerpBase, and SearXNG return classic SERP metadata.
 
-SerpBase uses Google SERP endpoints. `category: "images"`, `"news"`, or `"videos"` selects the matching SerpBase endpoint; `maxResults` is applied client-side to the returned page.
+SerpBase uses Google SERP endpoints. `category: "images"`, `"news"`, or `"videos"` selects the matching SerpBase endpoint; `maxResults` is applied client-side to the returned page. TinyFish also applies `maxResults` client-side to one result page.
 
 SearXNG requires no API key. It's a self-hosted metasearch engine. By default `@agntn/web` connects to `http://localhost:8080`. Override with `baseURL`:
 
@@ -302,7 +307,7 @@ interface SearchResult {
 }
 ```
 
-Optional fields depend on what the provider returns. Exa provides `score`, `text`, and `highlights`. Jina provides result `text`/metadata when available. Brave provides `favicon`. Not all providers populate all fields.
+Optional fields depend on what the provider returns. Exa provides `score`, `text`, and `highlights`. TinyFish provides publisher and research metadata. Jina provides result `text` and metadata when available. Brave provides `favicon`. Not all providers populate all fields.
 
 Read results use the same naming for URL-to-content:
 
@@ -335,13 +340,13 @@ interface SearchOptions {
 }
 ```
 
-`maxResults` works with every search provider. Domain filtering is supported by Exa, Tavily, and Jina include filters (`site`). Date ranges are currently Exa-specific. `category` is supported by Exa, Jina (`web`, `images`, `news`), and SearXNG.
+`maxResults` works with every search provider. TinyFish supports domain and date filters plus `news` and `research_paper` categories. Exa and Tavily support domain filters, while Jina supports include filters through `site`. Other category support varies by provider.
 
 Read options you can pass to `readUrl`:
 
 ```typescript
 interface ReadUrlOptions {
-  provider?: "jina"; // custom registered provider names are also accepted at runtime
+  provider?: string;
   format?: "markdown" | "text" | "html";
   maxTokens?: number;
   targetSelector?: string;
@@ -350,6 +355,8 @@ interface ReadUrlOptions {
   noCache?: boolean;
 }
 ```
+
+The built-in read providers are `jina`, `firecrawl`, and `tinyfish`. Custom registered provider names also work at runtime.
 
 ## Development
 

@@ -27,6 +27,7 @@ describe("@agntn/web", () => {
       "serpapi",
       "serpbase",
       "tavily",
+      "tinyfish",
     ]);
   });
 

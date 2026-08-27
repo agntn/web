@@ -82,6 +82,7 @@ const envKeys = [
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
   "TAVILY_API_KEY",
+  "TINYFISH_API_KEY",
   "SERPAPI_API_KEY",
   "SERPBASE_API_KEY",
 ];
