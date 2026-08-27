@@ -52,6 +52,9 @@
       "import": "./dist/opencode.mjs"
     }
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "obuild",
     "dev": "obuild --stub",

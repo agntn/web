@@ -27,7 +27,7 @@ packages/pi/extensions/
 test/unit/                # Public behavior and provider contract tests
 .github/workflows/
 ├── test.yml              # CI: typecheck -> build -> test
-└── release.yml           # npm publish on v* tags
+└── publish.yml           # npm OIDC publish on v* tags
 ```
 
 ## WHERE TO LOOK
@@ -44,7 +44,7 @@ test/unit/                # Public behavior and provider contract tests
 | Add tests            | `test/`                                                                       | Mirror public behavior, not implementation details                                                                                                                                   |
 | Change build outputs | `build.config.ts` + `package.json`                                            | Keep `entries` and `exports` aligned                                                                                                                                                 |
 | Change CI flow       | `.github/workflows/test.yml`                                                  | Order stays `typecheck -> build -> test`                                                                                                                                             |
-| Change release flow  | `.github/workflows/release.yml`                                               | Publish only from `v*` tags                                                                                                                                                          |
+| Change release flow  | `.github/workflows/publish.yml`                                               | Publish through npm OIDC only from `v*` tags                                                                                                                                         |
 
 ## CONVENTIONS
 
