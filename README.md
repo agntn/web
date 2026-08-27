@@ -222,17 +222,17 @@ The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`
 
 ## Providers
 
-| Provider  | Env var             | Auth               | Free tier                                  |
-| --------- | ------------------- | ------------------ | ------------------------------------------ |
-| Brave     | `BRAVE_API_KEY`     | Header             | 2k queries/mo                              |
-| Exa       | `EXA_API_KEY`       | Header             | 1k queries/mo                              |
-| Firecrawl | `FIRECRAWL_API_KEY` | Bearer header      | Credit-based free tier                     |
-| Jina      | `JINA_API_KEY`      | Bearer header      | Required for search; optional for read     |
-| SearXNG   | -                   | None               | Self-hosted                                |
-| SerpAPI   | `SERPAPI_API_KEY`   | Query param        | 100 queries/mo                             |
-| SerpBase  | `SERPBASE_API_KEY`  | `X-API-Key` header | 100 searches to start                      |
-| Tavily    | `TAVILY_API_KEY`    | Body               | 1k queries/mo                              |
-| TinyFish  | `TINYFISH_API_KEY`  | `X-API-Key` header | Free Fetch; Search requires account access |
+| Provider  | Env var             | Auth               | Free tier                              |
+| --------- | ------------------- | ------------------ | -------------------------------------- |
+| Brave     | `BRAVE_API_KEY`     | Header             | 2k queries/mo                          |
+| Exa       | `EXA_API_KEY`       | Header             | 1k queries/mo                          |
+| Firecrawl | `FIRECRAWL_API_KEY` | Bearer header      | Credit-based free tier                 |
+| Jina      | `JINA_API_KEY`      | Bearer header      | Required for search; optional for read |
+| SearXNG   | -                   | None               | Self-hosted                            |
+| SerpAPI   | `SERPAPI_API_KEY`   | Query param        | 100 queries/mo                         |
+| SerpBase  | `SERPBASE_API_KEY`  | `X-API-Key` header | 100 searches to start                  |
+| Tavily    | `TAVILY_API_KEY`    | Body               | 1k queries/mo                          |
+| TinyFish  | `TINYFISH_API_KEY`  | `X-API-Key` header | Free at $0; Search access required     |
 
 ### Result shape
 
