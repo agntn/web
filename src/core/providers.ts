@@ -7,6 +7,7 @@ export const builtinProviders = [
   "serpapi",
   "serpbase",
   "tavily",
+  "tinyfish",
 ] as const;
 
 export type WebSearchProviderName = (typeof builtinProviders)[number];

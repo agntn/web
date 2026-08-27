@@ -9,6 +9,7 @@ const envKeys: Record<string, WebSearchProviderName> = {
   FIRECRAWL_API_KEY: "firecrawl",
   JINA_API_KEY: "jina",
   TAVILY_API_KEY: "tavily",
+  TINYFISH_API_KEY: "tinyfish",
   SERPAPI_API_KEY: "serpapi",
   SERPBASE_API_KEY: "serpbase",
 };

@@ -13,7 +13,7 @@ const providerNames = [...builtinProviders, "all"] as const;
 
 export const searchTool = tool({
   description:
-    'Search the web using multiple search engines (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+    'Search the web using multiple search engines (Brave, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
   inputSchema: z.object({
     query: z
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
@@ -81,7 +81,7 @@ export const searchTool = tool({
 
 export const readTool = tool({
   description:
-    "Read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
+    "Read one URL or a batch of URLs into normalized content using Jina, Firecrawl, or TinyFish. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
   inputSchema: z.object({
     url: z
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])

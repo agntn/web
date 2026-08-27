@@ -16,7 +16,7 @@ const WebPlugin: Plugin = async () => ({
   tool: {
     web_search: tool({
       description:
-        'Search the web using multiple search engines (Brave, Exa, Firecrawl, Jina, Tavily, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+        'Search the web using multiple search engines (Brave, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
       args: {
         query: z
           .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
@@ -45,7 +45,7 @@ const WebPlugin: Plugin = async () => ({
     }),
     web_read: tool({
       description:
-        "Read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
+        "Read one URL or a batch of URLs into normalized content using Jina, Firecrawl, or TinyFish. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
       args: {
         url: z
           .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
