@@ -6,6 +6,7 @@ const mockGetJSON = vi.fn();
 const providerEnvKeys = [
   "EXA_API_KEY",
   "BRAVE_API_KEY",
+  "CONTEXT_DEV_API_KEY",
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
   "TAVILY_API_KEY",

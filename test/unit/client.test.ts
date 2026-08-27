@@ -423,6 +423,33 @@ describe("Client", () => {
       }
     });
 
+    it("should redact a nested target URL from HTTPError", async () => {
+      const client = new Client();
+
+      const error = new FetchError("Server error");
+      error.statusCode = 500;
+      error.data = "";
+
+      mockFetch.mockRejectedValueOnce(error);
+
+      try {
+        await client.getJSON(
+          "https://api.context.dev/v1/web/scrape/markdown?url=https%3A%2F%2Fexample.com%2Fprivate%3Ftoken%3Dsigned-secret&maxAgeMs=0",
+          undefined,
+          undefined,
+        );
+        throw new Error("Expected HTTPError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(HTTPError);
+        if (!(err instanceof HTTPError)) {
+          throw err;
+        }
+        expect(err.url).not.toContain("signed-secret");
+        expect(err.url).toContain("url=%5BREDACTED%5D");
+        expect(err.url).toContain("maxAgeMs=0");
+      }
+    });
+
     it("should redact multiple sensitive params from URL in HTTPError", async () => {
       const client = new Client();
 

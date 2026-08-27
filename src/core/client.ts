@@ -104,7 +104,7 @@ export class Client {
   }
 }
 
-const SENSITIVE_PARAMS = ["api_key", "key", "token", "secret", "password", "apikey"];
+const SENSITIVE_PARAMS = ["api_key", "key", "token", "secret", "password", "apikey", "url"];
 const SENSITIVE_PARAM_SET = new Set(SENSITIVE_PARAMS.map((param) => param.toLowerCase()));
 
 function sanitizeUrl(url: string): string {

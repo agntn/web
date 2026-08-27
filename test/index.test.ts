@@ -20,6 +20,7 @@ describe("@agntn/web", () => {
   it("should list all built-in provider names", () => {
     expect(builtinProviders).toEqual([
       "brave",
+      "context",
       "exa",
       "firecrawl",
       "jina",

@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
+import { providerApiKeyEnvVar } from "../core/providers.ts";
 import {
   AuthError,
   EmptyUrlError,
@@ -150,7 +151,8 @@ function handleReadError(
 ): never {
   if (error instanceof EmptyUrlError) return exitWithError("Read URL cannot be empty.");
   if (error instanceof AuthError) {
-    consola.info(`Set the ${provider.toUpperCase()}_API_KEY environment variable.`);
+    const envVar = providerApiKeyEnvVar(provider);
+    if (envVar !== null) consola.info(`Set the ${envVar} environment variable.`);
     return exitWithError(`Authentication failed for provider "${provider}".`);
   }
   if (error instanceof UnknownProviderError) {

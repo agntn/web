@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
+import { providerApiKeyEnvVar } from "../core/providers.ts";
 import {
   AuthError,
   NoProviderConfiguredError,
@@ -122,7 +123,8 @@ async function handleSearchError(
 ): Promise<never> {
   if (error instanceof AuthError) {
     const provider = providerName || error.provider;
-    consola.info(`Set the ${provider.toUpperCase()}_API_KEY environment variable.`);
+    const envVar = providerApiKeyEnvVar(provider);
+    if (envVar !== null) consola.info(`Set the ${envVar} environment variable.`);
     return exitWithError(`Authentication failed for provider "${provider}".`);
   }
   if (error instanceof SearchNotSupportedError) {
