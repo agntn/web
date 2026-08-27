@@ -9,6 +9,7 @@ import "../../src/providers/index.ts";
 const envKeys = [
   "EXA_API_KEY",
   "BRAVE_API_KEY",
+  "CONTEXT_DEV_API_KEY",
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
   "TAVILY_API_KEY",
@@ -47,11 +48,13 @@ describe("resolve", () => {
     it("should detect multiple providers", () => {
       process.env.EXA_API_KEY = "test-key";
       process.env.BRAVE_API_KEY = "test-key";
+      process.env.CONTEXT_DEV_API_KEY = "test-key";
       process.env.JINA_API_KEY = "test-key";
       process.env.TINYFISH_API_KEY = "test-key";
       const available = detectAvailableProviders();
       expect(available).toContain("exa");
       expect(available).toContain("brave");
+      expect(available).toContain("context");
       expect(available).toContain("jina");
       expect(available).toContain("tinyfish");
     });
@@ -65,6 +68,7 @@ describe("resolve", () => {
       const available = detectAvailableProviders();
       expect(available).not.toContain("exa");
       expect(available).not.toContain("brave");
+      expect(available).not.toContain("context");
       expect(available).not.toContain("jina");
       expect(available).not.toContain("tavily");
       expect(available).not.toContain("tinyfish");
@@ -95,6 +99,7 @@ describe("resolve", () => {
       const list = listProviders();
       const names = list.map((p) => p.name);
       expect(names).toContain("brave");
+      expect(names).toContain("context");
       expect(names).toContain("exa");
       expect(names).toContain("jina");
       expect(names).toContain("searxng");
@@ -122,8 +127,10 @@ describe("resolve", () => {
     it("should set correct envVar for api-key providers", () => {
       const list = listProviders();
       const brave = list.find((p) => p.name === "brave");
+      const context = list.find((p) => p.name === "context");
       const tinyfish = list.find((p) => p.name === "tinyfish");
       expect(brave?.envVar).toBe("BRAVE_API_KEY");
+      expect(context?.envVar).toBe("CONTEXT_DEV_API_KEY");
       expect(tinyfish?.envVar).toBe("TINYFISH_API_KEY");
     });
   });

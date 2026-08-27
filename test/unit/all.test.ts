@@ -67,6 +67,7 @@ describe("searchAll", () => {
     mockGetJSON.mockReset();
     delete process.env.EXA_API_KEY;
     delete process.env.BRAVE_API_KEY;
+    delete process.env.CONTEXT_DEV_API_KEY;
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.JINA_API_KEY;
     delete process.env.TAVILY_API_KEY;
@@ -416,6 +417,7 @@ describe("searchAllDetailed", () => {
     mockGetJSON.mockReset();
     delete process.env.EXA_API_KEY;
     delete process.env.BRAVE_API_KEY;
+    delete process.env.CONTEXT_DEV_API_KEY;
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.JINA_API_KEY;
     delete process.env.TAVILY_API_KEY;

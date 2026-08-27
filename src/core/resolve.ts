@@ -1,27 +1,24 @@
-import { builtinProviders, type WebSearchProviderName } from "./providers.ts";
+import {
+  builtinProviders,
+  providerApiKeyEnvVar,
+  providerDetectionOrder,
+  type WebSearchProviderName,
+} from "./providers.ts";
 import { create, has } from "./registry.ts";
 import { NoProviderAvailableError, NoProviderConfiguredError } from "./errors.ts";
 import { isAvailabilityProvider } from "./provider.ts";
 
-const envKeys: Record<string, WebSearchProviderName> = {
-  EXA_API_KEY: "exa",
-  BRAVE_API_KEY: "brave",
-  FIRECRAWL_API_KEY: "firecrawl",
-  JINA_API_KEY: "jina",
-  TAVILY_API_KEY: "tavily",
-  TINYFISH_API_KEY: "tinyfish",
-  SERPAPI_API_KEY: "serpapi",
-  SERPBASE_API_KEY: "serpbase",
-};
-
-function envVarFor(name: WebSearchProviderName): string | null {
-  return name === "searxng" ? null : `${name.toUpperCase()}_API_KEY`;
+function configuredProviderEntries(): Array<readonly [string, WebSearchProviderName]> {
+  return providerDetectionOrder.flatMap((name) => {
+    const envVar = providerApiKeyEnvVar(name);
+    return envVar === null ? [] : [[envVar, name] as const];
+  });
 }
 
 export function detectAvailableProviders(): WebSearchProviderName[] {
   const available: WebSearchProviderName[] = [];
 
-  for (const [envVar, name] of Object.entries(envKeys)) {
+  for (const [envVar, name] of configuredProviderEntries()) {
     if (process.env[envVar]) {
       available.push(name);
     }
@@ -35,7 +32,7 @@ export function detectAvailableProviders(): WebSearchProviderName[] {
 }
 
 export function resolveDefaultProvider(): WebSearchProviderName {
-  for (const [envVar, name] of Object.entries(envKeys)) {
+  for (const [envVar, name] of configuredProviderEntries()) {
     if (process.env[envVar]) {
       return name;
     }
@@ -66,7 +63,7 @@ export function listProviders(): ProviderStatus[] {
   return builtinProviders.map((name) => ({
     name,
     configured: available.includes(name),
-    envVar: envVarFor(name),
+    envVar: providerApiKeyEnvVar(name),
   }));
 }
 
@@ -102,7 +99,7 @@ export async function listProvidersAsync(): Promise<ProviderStatus[]> {
   return Promise.all(
     builtinProviders.map(async (name) => {
       const configured = available.includes(name);
-      const base: ProviderStatus = { name, configured, envVar: envVarFor(name) };
+      const base: ProviderStatus = { name, configured, envVar: providerApiKeyEnvVar(name) };
       if (!configured) return base;
       const reachable = await probeConfiguredProvider(name);
       return reachable === undefined ? base : { ...base, reachable };

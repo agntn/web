@@ -37,7 +37,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_search",
       title: "Web Search",
       description:
-        'Search the web using multiple search engines (Brave, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+        'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
       inputSchema: Type.Object({
         query: Type.Union(
           [
@@ -101,7 +101,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_read",
       title: "Web Read",
       description:
-        "Read one URL or a batch of URLs into normalized content using Jina, Firecrawl, or TinyFish. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
+        "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, or TinyFish. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
       inputSchema: Type.Object({
         url: Type.Union(
           [

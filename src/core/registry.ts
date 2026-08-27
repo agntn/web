@@ -1,4 +1,5 @@
 import type { ProviderConfig } from "./types.ts";
+import { providerApiKeyEnvVar } from "./providers.ts";
 import {
   Provider,
   isReadProvider,
@@ -33,7 +34,8 @@ export function create(name: string, config?: Readonly<ProviderConfig>): Provide
     throw new UnknownProviderError(name);
   }
 
-  const apiKey = config?.apiKey || process.env[`${name.toUpperCase()}_API_KEY`];
+  const envVar = providerApiKeyEnvVar(name);
+  const apiKey = config?.apiKey || (envVar === null ? undefined : process.env[envVar]);
 
   return new ProviderClass({
     ...config,

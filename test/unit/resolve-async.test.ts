@@ -11,6 +11,7 @@ import "../../src/providers/index.ts";
 const envKeys = [
   "EXA_API_KEY",
   "BRAVE_API_KEY",
+  "CONTEXT_DEV_API_KEY",
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
   "TAVILY_API_KEY",
