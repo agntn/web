@@ -2,6 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetJSON =
   vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();
+const mockDefaultPostJSON =
+  vi.fn<
+    (
+      url: string,
+      body: Readonly<Record<string, unknown>>,
+      headers?: Readonly<Record<string, string>>,
+    ) => Promise<unknown>
+  >();
 const mockPostJSON =
   vi.fn<
     (
@@ -11,20 +19,28 @@ const mockPostJSON =
     ) => Promise<unknown>
   >();
 
-const mockClient = {
+const mockDefaultClient = {
   getJSON: mockGetJSON,
-  postJSON: mockPostJSON,
+  postJSON: mockDefaultPostJSON,
   maxRetries: 5,
   baseDelay: 50,
   timeout: 30000,
   userAgent: "agntn-web/0.0.1",
 };
+const mockReadClient = {
+  getJSON: vi.fn(),
+  postJSON: mockPostJSON,
+  maxRetries: 0,
+  baseDelay: 50,
+  timeout: 150000,
+  userAgent: "agntn-web/0.0.1",
+};
 
 vi.mock("../../src/core/client.ts", () => ({
   Client: vi.fn(function ClientMock() {
-    return mockClient;
+    return mockReadClient;
   }),
-  defaultClient: vi.fn(() => mockClient),
+  defaultClient: vi.fn(() => mockDefaultClient),
 }));
 
 import { Client } from "../../src/core/client.ts";
@@ -95,8 +111,10 @@ const fetchResponse = {
 describe("tinyfish provider", () => {
   beforeEach(() => {
     mockGetJSON.mockReset();
+    mockDefaultPostJSON.mockReset();
     mockPostJSON.mockReset();
     mockGetJSON.mockResolvedValue(searchResponse);
+    mockDefaultPostJSON.mockResolvedValue(fetchResponse);
     mockPostJSON.mockResolvedValue(fetchResponse);
     vi.mocked(Client).mockClear();
     delete process.env.TINYFISH_API_KEY;
@@ -199,6 +217,7 @@ describe("tinyfish provider", () => {
       noCache: true,
     });
 
+    expect(mockDefaultPostJSON).not.toHaveBeenCalled();
     expect(mockPostJSON).toHaveBeenCalledOnce();
     const [url, body, headers] = mockPostJSON.mock.calls[0];
     expect(url).toBe("https://api.fetch.tinyfish.ai");
