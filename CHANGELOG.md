@@ -1,5 +1,54 @@
 # Changelog
 
+## v0.3.0
+
+[compare changes](https://github.com/agntn/web/compare/v0.2.0...v0.3.0)
+
+### 🚀 Enhancements
+
+- Add Firecrawl provider ([#35](https://github.com/agntn/web/pull/35))
+- Serve web tools over MCP ([#39](https://github.com/agntn/web/pull/39))
+- **firecrawl:** Keep search diagnostics ([#46](https://github.com/agntn/web/pull/46))
+- Add batching to web agent tools ([#48](https://github.com/agntn/web/pull/48))
+- **cli:** Read several URLs per command ([#52](https://github.com/agntn/web/pull/52))
+- **tinyfish:** Wire search and read ([#56](https://github.com/agntn/web/pull/56))
+- Add Context.dev provider ([#57](https://github.com/agntn/web/pull/57))
+
+### 🩹 Fixes
+
+- **mcp:** Skip unreachable default providers ([#44](https://github.com/agntn/web/pull/44))
+- **read:** Fall back on Jina 402 ([#45](https://github.com/agntn/web/pull/45))
+- **pi:** Load web tools from live source ([#49](https://github.com/agntn/web/pull/49))
+- **pi:** Stop rejecting live providers ([#62](https://github.com/agntn/web/pull/62))
+- **read:** Try configured readers after Jina 402 ([#63](https://github.com/agntn/web/pull/63))
+
+### 💅 Refactors
+
+- ⚠️  Use abstract provider classes ([#36](https://github.com/agntn/web/pull/36))
+- ⚠️  Rename package to @agntn/web ([#38](https://github.com/agntn/web/pull/38))
+
+### 🏡 Chore
+
+- Enforce shared lint rules ([#47](https://github.com/agntn/web/pull/47))
+
+### ✅ Tests
+
+- **tinyfish:** Pin Fetch client routing ([#61](https://github.com/agntn/web/pull/61))
+
+### 🤖 CI
+
+- Publish npm package through OIDC ([#51](https://github.com/agntn/web/pull/51))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Use abstract provider classes ([#36](https://github.com/agntn/web/pull/36))
+- ⚠️  Rename package to @agntn/web ([#38](https://github.com/agntn/web/pull/38))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen <aeitwoen@gmail.com>
+
 ## v0.2.0
 
 [compare changes](https://github.com/agntn/web/compare/v0.1.2...v0.2.0)
