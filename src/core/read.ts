@@ -2,6 +2,7 @@ import type { ReadOptions, ReadResult } from "./types.ts";
 import { builtinProviders } from "./providers.ts";
 import { EmptyUrlError, HTTPError, ReadNotSupportedError } from "./errors.ts";
 import { createReadProvider } from "./registry.ts";
+import { detectAvailableProviders } from "./resolve.ts";
 
 export const readProviderNames = ["jina", "context", "firecrawl", "tinyfish"] as const;
 export type ReadProviderName = (typeof readProviderNames)[number];
@@ -27,8 +28,8 @@ export async function readUrl(
   try {
     return await createReadProvider(providerName).read(trimmedUrl, readOptions);
   } catch (error) {
-    if (!shouldFallbackToFirecrawl(requestedProviderName, error)) throw error;
-    return createReadProvider("firecrawl").read(trimmedUrl, readOptions);
+    if (!shouldFallback(requestedProviderName, error)) throw error;
+    return readFromConfiguredFallbacks(trimmedUrl, readOptions, providerName, error);
   }
 }
 
@@ -40,10 +41,32 @@ function resolveReadProviderName(requestedProvider?: string): string {
   return providerName;
 }
 
-function shouldFallbackToFirecrawl(requestedProvider: string | undefined, error: unknown): boolean {
-  return (
-    !requestedProvider && isPaymentRequired(error) && process.env.FIRECRAWL_API_KEY !== undefined
+async function readFromConfiguredFallbacks(
+  url: string,
+  options: Readonly<ReadOptions>,
+  initialProvider: string,
+  initialError: unknown,
+): Promise<ReadResult> {
+  let lastError = initialError;
+  for (const providerName of configuredReadProviders(initialProvider)) {
+    try {
+      return await createReadProvider(providerName).read(url, options);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+function configuredReadProviders(initialProvider: string): ReadProviderName[] {
+  const configuredProviders = detectAvailableProviders();
+  return readProviderNames.filter(
+    (name) => name !== initialProvider && configuredProviders.includes(name),
   );
+}
+
+function shouldFallback(requestedProvider: string | undefined, error: unknown): boolean {
+  return !requestedProvider && isPaymentRequired(error);
 }
 
 function isPaymentRequired(error: unknown): error is HTTPError {
