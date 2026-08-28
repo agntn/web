@@ -183,7 +183,6 @@ type ReadRenderParams = Readonly<Omit<ReadParams, "url">> & {
   readonly url: string | readonly string[];
 };
 type EmptyParams = Static<typeof emptyParameters>;
-type ProviderInput = (typeof PROVIDERS)[number];
 type ReadProviderInput = ReadProviderName;
 
 export default function webExtension(pi: ExtensionAPI) {
@@ -206,7 +205,8 @@ export default function webExtension(pi: ExtensionAPI) {
       return new Text(renderSearchCall(args, theme), 0, 0);
     },
     async execute(_toolCallId, params): Promise<AgentToolResult<SearchDetails>> {
-      const providerName = normalizeSearchProviderInput(params.provider);
+      const web = await loadWeb();
+      const providerName = normalizeSearchProviderInput(params.provider, web.builtinProviders);
       const searchOptions: SearchRequestOptions = stripUndefined({
         maxResults: params.maxResults,
         includeDomains: params.includeDomains,
@@ -215,8 +215,6 @@ export default function webExtension(pi: ExtensionAPI) {
         startPublishedDate: params.startPublishedDate,
         endPublishedDate: params.endPublishedDate,
       });
-
-      const web = await loadWeb();
 
       if (Array.isArray(params.query)) {
         const outcomes = await web.searchBatch(params.query, {
@@ -459,8 +457,11 @@ async function searchForCommand(
   }
 }
 
-function isKnownProvider(name: string): name is ProviderInput {
-  return PROVIDERS.some((provider) => provider === name);
+function isKnownSearchProvider(
+  name: string,
+  providerNames: readonly WebSearchProviderName[],
+): name is WebSearchProviderName {
+  return providerNames.some((provider) => provider === name);
 }
 
 function isKnownReadProvider(
@@ -472,13 +473,17 @@ function isKnownReadProvider(
 
 function normalizeSearchProviderInput(
   provider: string | undefined,
+  providerNames: readonly WebSearchProviderName[],
 ): "all" | WebSearchProviderName | undefined {
   const rawProvider = (provider ?? "").trim() || undefined;
-  if (rawProvider === undefined) return undefined;
-  if (!isKnownProvider(rawProvider)) {
-    throw new Error(`Unknown provider "${rawProvider}". Available: ${PROVIDERS.join(", ")}.`);
+  if (rawProvider === undefined || rawProvider === "auto") return undefined;
+  if (rawProvider === "all") return "all";
+  if (!isKnownSearchProvider(rawProvider, providerNames)) {
+    throw new Error(
+      `Unknown provider "${rawProvider}". Available: auto, all, ${providerNames.join(", ")}.`,
+    );
   }
-  return normalizeProvider(rawProvider);
+  return rawProvider;
 }
 
 function normalizeReadProviderInput(
@@ -499,15 +504,6 @@ function normalizeReadFormat(format: string | undefined): ReadOptions["format"] 
   if (format === undefined || format === "") return undefined;
   if (format === "markdown" || format === "text" || format === "html") return format;
   throw new Error('Invalid read format. Expected "markdown", "text", or "html".');
-}
-
-function normalizeProvider(
-  provider: ProviderInput | undefined,
-): "all" | WebSearchProviderName | undefined {
-  if (provider === "auto") {
-    return undefined;
-  }
-  return provider;
 }
 
 type SearchOptionValues = {
