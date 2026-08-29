@@ -4,5 +4,8 @@ allowBuilds:
   koffi: false
   protobufjs: false
 
+minimumReleaseAgeExclude:
+  - "@agntn/ox@0.1.0"
+
 packages:
   - packages/*
