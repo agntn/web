@@ -58,11 +58,12 @@ export {
   has,
 } from "./core/registry.ts";
 
-export { searchAll, searchAllDetailed } from "./core/all.ts";
+export { searchAll, searchAllDetailed, searchWithFallback } from "./core/all.ts";
 export type {
   SearchAllOptions,
   SearchAllResult,
   SearchAllResponse,
+  SearchWithFallbackResult,
   ProviderError,
 } from "./core/all.ts";
 

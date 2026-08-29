@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockPostJSON =
   vi.fn<
@@ -23,11 +23,12 @@ vi.mock("../../src/core/client.ts", () => ({
   })),
 }));
 
-import { searchAll, searchAllDetailed } from "../../src/core/all.ts";
+import { searchAll, searchAllDetailed, searchWithFallback } from "../../src/core/all.ts";
 import {
   UnknownProviderError,
   NoProviderConfiguredError,
   EmptyQueryError,
+  HTTPError,
   InvalidDateFilterError,
 } from "../../src/core/errors.ts";
 
@@ -519,5 +520,49 @@ describe("searchAllDetailed", () => {
         endPublishedDate: "2024-12-31T23:59:59+02:00",
       }),
     ).resolves.toBeDefined();
+  });
+});
+
+describe("searchWithFallback", () => {
+  const savedExaApiKey = process.env.EXA_API_KEY;
+  const savedBraveApiKey = process.env.BRAVE_API_KEY;
+
+  beforeEach(() => {
+    mockPostJSON.mockReset();
+    mockGetJSON.mockReset();
+    delete process.env.EXA_API_KEY;
+    delete process.env.BRAVE_API_KEY;
+  });
+
+  afterEach(() => {
+    if (savedExaApiKey === undefined) delete process.env.EXA_API_KEY;
+    else process.env.EXA_API_KEY = savedExaApiKey;
+    if (savedBraveApiKey === undefined) delete process.env.BRAVE_API_KEY;
+    else process.env.BRAVE_API_KEY = savedBraveApiKey;
+  });
+
+  it("returns the provider that succeeds after an automatic 402", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockPostJSON.mockRejectedValue(
+      new HTTPError(402, "https://api.exa.ai/search", "Payment required"),
+    );
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    await expect(searchWithFallback("test")).resolves.toMatchObject({
+      provider: "brave",
+      results: [expect.objectContaining({ url: "https://b.com" })],
+    });
+  });
+
+  it("does not hide a non-payment failure from the first provider", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    const failure = new HTTPError(500, "https://api.exa.ai/search", "Server error");
+    mockPostJSON.mockRejectedValue(failure);
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    await expect(searchWithFallback("test")).rejects.toBe(failure);
+    expect(mockGetJSON).not.toHaveBeenCalled();
   });
 });

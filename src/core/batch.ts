@@ -1,8 +1,7 @@
 import { EmptyQueryError, EmptyUrlError } from "./errors.ts";
-import { searchAllDetailed } from "./all.ts";
+import { prepareSearchWithFallback, searchAllDetailed } from "./all.ts";
 import { createSearchProvider } from "./registry.ts";
 import { readUrl, type ReadUrlOptions } from "./read.ts";
-import { resolveDefaultProviderAsync } from "./resolve.ts";
 import type { WebSearchProviderName } from "./providers.ts";
 import type { ReadResult, SearchRequestOptions, SearchResult } from "./types.ts";
 
@@ -43,9 +42,22 @@ export async function searchBatch(
     );
   }
 
+  if (requestedProvider === undefined) {
+    try {
+      const search = await prepareSearchWithFallback(searchOptions);
+      return mapSearchOutcomes(
+        await settleBatch(queries, async (query) => {
+          const response = await search(query);
+          return response.results;
+        }),
+      );
+    } catch (error) {
+      return queries.map((query) => ({ query, error: errorMessage(error) }));
+    }
+  }
+
   try {
-    const providerName = requestedProvider ?? (await resolveDefaultProviderAsync());
-    const provider = createSearchProvider(providerName);
+    const provider = createSearchProvider(requestedProvider);
     return mapSearchOutcomes(
       await settleBatch(queries, (query) => provider.search(query, searchOptions)),
     );

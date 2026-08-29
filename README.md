@@ -137,7 +137,7 @@ Jina read uses `r.jina.ai` and does not require an API key for basic reads; when
 
 ### Batch operations
 
-`searchBatch` and `readBatch` run up to 10 independent operations in parallel. Input order is preserved, and one failure does not discard the other outcomes:
+`searchBatch` and `readBatch` run up to 10 independent operations in parallel. Input order is preserved, and one failure does not discard the other outcomes. Without an explicit search provider, each query tries the remaining configured providers after HTTP 402:
 
 ```typescript
 import { readBatch, searchBatch } from "@agntn/web";
@@ -174,7 +174,7 @@ tools: { web_search: searchTool, web_read: readTool }
 // readTool input: { url: string | string[], provider?: "jina" | "context" | "firecrawl" | "tinyfish", format?: "markdown" | "text" | "html" }
 ```
 
-For `searchTool`, when no provider is specified, the tool auto-detects the first available one from environment variables. `readTool` defaults to Jina Reader.
+Without an explicit provider, `searchTool` starts with the first reachable provider from the environment and tries the remaining configured providers after HTTP 402. `readTool` defaults to Jina Reader.
 
 ## CLI
 

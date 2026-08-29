@@ -1,9 +1,11 @@
 import type { SearchResult, SearchRequestOptions } from "./types.ts";
+import type { WebSearchProviderName } from "./providers.ts";
 import {
   UnknownProviderError,
   NoProviderConfiguredError,
   NoProviderAvailableError,
   EmptyQueryError,
+  HTTPError,
   validateDateFilters,
 } from "./errors.ts";
 import { createSearchProvider, has } from "./registry.ts";
@@ -26,6 +28,15 @@ export interface SearchAllResponse {
   results: SearchAllResult[];
   errors: ProviderError[];
 }
+
+/** Result from automatic search after any payment fallback. */
+export interface SearchWithFallbackResult {
+  readonly provider: WebSearchProviderName;
+  readonly results: readonly SearchResult[];
+}
+
+/** Automatic search prepared with one snapshot of configured providers. */
+export type PreparedSearchWithFallback = (query: string) => Promise<SearchWithFallbackResult>;
 
 /**
  * Query multiple providers in parallel and return deduplicated results.
@@ -54,17 +65,69 @@ export async function searchAllDetailed(
   query: string,
   options?: SearchAllOptions,
 ): Promise<SearchAllResponse> {
-  if (!query.trim()) {
-    throw new EmptyQueryError();
-  }
-
-  validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
+  validateSearchInput(query, options);
 
   const { providers: requestedProviders, ...searchOptions } = options ?? {};
   validateProviderNames(requestedProviders);
   const providerNames = await resolveProviderNames(requestedProviders);
   const settled = await searchProviders(providerNames, query, searchOptions);
   return collectProviderResults(providerNames, settled);
+}
+
+/**
+ * Search through automatic providers in order after the first one requires payment.
+ * @param query - Search query.
+ * @param options - Search options forwarded to the selected provider.
+ * @returns {Promise<SearchWithFallbackResult>} Results and the provider that answered.
+ */
+export async function searchWithFallback(
+  query: string,
+  options?: Readonly<SearchRequestOptions>,
+): Promise<SearchWithFallbackResult> {
+  validateSearchInput(query, options);
+
+  const providerNames = await resolveAutomaticProviderNames();
+  return searchProviderNamesWithFallback(providerNames, query, options);
+}
+
+/**
+ * Resolve the automatic provider order once for a batch of searches.
+ * @param options - Search options forwarded to every selected provider.
+ * @returns {Promise<PreparedSearchWithFallback>} Search function using the resolved provider order.
+ */
+export async function prepareSearchWithFallback(
+  options?: Readonly<SearchRequestOptions>,
+): Promise<PreparedSearchWithFallback> {
+  validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
+  const providerNames = await resolveAutomaticProviderNames();
+  return (query) => {
+    if (!query.trim()) throw new EmptyQueryError();
+    return searchProviderNamesWithFallback(providerNames, query, options);
+  };
+}
+
+async function searchProviderNamesWithFallback(
+  providerNames: readonly WebSearchProviderName[],
+  query: string,
+  options?: Readonly<SearchRequestOptions>,
+): Promise<SearchWithFallbackResult> {
+  let lastError: unknown;
+  for (const [index, providerName] of providerNames.entries()) {
+    try {
+      return await searchProvider(providerName, query, options);
+    } catch (error) {
+      if (index === 0 && !isPaymentRequired(error)) throw error;
+      lastError = error;
+    }
+  }
+  throw lastError ?? new NoProviderAvailableError(providerNames);
+}
+
+function validateSearchInput(query: string, options?: Readonly<SearchRequestOptions>): void {
+  if (!query.trim()) {
+    throw new EmptyQueryError();
+  }
+  validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
 }
 
 function validateProviderNames(providerNames?: readonly string[]): void {
@@ -75,13 +138,33 @@ function validateProviderNames(providerNames?: readonly string[]): void {
 async function resolveProviderNames(
   requestedProviders?: readonly string[],
 ): Promise<readonly string[]> {
-  const providerNames = requestedProviders ?? (await detectAvailableProvidersAsync());
+  if (requestedProviders !== undefined) {
+    if (requestedProviders.length > 0) return requestedProviders;
+    throw new NoProviderConfiguredError();
+  }
+  return resolveAutomaticProviderNames();
+}
+
+async function resolveAutomaticProviderNames(): Promise<readonly WebSearchProviderName[]> {
+  const providerNames = await detectAvailableProvidersAsync();
   if (providerNames.length > 0) return providerNames;
-  if (requestedProviders !== undefined) throw new NoProviderConfiguredError();
 
   const configuredProviders = detectAvailableProviders();
   if (configuredProviders.length === 0) throw new NoProviderConfiguredError();
   throw new NoProviderAvailableError(configuredProviders);
+}
+
+async function searchProvider(
+  providerName: WebSearchProviderName,
+  query: string,
+  options?: Readonly<SearchRequestOptions>,
+): Promise<SearchWithFallbackResult> {
+  const results = await createSearchProvider(providerName).search(query, options);
+  return { provider: providerName, results };
+}
+
+function isPaymentRequired(error: unknown): error is HTTPError {
+  return error instanceof HTTPError && error.statusCode === 402;
 }
 
 function searchProviders(
