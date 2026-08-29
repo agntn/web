@@ -28,8 +28,8 @@
 
 ### 💅 Refactors
 
-- ⚠️  Use abstract provider classes ([#36](https://github.com/agntn/web/pull/36))
-- ⚠️  Rename package to @agntn/web ([#38](https://github.com/agntn/web/pull/38))
+- ⚠️ Use abstract provider classes ([#36](https://github.com/agntn/web/pull/36))
+- ⚠️ Rename package to @agntn/web ([#38](https://github.com/agntn/web/pull/38))
 
 ### 🏡 Chore
 
@@ -45,8 +45,8 @@
 
 #### ⚠️ Breaking Changes
 
-- ⚠️  Use abstract provider classes ([#36](https://github.com/agntn/web/pull/36))
-- ⚠️  Rename package to @agntn/web ([#38](https://github.com/agntn/web/pull/38))
+- ⚠️ Use abstract provider classes ([#36](https://github.com/agntn/web/pull/36))
+- ⚠️ Rename package to @agntn/web ([#38](https://github.com/agntn/web/pull/38))
 
 ### ❤️ Contributors
 
