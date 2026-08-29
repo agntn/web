@@ -3,6 +3,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetJSON = vi.fn();
+const mockPostJSON = vi.fn();
 const providerEnvKeys = [
   "EXA_API_KEY",
   "BRAVE_API_KEY",
@@ -19,12 +20,17 @@ vi.mock("../src/core/client.ts", () => ({
   Client: vi.fn(),
   defaultClient: vi.fn(() => ({
     getJSON: mockGetJSON,
-    postJSON: vi.fn(),
+    postJSON: mockPostJSON,
   })),
 }));
 
 import { createMcpServer, executeRead, executeSearch } from "../src/mcp.ts";
-import { EmptyQueryError, EmptyUrlError, NoProviderAvailableError } from "../src/core/errors.ts";
+import {
+  EmptyQueryError,
+  EmptyUrlError,
+  HTTPError,
+  NoProviderAvailableError,
+} from "../src/core/errors.ts";
 import "../src/providers/index.ts";
 
 const openConnections: Array<{ close(): Promise<void> }> = [];
@@ -208,6 +214,7 @@ describe("web MCP server", () => {
 describe("web MCP executors", () => {
   beforeEach(() => {
     mockGetJSON.mockReset();
+    mockPostJSON.mockReset();
     mockGetJSON.mockResolvedValue({ code: 200, status: 20000, data: [] });
   });
 
@@ -216,6 +223,31 @@ describe("web MCP executors", () => {
 
     await expect(executeSearch({ query: "test" })).rejects.toBeInstanceOf(NoProviderAvailableError);
     expect(mockGetJSON).not.toHaveBeenCalled();
+  });
+
+  it("falls past 402 when the provider was selected automatically", async () => {
+    vi.stubEnv("EXA_API_KEY", "test-exa");
+    vi.stubEnv("BRAVE_API_KEY", "test-brave");
+    mockPostJSON.mockRejectedValue(
+      new HTTPError(402, "https://api.exa.ai/search", "Payment required"),
+    );
+    mockGetJSON.mockResolvedValue({
+      web: {
+        results: [
+          {
+            title: "Brave Result",
+            url: "https://brave.example.com",
+            description: "Fallback result",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
+      },
+    });
+
+    await expect(executeSearch({ query: "test" })).resolves.toEqual([
+      expect.objectContaining({ url: "https://brave.example.com" }),
+    ]);
   });
 
   it("guards the empty-query contract when a host skips validation", async () => {

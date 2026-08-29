@@ -94,7 +94,7 @@ const PROVIDERS = [
   "tavily",
   "tinyfish",
 ] as const;
-const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) picks the first available provider from env. Use "all" to query every configured provider in parallel.`;
+const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) tries configured providers in order after HTTP 402. Use "all" to query every configured provider in parallel.`;
 const READ_PROVIDER_HINT =
   "Read provider to use. Defaults to Jina and is validated against web.readProviderNames at execution time.";
 
@@ -267,28 +267,47 @@ export default function webExtension(pi: ExtensionAPI) {
         return result;
       }
 
-      const resolvedProvider = providerName ?? (await web.resolveDefaultProviderAsync());
-      const provider = web.createSearchProvider(resolvedProvider);
-      const results = await provider.search(query, searchOptions);
+      if (providerName !== undefined) {
+        const results = await web.createSearchProvider(providerName).search(query, searchOptions);
+        const header = buildHeader({
+          mode: "single",
+          provider: providerName,
+          query,
+          count: results.length,
+          autoSelected: false,
+        });
+        return {
+          content: [{ type: "text", text: withHeader(header, formatResults(results)) }],
+          details: {
+            mode: "single",
+            query,
+            provider: providerName,
+            options: searchOptions,
+            count: results.length,
+            results,
+          },
+        };
+      }
+
+      const response = await web.searchWithFallback(query, searchOptions);
       const header = buildHeader({
         mode: "single",
-        provider: resolvedProvider,
+        provider: response.provider,
         query,
-        count: results.length,
-        autoSelected: providerName === undefined,
+        count: response.results.length,
+        autoSelected: true,
       });
-      const result: AgentToolResult<SearchDetails> = {
-        content: [{ type: "text", text: withHeader(header, formatResults(results)) }],
+      return {
+        content: [{ type: "text", text: withHeader(header, formatResults(response.results)) }],
         details: {
           mode: "single",
           query,
-          provider: resolvedProvider,
+          provider: response.provider,
           options: searchOptions,
-          count: results.length,
-          results,
+          count: response.results.length,
+          results: response.results,
         },
       };
-      return result;
     },
   });
 
@@ -438,22 +457,21 @@ async function searchForCommand(
   ui: CommandUi,
 ): Promise<CommandSearchResult | undefined> {
   const web = await loadWeb();
-  let provider: WebSearchProviderName;
   try {
-    provider = await web.resolveDefaultProviderAsync();
+    const response = await web.searchWithFallback(query, { maxResults: DEFAULT_MAX_RESULTS });
+    if (response.results.length === 0) {
+      ui.notify(`No results for "${query}" via ${response.provider}.`, "warning");
+    }
+    return response;
   } catch (error) {
-    ui.notify(`No reachable web providers. ${errorMessage(error)}`, "warning");
-    return undefined;
-  }
-
-  try {
-    const results = await web
-      .createSearchProvider(provider)
-      .search(query, { maxResults: DEFAULT_MAX_RESULTS });
-    if (results.length === 0) ui.notify(`No results for "${query}" via ${provider}.`, "warning");
-    return { provider, results };
-  } catch (error) {
-    ui.notify(`web ${provider} failed: ${errorMessage(error)}`, "error");
+    if (
+      error instanceof web.NoProviderConfiguredError ||
+      error instanceof web.NoProviderAvailableError
+    ) {
+      ui.notify(`No reachable web providers. ${errorMessage(error)}`, "warning");
+      return undefined;
+    }
+    ui.notify(`web search failed: ${errorMessage(error)}`, "error");
     return undefined;
   }
 }

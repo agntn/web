@@ -2,11 +2,11 @@ import { tool } from "ai";
 import { z } from "zod";
 import { builtinProviders } from "./core/providers.ts";
 import { createSearchProvider } from "./core/registry.ts";
-import { searchAll } from "./core/all.ts";
+import { searchAll, searchWithFallback } from "./core/all.ts";
 import { readProviderNames, readUrl } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
-import { resolveDefaultProvider, listProviders } from "./core/resolve.ts";
+import { listProviders } from "./core/resolve.ts";
 import "./providers/index.ts";
 
 const providerNames = [...builtinProviders, "all"] as const;
@@ -22,7 +22,7 @@ export const searchTool = tool({
       .enum(providerNames)
       .optional()
       .describe(
-        'Provider to use. Defaults to first available from env. Use "all" for parallel search.',
+        'Provider to use. Automatic selection tries other configured providers after HTTP 402. Use "all" for parallel search.',
       ),
     maxResults: z.number().min(1).max(20).optional().describe("Max results (default: 10)"),
     includeDomains: z
@@ -74,8 +74,11 @@ export const searchTool = tool({
       return searchAll(query, searchOptions);
     }
 
-    const name = providerName ?? resolveDefaultProvider();
-    return createSearchProvider(name).search(query, searchOptions);
+    if (providerName !== undefined) {
+      return createSearchProvider(providerName).search(query, searchOptions);
+    }
+    const response = await searchWithFallback(query, searchOptions);
+    return response.results;
   },
 });
 

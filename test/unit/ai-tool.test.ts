@@ -24,7 +24,7 @@ vi.mock("../../src/core/client.ts", () => ({
 }));
 
 import { readTool, searchTool } from "../../src/ai.ts";
-import { EmptyQueryError, EmptyUrlError } from "../../src/core/errors.ts";
+import { EmptyQueryError, EmptyUrlError, HTTPError } from "../../src/core/errors.ts";
 
 const exaResponse = {
   requestId: "test-req",
@@ -154,6 +154,34 @@ describe("searchTool", () => {
     ]);
   });
 
+  it("uses payment fallback independently for automatic batch items", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    process.env.BRAVE_API_KEY = "test-brave-key";
+    const availabilityProbe = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    vi.stubGlobal("fetch", availabilityProbe);
+    mockPostJSON.mockRejectedValue(
+      new HTTPError(402, "https://api.exa.ai/search", "Payment required"),
+    );
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    const outcomes = await searchTool.execute!(
+      { query: ["first query", "second query"] },
+      { toolCallId: "call-batch-fallback", messages: [] },
+    );
+
+    expect(outcomes).toEqual([
+      {
+        query: "first query",
+        results: [expect.objectContaining({ url: "https://brave.example.com" })],
+      },
+      {
+        query: "second query",
+        results: [expect.objectContaining({ url: "https://brave.example.com" })],
+      },
+    ]);
+    expect(availabilityProbe).toHaveBeenCalledOnce();
+  });
+
   it("rejects oversized batches before starting requests", async () => {
     process.env.EXA_API_KEY = "test-exa-key";
     const queries = Array.from({ length: 11 }, (_, index) => `query ${index}`);
@@ -181,7 +209,41 @@ describe("searchTool", () => {
     expect(results[0].url).toBe("https://brave.example.com");
   });
 
+  it("tries the next configured provider when automatic search gets 402", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    process.env.BRAVE_API_KEY = "test-brave-key";
+    mockPostJSON.mockRejectedValue(
+      new HTTPError(402, "https://api.exa.ai/search", "Payment required"),
+    );
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    const results = (await searchTool.execute!(
+      { query: "test query" },
+      { toolCallId: "call-fallback", messages: [] },
+    )) as readonly { readonly url: string }[];
+
+    expect(results).toHaveLength(1);
+    expect(results[0].url).toBe("https://brave.example.com");
+  });
+
+  it("keeps 402 visible when Exa was requested explicitly", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    process.env.BRAVE_API_KEY = "test-brave-key";
+    const failure = new HTTPError(402, "https://api.exa.ai/search", "Payment required");
+    mockPostJSON.mockRejectedValue(failure);
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    await expect(
+      searchTool.execute!(
+        { query: "test query", provider: "exa" },
+        { toolCallId: "call-explicit-402", messages: [] },
+      ),
+    ).rejects.toBe(failure);
+    expect(mockGetJSON).not.toHaveBeenCalled();
+  });
+
   it("execute falls back to searxng when no API keys set", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
     mockGetJSON.mockResolvedValue(searxngResponse);
 
     const results = (await searchTool.execute!(

@@ -9,11 +9,11 @@ import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { builtinProviders } from "./core/providers.ts";
 import { createSearchProvider } from "./core/registry.ts";
-import { searchAll } from "./core/all.ts";
+import { searchAll, searchWithFallback } from "./core/all.ts";
 import { readProviderNames, readUrl, type ReadProviderName } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError } from "./core/errors.ts";
-import { resolveDefaultProviderAsync, listProvidersAsync } from "./core/resolve.ts";
+import { listProvidersAsync } from "./core/resolve.ts";
 import type { SearchRequestOptions } from "./core/types.ts";
 import "./providers/index.ts";
 import { version } from "./version.ts";
@@ -54,7 +54,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
             providerNames.map((name) => Type.Literal(name)),
             {
               description:
-                'Provider to use. Defaults to first available from env. Use "all" for parallel search.',
+                'Provider to use. Automatic selection tries other configured providers after HTTP 402. Use "all" for parallel search.',
             },
           ),
         ),
@@ -210,8 +210,11 @@ async function runSearch(
     return searchAll(query, searchOptions);
   }
 
-  const name = requestedProvider ?? (await resolveDefaultProviderAsync());
-  return createSearchProvider(name).search(query, searchOptions);
+  if (requestedProvider !== undefined) {
+    return createSearchProvider(requestedProvider).search(query, searchOptions);
+  }
+  const response = await searchWithFallback(query, searchOptions);
+  return response.results;
 }
 
 /**
