@@ -49,14 +49,14 @@ type ReadDetails =
   | {
       readonly mode: "read";
       readonly url: string;
-      readonly provider: ReadProviderName;
+      readonly provider: "auto" | ReadProviderName;
       readonly options: ReadOptions;
       readonly result: ReadResult;
     }
   | {
       readonly mode: "batch";
       readonly urls: readonly string[];
-      readonly provider: ReadProviderName;
+      readonly provider: "auto" | ReadProviderName;
       readonly options: ReadOptions;
       readonly outcomes: readonly ReadBatchItem[];
     };
@@ -310,6 +310,7 @@ export default function webExtension(pi: ExtensionAPI) {
     async execute(_toolCallId, params): Promise<AgentToolResult<ReadDetails>> {
       const web = await loadWeb();
       const readProvider = normalizeReadProviderInput(params.provider, web.readProviderNames);
+      const readProviderLabel = readProvider ?? "auto";
       const format = normalizeReadFormat(params.format);
       const readOptions: ReadOptions = stripUndefinedRead({
         format,
@@ -330,7 +331,7 @@ export default function webExtension(pi: ExtensionAPI) {
           details: {
             mode: "batch",
             urls: params.url,
-            provider: readProvider,
+            provider: readProviderLabel,
             options: readOptions,
             outcomes,
           },
@@ -342,13 +343,13 @@ export default function webExtension(pi: ExtensionAPI) {
         throw new Error("URL cannot be empty");
       }
       const result = await web.readUrl(url, { provider: readProvider, ...readOptions });
-      const header = `[provider=${readProvider}] read ${result.url}`;
+      const header = `[provider=${readProviderLabel}] read ${result.url}`;
       return {
         content: [{ type: "text", text: withHeader(header, formatReadResult(result)) }],
         details: {
           mode: "read",
           url,
-          provider: readProvider,
+          provider: readProviderLabel,
           options: readOptions,
           result,
         },
@@ -489,9 +490,9 @@ function normalizeSearchProviderInput(
 function normalizeReadProviderInput(
   provider: string | undefined,
   readProviderNames: readonly ReadProviderName[],
-): ReadProviderName {
-  const defaultProvider: ReadProviderName = readProviderNames[0] ?? "jina";
-  const rawProvider = (provider ?? defaultProvider).trim() || defaultProvider;
+): ReadProviderName | undefined {
+  const rawProvider = provider?.trim() || undefined;
+  if (rawProvider === undefined) return undefined;
   if (!isKnownReadProvider(rawProvider, readProviderNames)) {
     throw new Error(
       `Unknown read provider "${rawProvider}". Available: ${readProviderNames.join(", ")}.`,
