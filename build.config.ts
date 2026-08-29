@@ -9,6 +9,16 @@ export default defineBuildConfig({
   ],
   hooks: {
     rolldownConfig(config) {
+      if (Array.isArray(config.plugins)) {
+        config.plugins = config.plugins.filter(
+          (plugin: unknown) =>
+            typeof plugin !== "object" ||
+            plugin === null ||
+            !("name" in plugin) ||
+            plugin.name !== "remove-comments",
+        );
+      }
+
       if (!Array.isArray(config.external)) return;
 
       config.external = config.external.filter((entry) => {
