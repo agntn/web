@@ -25,6 +25,7 @@ vi.mock("../src/core/client.ts", () => ({
 }));
 
 import { createMcpServer, executeRead, executeSearch } from "../src/mcp.ts";
+import { version } from "../src/version.ts";
 import {
   EmptyQueryError,
   EmptyUrlError,
@@ -171,8 +172,20 @@ describe("web MCP server", () => {
     expect(response.isError).toBeUndefined();
     const payload = JSON.parse(
       (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
-    ) as readonly unknown[];
-    expect(payload).toContainEqual({
+    ) as {
+      readonly runtime: {
+        readonly version: string;
+        readonly buildId: string;
+        readonly processStartedAt: string;
+      };
+      readonly providers: readonly unknown[];
+    };
+    expect(payload.runtime).toMatchObject({
+      version,
+      processStartedAt: new Date(performance.timeOrigin).toISOString(),
+    });
+    expect(payload.runtime.buildId).toMatch(/^[a-f0-9]{12}$/);
+    expect(payload.providers).toContainEqual({
       name: "searxng",
       configured: true,
       envVar: null,

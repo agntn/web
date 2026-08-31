@@ -3,6 +3,7 @@
     "target": "ES2024",
     "module": "ESNext",
     "lib": ["ES2024"],
+    "types": ["node"],
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "strict": true,

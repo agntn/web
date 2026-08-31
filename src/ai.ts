@@ -7,6 +7,7 @@ import { readProviderNames, readUrl } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
 import { listProviders } from "./core/resolve.ts";
+import { runtimeInfo } from "./version.ts";
 import "./providers/index.ts";
 
 const providerNames = [...builtinProviders, "all"] as const;
@@ -141,7 +142,8 @@ export const readTool = tool({
 });
 
 export const providersTool = tool({
-  description: "List available web search providers and their configuration status.",
+  description:
+    "List available web search providers, their configuration status, and the running build.",
   inputSchema: z.object({}),
-  execute: async () => listProviders(),
+  execute: async () => ({ runtime: runtimeInfo, providers: listProviders() }),
 });

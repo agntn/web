@@ -119,6 +119,36 @@ describe("Pi extension", () => {
     }
   });
 
+  it("reports the loaded build and process start through web_providers", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("unreachable")));
+
+    try {
+      const providersTool = captureTools().get("web_providers");
+      if (!providersTool) throw new Error("web_providers was not registered");
+      const execution: unknown = Reflect.apply(
+        providersTool.execute.bind(providersTool),
+        undefined,
+        ["test-call", {}, undefined, undefined, undefined],
+      );
+
+      await expect(execution).resolves.toHaveProperty(
+        "details.runtime.buildId",
+        expect.stringMatching(/^[a-f0-9]{12}$/),
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "details.runtime.processStartedAt",
+        new Date(performance.timeOrigin).toISOString(),
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringMatching(/^web \S+ build [a-f0-9]{12}, started /),
+      );
+    } finally {
+      vi.unstubAllGlobals();
+      resetDefaultClientForTests();
+    }
+  });
+
   it("keeps the no-provider command failure at warning severity", async () => {
     const previousEnv = new Map<string, string | undefined>();
     for (const provider of builtinProviders) {

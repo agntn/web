@@ -16,7 +16,7 @@ import { EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
 import type { SearchRequestOptions } from "./core/types.ts";
 import "./providers/index.ts";
-import { version } from "./version.ts";
+import { runtimeInfo, version } from "./version.ts";
 
 const MAX_RESULTS_HARD_CAP = 20;
 
@@ -158,7 +158,8 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
     {
       name: "web_providers",
       title: "Web Providers",
-      description: "List available web search providers and their configuration status.",
+      description:
+        "List available web search providers, their configuration status, and the running build.",
       inputSchema: Type.Object({}),
       annotations: {
         title: "Web Providers",
@@ -167,7 +168,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         idempotentHint: true,
         openWorldHint: false,
       },
-      execute: () => listProvidersAsync(),
+      execute: async () => ({ runtime: runtimeInfo, providers: await listProvidersAsync() }),
     },
   ].map((tool) => [tool.name, tool]),
 );
