@@ -6,7 +6,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 import type {
   ProviderStatus,
-  ReadBatchItem,
+  ReadBatchDetailedItem,
   ReadOptions,
   ReadProviderName,
   ReadResult,
@@ -50,6 +50,8 @@ type ReadDetails =
       readonly mode: "read";
       readonly url: string;
       readonly provider: "auto" | ReadProviderName;
+      readonly effectiveProvider: string;
+      readonly attempts: readonly string[];
       readonly options: ReadOptions;
       readonly result: ReadResult;
     }
@@ -58,7 +60,7 @@ type ReadDetails =
       readonly urls: readonly string[];
       readonly provider: "auto" | ReadProviderName;
       readonly options: ReadOptions;
-      readonly outcomes: readonly ReadBatchItem[];
+      readonly outcomes: readonly ReadBatchDetailedItem[];
     };
 
 type WebModule = typeof import("@agntn/web");
@@ -96,7 +98,7 @@ const PROVIDERS = [
 ] as const;
 const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) tries configured providers in order after HTTP 402. Use "all" to query every configured provider in parallel.`;
 const READ_PROVIDER_HINT =
-  "Read provider to use. Defaults to Jina and is validated against web.readProviderNames at execution time.";
+  'Read provider to use. "auto" (or omit) starts with Jina and falls back to other configured readers after HTTP 402 or 409. Validated against web.readProviderNames at execution time.';
 
 const MAX_RESULTS_HARD_CAP = 20;
 const MAX_BATCH_ITEMS_HARD_CAP = 10;
@@ -315,7 +317,7 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_read",
     label: "Web Read",
     description:
-      "Read-only/open-world network fetch: read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item has its own result or error. Defaults to Jina Reader (r.jina.ai); Context.dev, Firecrawl, and TinyFish are also available for rendered pages and PDFs.",
+      "Read-only/open-world network fetch: read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item has its own result or error. Automatic reads start with Jina, try configured readers after HTTP 402 or 409, and report the effective provider.",
     promptSnippet:
       "Read one URL with web_read, or pass a URL array when several pages are needed independently.",
     promptGuidelines: [
@@ -341,7 +343,7 @@ export default function webExtension(pi: ExtensionAPI) {
       });
 
       if (Array.isArray(params.url)) {
-        const outcomes = await web.readBatch(params.url, {
+        const outcomes = await web.readBatchDetailed(params.url, {
           provider: readProvider,
           ...readOptions,
         });
@@ -361,16 +363,21 @@ export default function webExtension(pi: ExtensionAPI) {
       if (!url) {
         throw new Error("URL cannot be empty");
       }
-      const result = await web.readUrl(url, { provider: readProvider, ...readOptions });
-      const header = `[provider=${readProviderLabel}] read ${result.url}`;
+      const response = await web.readUrlDetailed(url, {
+        provider: readProvider,
+        ...readOptions,
+      });
+      const header = `[provider=${response.provider} requested=${response.requestedProvider}] read ${truncateSingleLine(response.result.url, 200)}`;
       return {
-        content: [{ type: "text", text: withHeader(header, formatReadResult(result)) }],
+        content: [{ type: "text", text: withHeader(header, formatReadResult(response.result)) }],
         details: {
           mode: "read",
           url,
           provider: readProviderLabel,
+          effectiveProvider: response.provider,
+          attempts: response.attempts,
           options: readOptions,
-          result,
+          result: response.result,
         },
       };
     },
@@ -510,10 +517,10 @@ function normalizeReadProviderInput(
   readProviderNames: readonly ReadProviderName[],
 ): ReadProviderName | undefined {
   const rawProvider = provider?.trim() || undefined;
-  if (rawProvider === undefined) return undefined;
+  if (rawProvider === undefined || rawProvider === "auto") return undefined;
   if (!isKnownReadProvider(rawProvider, readProviderNames)) {
     throw new Error(
-      `Unknown read provider "${rawProvider}". Available: ${readProviderNames.join(", ")}.`,
+      `Unknown read provider "${rawProvider}". Available: auto, ${readProviderNames.join(", ")}.`,
     );
   }
   return rawProvider;
@@ -616,6 +623,9 @@ type ReadBatchItemView =
   | { readonly url: string; readonly error: string }
   | {
       readonly url: string;
+      readonly requestedProvider: string;
+      readonly provider: string;
+      readonly attempts: readonly string[];
       readonly result: Readonly<Pick<ReadResult, "title" | "url" | "description" | "content">>;
     };
 type ProviderErrorView = { readonly provider: string; readonly error: Readonly<Error> };
@@ -659,10 +669,13 @@ function formatSearchBatch(outcomes: readonly SearchBatchItemView[]): string {
 function formatReadBatch(outcomes: readonly ReadBatchItemView[]): string {
   return outcomes
     .map((outcome, index) => {
-      const header = `[${index + 1}] ${outcome.url}`;
+      const header = `[${index + 1}] ${truncateSingleLine(outcome.url, 200)}`;
       return "error" in outcome
         ? `${header}\nError: ${outcome.error}`
-        : withHeader(header, formatReadResult(outcome.result));
+        : withHeader(
+            `${header} [provider=${truncateSingleLine(outcome.provider, 80)} requested=${truncateSingleLine(outcome.requestedProvider, 80)}]`,
+            formatReadResult(outcome.result),
+          );
     })
     .join("\n\n");
 }

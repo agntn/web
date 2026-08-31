@@ -6,7 +6,9 @@ import {
   createReadProvider,
   createSearchProvider,
   readBatch,
+  readBatchDetailed,
   readUrl,
+  readUrlDetailed,
   searchBatch,
   version,
   ReadNotSupportedError,
@@ -53,7 +55,9 @@ describe("@agntn/web", () => {
 
   it("should export read and batch operations", () => {
     expect(readUrl).toBeTypeOf("function");
+    expect(readUrlDetailed).toBeTypeOf("function");
     expect(searchBatch).toBeTypeOf("function");
     expect(readBatch).toBeTypeOf("function");
+    expect(readBatchDetailed).toBeTypeOf("function");
   });
 });

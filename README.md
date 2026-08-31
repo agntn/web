@@ -22,7 +22,7 @@ pi install git:github.com/agntn/web
 Provided tools:
 
 - `web_search` - search one query or a batch of queries with a single provider, or use `provider="all"` for provider fan-out
-- `web_read` - read one URL or a batch of URLs with Jina Reader, Context.dev, Firecrawl, or TinyFish
+- `web_read` - read one URL or a batch of URLs and report the effective reader after fallback
 - `web_providers` - list built-in providers, env-var configuration, and reachability status
 
 Provided slash commands:
@@ -135,9 +135,20 @@ console.log(page.title, page.content);
 
 Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Context.dev, Firecrawl, and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`. Without an explicit provider, `readUrl` starts with Jina and tries configured readers if Jina returns HTTP 402 or 409. Explicit provider selection stays strict.
 
+Use `readUrlDetailed` when provider identity matters. `requestedProvider` records explicit selection or `auto`, `provider` is the reader that returned the page, and `attempts` keeps the ordered fallback path:
+
+```typescript
+import { readUrlDetailed } from "@agntn/web";
+
+const { result, requestedProvider, provider, attempts } = await readUrlDetailed(
+  "https://example.com/article",
+);
+console.log(requestedProvider, provider, attempts, result.content);
+```
+
 ### Batch operations
 
-`searchBatch` and `readBatch` run up to 10 independent operations in parallel. Input order is preserved, and one failure does not discard the other outcomes. Without an explicit search provider, each query tries the remaining configured providers after HTTP 402:
+`searchBatch` and `readBatch` run up to 10 independent operations in parallel. Input order is preserved, and one failure does not discard the other outcomes. `readBatchDetailed` adds the effective `provider` and `attempts` to each successful read. Without an explicit search provider, each query tries the remaining configured providers after HTTP 402:
 
 ```typescript
 import { readBatch, searchBatch } from "@agntn/web";
@@ -195,14 +206,14 @@ web providers
 | `web providers`      | List built-in providers                       |
 | `web mcp`            | Run the MCP server over stdio                 |
 
-Passing 2-10 URLs returns one ordered outcome per URL. Batch JSON is an array of `{ url, result }` or `{ url, error }`; any failed read makes the command exit 1 without discarding successes.
+Read commands use automatic selection unless `--provider` is set. Scalar JSON is `{ result, requestedProvider, provider, attempts }`; batch successes add `url` to that shape. Any failed batch item makes the command exit 1 without discarding successes.
 
 ### MCP server
 
 `web mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio exposing the same capabilities as the agent tools:
 
 - `web_search` - search one query or a batch, or use `provider="all"` for provider fan-out
-- `web_read` - read one URL or a batch (default: Jina Reader)
+- `web_read` - read one URL or a batch and return effective provider provenance
 - `web_providers` - list providers and their configuration status
 
 Register it with any MCP client:
@@ -213,13 +224,13 @@ claude mcp add web --scope user -- web mcp
 
 The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`createMcpServer()`) when your host provides its own transport.
 
-| Flag                              | Description                                                              |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `--provider <name>`               | Provider to use (search default: first configured; read default: `jina`) |
-| `--max-results <n>`               | Maximum search results to return (default: `10`)                         |
-| `--format <markdown\|text\|html>` | Preferred read format                                                    |
-| `--max-tokens <n>`                | Maximum read tokens when supported                                       |
-| `--json`                          | Output as JSON                                                           |
+| Flag                              | Description                                                               |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| `--provider <name>`               | Provider to use (search: first configured; read: auto starting with Jina) |
+| `--max-results <n>`               | Maximum search results to return (default: `10`)                          |
+| `--format <markdown\|text\|html>` | Preferred read format                                                     |
+| `--max-tokens <n>`                | Maximum read tokens when supported                                        |
+| `--json`                          | Output as JSON                                                            |
 
 ## Providers
 
@@ -345,7 +356,7 @@ interface SearchOptions {
 
 `maxResults` works with every search provider. TinyFish supports domain and date filters plus `news` and `research_paper` categories. Context.dev, Exa, and Tavily support domain filters, while Jina supports include filters through `site`. Other category support varies by provider.
 
-Read options you can pass to `readUrl`:
+Read options you can pass to `readUrl` or `readUrlDetailed`:
 
 ```typescript
 interface ReadUrlOptions {

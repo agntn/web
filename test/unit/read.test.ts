@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
-import { readUrl } from "../../src/core/read.ts";
+import { readUrl, readUrlDetailed } from "../../src/core/read.ts";
 import { register } from "../../src/core/registry.ts";
 import { EmptyUrlError, HTTPError, ReadNotSupportedError } from "../../src/core/errors.ts";
 import { Provider } from "../../src/core/provider.ts";
@@ -62,6 +62,30 @@ describe("readUrl", () => {
       content: "ok",
     });
     expect(readFromContext).toHaveBeenCalledWith("https://example.com", { format: "text" });
+  });
+
+  it("reports the effective reader and ordered attempts after fallback", async () => {
+    const readFromContext = vi
+      .fn()
+      .mockResolvedValue({ url: "https://example.com", content: "ok" });
+    registerReader("jina", paymentRequired);
+    registerReader("context", readFromContext);
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    await expect(readUrlDetailed("https://example.com", { format: "text" })).resolves.toEqual({
+      result: { url: "https://example.com", content: "ok" },
+      requestedProvider: "auto",
+      provider: "context",
+      attempts: ["jina", "context"],
+    });
+  });
+
+  it("reports an explicit reader selection", async () => {
+    registerReader("jina", async () => ({ url: "https://example.com", content: "ok" }));
+
+    await expect(
+      readUrlDetailed("https://example.com", { provider: "jina" }),
+    ).resolves.toMatchObject({ requestedProvider: "jina", provider: "jina", attempts: ["jina"] });
   });
 
   it("falls back to configured readers when automatic Jina returns 409", async () => {

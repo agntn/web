@@ -1,7 +1,7 @@
 import { EmptyQueryError, EmptyUrlError } from "./errors.ts";
 import { prepareSearchWithFallback, searchAllDetailed } from "./all.ts";
 import { createSearchProvider } from "./registry.ts";
-import { readUrl, type ReadUrlOptions } from "./read.ts";
+import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
 import type { WebSearchProviderName } from "./providers.ts";
 import type { ReadResult, SearchRequestOptions, SearchResult } from "./types.ts";
 
@@ -21,6 +21,17 @@ export type SearchBatchItem =
 /** One successful or failed URL outcome. */
 export type ReadBatchItem =
   | { readonly url: string; readonly result: ReadResult }
+  | { readonly url: string; readonly error: string };
+
+/** One detailed URL outcome with effective provider provenance. */
+export type ReadBatchDetailedItem =
+  | {
+      readonly url: string;
+      readonly result: Readonly<ReadResult>;
+      readonly requestedProvider: string;
+      readonly provider: string;
+      readonly attempts: readonly string[];
+    }
   | { readonly url: string; readonly error: string };
 
 /**
@@ -67,7 +78,7 @@ export async function searchBatch(
 }
 
 /**
- * Reads independent URLs in parallel while preserving input order and failures.
+ * Reads independent URLs while preserving the original batch contract.
  * @param urls - URLs to read.
  * @param options - Shared provider and read options.
  * @returns {Promise<readonly ReadBatchItem[]>} One result or error for every URL.
@@ -76,11 +87,29 @@ export async function readBatch(
   urls: readonly string[],
   options?: Readonly<ReadUrlOptions>,
 ): Promise<readonly ReadBatchItem[]> {
-  validateBatch(urls, "URL", EmptyUrlError);
-  const outcomes = await settleBatch(urls, (url) => readUrl(url, options));
+  const outcomes = await readBatchDetailed(urls, options);
   return outcomes.map((outcome): ReadBatchItem =>
+    "error" in outcome
+      ? { url: outcome.url, error: outcome.error }
+      : { url: outcome.url, result: outcome.result },
+  );
+}
+
+/**
+ * Reads independent URLs and reports effective provider provenance per item.
+ * @param urls - URLs to read.
+ * @param options - Shared provider and read options.
+ * @returns {Promise<readonly ReadBatchDetailedItem[]>} Detailed outcomes for every URL.
+ */
+export async function readBatchDetailed(
+  urls: readonly string[],
+  options?: Readonly<ReadUrlOptions>,
+): Promise<readonly ReadBatchDetailedItem[]> {
+  validateBatch(urls, "URL", EmptyUrlError);
+  const outcomes = await settleBatch(urls, (url) => readUrlDetailed(url, options));
+  return outcomes.map((outcome): ReadBatchDetailedItem =>
     outcome.ok
-      ? { url: outcome.input, result: outcome.value }
+      ? { url: outcome.input, ...outcome.value }
       : { url: outcome.input, error: outcome.error },
   );
 }

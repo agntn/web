@@ -67,11 +67,16 @@ export type {
   ProviderError,
 } from "./core/all.ts";
 
-export { readProviderNames, readUrl } from "./core/read.ts";
-export type { ReadProviderName, ReadUrlOptions } from "./core/read.ts";
+export { readProviderNames, readUrl, readUrlDetailed } from "./core/read.ts";
+export type { ReadProviderName, ReadUrlOptions, ReadUrlDetailedResult } from "./core/read.ts";
 
-export { MAX_BATCH_ITEMS, searchBatch, readBatch } from "./core/batch.ts";
-export type { SearchBatchOptions, SearchBatchItem, ReadBatchItem } from "./core/batch.ts";
+export { MAX_BATCH_ITEMS, searchBatch, readBatch, readBatchDetailed } from "./core/batch.ts";
+export type {
+  SearchBatchOptions,
+  SearchBatchItem,
+  ReadBatchItem,
+  ReadBatchDetailedItem,
+} from "./core/batch.ts";
 
 export {
   resolveDefaultProvider,

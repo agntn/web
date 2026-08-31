@@ -162,7 +162,7 @@ describe("Pi extension", () => {
     }
   });
 
-  it("keeps an omitted read provider eligible for fallback", async () => {
+  it("reports the effective reader after automatic fallback", async () => {
     const previousContextKey = process.env.CONTEXT_DEV_API_KEY;
     process.env.CONTEXT_DEV_API_KEY = "test-key";
     const requestedUrls: string[] = [];
@@ -200,7 +200,7 @@ describe("Pi extension", () => {
       if (!readTool) throw new Error("web_read was not registered");
       const execution: unknown = Reflect.apply(readTool.execute.bind(readTool), undefined, [
         "test-call",
-        { url: "https://example.com" },
+        { url: "https://example.com", provider: "auto" },
         undefined,
         undefined,
         undefined,
@@ -209,12 +209,31 @@ describe("Pi extension", () => {
       await expect(execution).resolves.toMatchObject({
         content: [
           {
-            text: "[provider=auto] read https://example.com\n\nFallback result\n   https://example.com\n\nFallback content",
+            text: "[provider=context requested=auto] read https://example.com\n\nFallback result\n   https://example.com\n\nFallback content",
           },
         ],
-        details: { provider: "auto", result: { content: "Fallback content" } },
+        details: {
+          provider: "auto",
+          effectiveProvider: "context",
+          attempts: ["jina", "context"],
+          result: { content: "Fallback content" },
+        },
       });
+
+      const batchExecution: unknown = Reflect.apply(readTool.execute.bind(readTool), undefined, [
+        "test-batch-call",
+        { url: ["https://example.com"] },
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      await expect(batchExecution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringContaining("[1] https://example.com [provider=context requested=auto]"),
+      );
       expect(requestedUrls).toEqual([
+        "https://r.jina.ai/https%3A%2F%2Fexample.com",
+        "https://api.context.dev/v1/web/scrape/markdown?url=https%3A%2F%2Fexample.com",
         "https://r.jina.ai/https%3A%2F%2Fexample.com",
         "https://api.context.dev/v1/web/scrape/markdown?url=https%3A%2F%2Fexample.com",
       ]);

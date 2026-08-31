@@ -21,8 +21,7 @@ export default defineCommand({
     },
     provider: {
       type: "string",
-      description: "Read provider to use",
-      default: "jina",
+      description: "Read provider to use; omit or pass auto for fallback",
     },
     format: {
       type: "string",
@@ -45,16 +44,16 @@ export default defineCommand({
     try {
       await import("../providers/index.ts");
       if (parsed.urls.length === 1) {
-        const result = await read.readUrl(parsed.urls[0], parsed.options);
-        writeReadResult(result, args.json);
+        const response = await read.readUrlDetailed(parsed.urls[0], parsed.options);
+        writeReadDetailedResult(response, args.json);
         return;
       }
 
-      const outcomes = await batch.readBatch(parsed.urls, parsed.options);
+      const outcomes = await batch.readBatchDetailed(parsed.urls, parsed.options);
       writeReadBatch(outcomes, args.json);
       if (outcomes.some((outcome) => "error" in outcome)) process.exitCode = 1;
     } catch (error) {
-      handleReadError(error, parsed.options.provider ?? "jina", read.readProviderNames);
+      handleReadError(error, read.readProviderNames);
     }
   },
 });
@@ -71,7 +70,7 @@ type ReadCommandArgs = {
 type ParsedReadArguments = {
   readonly urls: readonly string[];
   readonly options: {
-    readonly provider: string;
+    readonly provider?: string;
     readonly format?: "markdown" | "text" | "html";
     readonly maxTokens?: number;
   };
@@ -90,11 +89,36 @@ function parseReadArguments(args: ReadCommandArgs, maxBatchItems: number): Parse
   return {
     urls,
     options: {
-      provider: args.provider || "jina",
+      ...parseProviderOption(args.provider),
       format: format.value,
       maxTokens: maxTokens.value,
     },
   };
+}
+
+function parseProviderOption(input: string | undefined): { readonly provider?: string } {
+  const provider = input?.trim();
+  return !provider || provider === "auto" ? {} : { provider };
+}
+
+type ReadDetailedResultView = {
+  readonly result: Readonly<
+    Pick<import("../core/types.ts").ReadResult, "url" | "title" | "description" | "content">
+  >;
+  readonly requestedProvider: string;
+  readonly provider: string;
+  readonly attempts: readonly string[];
+};
+
+function writeReadDetailedResult(response: ReadDetailedResultView, json: boolean): void {
+  if (json) {
+    process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
+    return;
+  }
+  consola.log(
+    `[provider=${sanitizeHeaderText(response.provider)} requested=${sanitizeHeaderText(response.requestedProvider)}] read ${sanitizeHeaderText(response.result.url)}`,
+  );
+  writeReadResult(response.result, false);
 }
 
 function writeReadResult(
@@ -122,6 +146,9 @@ type ReadBatchItemView =
   | { readonly url: string; readonly error: string }
   | {
       readonly url: string;
+      readonly requestedProvider: string;
+      readonly provider: string;
+      readonly attempts: readonly string[];
       readonly result: Readonly<
         Pick<import("../core/types.ts").ReadResult, "url" | "title" | "description" | "content">
       >;
@@ -134,30 +161,29 @@ function writeReadBatch(outcomes: readonly ReadBatchItemView[], json: boolean): 
   }
 
   for (const [index, outcome] of outcomes.entries()) {
-    consola.log(`[${index + 1}] ${sanitizeTerminalText(outcome.url)}`);
     if ("error" in outcome) {
+      consola.log(`[${index + 1}] ${sanitizeHeaderText(outcome.url)}`);
       consola.error(`  ${sanitizeTerminalText(outcome.error)}`);
     } else {
+      consola.log(
+        `[${index + 1}] [provider=${sanitizeHeaderText(outcome.provider)} requested=${sanitizeHeaderText(outcome.requestedProvider)}] ${sanitizeHeaderText(outcome.url)}`,
+      );
       writeReadResult(outcome.result, false);
     }
     if (index < outcomes.length - 1) consola.log("");
   }
 }
 
-function handleReadError(
-  error: unknown,
-  provider: string,
-  readProviderNames: readonly string[],
-): never {
+function handleReadError(error: unknown, readProviderNames: readonly string[]): never {
   if (error instanceof EmptyUrlError) return exitWithError("Read URL cannot be empty.");
   if (error instanceof AuthError) {
-    const envVar = providerApiKeyEnvVar(provider);
+    const envVar = providerApiKeyEnvVar(error.provider);
     if (envVar !== null) consola.info(`Set the ${envVar} environment variable.`);
-    return exitWithError(`Authentication failed for provider "${provider}".`);
+    return exitWithError(`Authentication failed for provider "${error.provider}".`);
   }
   if (error instanceof UnknownProviderError) {
     consola.info(`Read-capable providers: ${readProviderNames.join(", ")}`);
-    return exitWithError(`Unknown provider: ${provider}`);
+    return exitWithError(`Unknown provider: ${error.provider}`);
   }
   if (error instanceof ReadNotSupportedError) return exitWithError(error.message);
   throw error;
@@ -206,6 +232,10 @@ function parseFormat(input: string | undefined): ParsedFormat {
 function truncateSingleLine(text: string, maxLength: number): string {
   const singleLine = text.replaceAll(/\s+/g, " ").trim();
   return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 1)}…`;
+}
+
+function sanitizeHeaderText(text: string): string {
+  return truncateSingleLine(sanitizeTerminalText(text), 160);
 }
 
 function sanitizeTerminalText(text: string): string {
