@@ -140,7 +140,10 @@ describe("web MCP server", () => {
 
     const response = await client.callTool({
       name: "web_read",
-      arguments: { url: ["https://example.com/one", "https://example.com/two"] },
+      arguments: {
+        url: ["https://example.com/one", "https://example.com/two"],
+        provider: "auto",
+      },
     });
 
     expect(response.isError).toBeUndefined();
@@ -151,6 +154,9 @@ describe("web MCP server", () => {
       {
         url: "https://example.com/one",
         result: { url: "https://example.com/one", content: "one" },
+        requestedProvider: "auto",
+        provider: "jina",
+        attempts: ["jina"],
       },
       { url: "https://example.com/two", error: "second read failed" },
     ]);
@@ -253,6 +259,27 @@ describe("web MCP executors", () => {
   it("guards the empty-query contract when a host skips validation", async () => {
     await expect(executeSearch({})).rejects.toBeInstanceOf(EmptyQueryError);
     await expect(executeSearch({ query: "   " })).rejects.toBeInstanceOf(EmptyQueryError);
+  });
+
+  it("distinguishes automatic and explicit reader provenance", async () => {
+    mockGetJSON.mockResolvedValue({
+      code: 200,
+      status: 20000,
+      data: { url: "https://example.com", content: "page" },
+    });
+
+    await expect(executeRead({ url: "https://example.com" })).resolves.toEqual({
+      result: { url: "https://example.com", content: "page" },
+      requestedProvider: "auto",
+      provider: "jina",
+      attempts: ["jina"],
+    });
+    await expect(
+      executeRead({ url: "https://example.com", provider: "auto" }),
+    ).resolves.toMatchObject({ requestedProvider: "auto", provider: "jina" });
+    await expect(
+      executeRead({ url: "https://example.com", provider: "jina" }),
+    ).resolves.toMatchObject({ requestedProvider: "jina", provider: "jina" });
   });
 
   it("guards the empty-url contract when a host skips validation", async () => {

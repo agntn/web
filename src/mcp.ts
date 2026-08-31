@@ -10,8 +10,8 @@ import { Value } from "typebox/value";
 import { builtinProviders } from "./core/providers.ts";
 import { createSearchProvider } from "./core/registry.ts";
 import { searchAll, searchWithFallback } from "./core/all.ts";
-import { readProviderNames, readUrl, type ReadProviderName } from "./core/read.ts";
-import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
+import { readProviderNames, readUrlDetailed, type ReadProviderName } from "./core/read.ts";
+import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
 import type { SearchRequestOptions } from "./core/types.ts";
@@ -101,7 +101,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_read",
       title: "Web Read",
       description:
-        "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, or TinyFish. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
+        "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, or TinyFish. Automatic reads report the effective provider after fallback.",
       inputSchema: Type.Object({
         url: Type.Union(
           [
@@ -115,9 +115,10 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         ),
         provider: Type.Optional(
           Type.Union(
-            readProviderNames.map((name) => Type.Literal(name)),
+            [Type.Literal("auto"), ...readProviderNames.map((name) => Type.Literal(name))],
             {
-              description: "Read provider to use. Defaults to Jina.",
+              description:
+                'Read provider to use. "auto" starts with Jina and falls back to other configured readers after HTTP 402 or 409.',
             },
           ),
         ),
@@ -240,7 +241,9 @@ export async function executeRead(args: Readonly<Record<string, unknown>>): Prom
     timeout: intArg("timeout", args.timeout),
     noCache: boolArg("noCache", args.noCache),
   };
-  return urls === undefined ? readUrl(url, readOptions) : readBatch(urls, readOptions);
+  return urls === undefined
+    ? readUrlDetailed(url, readOptions)
+    : readBatchDetailed(urls, readOptions);
 }
 
 /**
@@ -281,10 +284,10 @@ function searchProviderArg(value: unknown): (typeof providerNames)[number] | und
 }
 
 function readProviderArg(value: unknown): ReadProviderName | undefined {
-  if (value === undefined) return undefined;
+  if (value === undefined || value === "auto") return undefined;
   const provider = readProviderNames.find((name) => name === value);
   if (!provider) {
-    throw new TypeError(`provider must be one of: ${readProviderNames.join(", ")}`);
+    throw new TypeError(`provider must be one of: auto, ${readProviderNames.join(", ")}`);
   }
   return provider;
 }
