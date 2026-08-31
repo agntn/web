@@ -58,7 +58,7 @@
   "scripts": {
     "build": "obuild",
     "dev": "obuild --stub",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.extensions.json",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.extensions.json",
     "test": "vitest",
     "test:run": "vitest --run",
     "prepack": "pnpm run build",
