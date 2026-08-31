@@ -29,6 +29,10 @@ const paymentRequired = async (): Promise<ReadResult> => {
   throw new HTTPError(402, "https://r.jina.ai/https%3A%2F%2Fexample.com", "Payment required");
 };
 
+const jinaConflict = async (): Promise<ReadResult> => {
+  throw new HTTPError(409, "https://r.jina.ai/https%3A%2F%2Fexample.com", "Conflict");
+};
+
 describe("readUrl", () => {
   const fallbackEnvKeys = ["CONTEXT_DEV_API_KEY", "FIRECRAWL_API_KEY", "TINYFISH_API_KEY"] as const;
   const savedEnv = Object.fromEntries(fallbackEnvKeys.map((key) => [key, process.env[key]]));
@@ -58,6 +62,33 @@ describe("readUrl", () => {
       content: "ok",
     });
     expect(readFromContext).toHaveBeenCalledWith("https://example.com", { format: "text" });
+  });
+
+  it("falls back to configured readers when automatic Jina returns 409", async () => {
+    const readFromContext = vi
+      .fn()
+      .mockResolvedValue({ url: "https://example.com", content: "ok" });
+    registerReader("jina", jinaConflict);
+    registerReader("context", readFromContext);
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    await expect(readUrl("https://example.com")).resolves.toEqual({
+      url: "https://example.com",
+      content: "ok",
+    });
+  });
+
+  it("returns the last configured reader error after Jina 409", async () => {
+    registerReader("jina", jinaConflict);
+    registerReader("context", async () => {
+      throw new HTTPError(503, "https://context.example.com", "Unavailable");
+    });
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    await expect(readUrl("https://example.com")).rejects.toMatchObject({
+      statusCode: 503,
+      url: "https://context.example.com",
+    });
   });
 
   it("keeps trying configured readers until one succeeds", async () => {
@@ -106,6 +137,20 @@ describe("readUrl", () => {
 
     await expect(readUrl("https://example.com", { provider: "jina" })).rejects.toMatchObject({
       statusCode: 402,
+    });
+    expect(readFromContext).not.toHaveBeenCalled();
+  });
+
+  it("does not fall back when Jina 409 is explicit", async () => {
+    const readFromContext = vi
+      .fn()
+      .mockResolvedValue({ url: "https://example.com", content: "ok" });
+    registerReader("jina", jinaConflict);
+    registerReader("context", readFromContext);
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    await expect(readUrl("https://example.com", { provider: "jina" })).rejects.toMatchObject({
+      statusCode: 409,
     });
     expect(readFromContext).not.toHaveBeenCalled();
   });
