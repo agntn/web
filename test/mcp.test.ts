@@ -86,16 +86,26 @@ describe("web MCP server", () => {
 
     const response = await client.callTool({
       name: "web_search",
-      arguments: { query: "test query", provider: "jina", maxResults: 5 },
+      arguments: {
+        query: "test query",
+        provider: "jina",
+        maxResults: 5,
+        startPublishedDate: "2024-01-01",
+      },
     });
 
     expect(response.isError).toBeUndefined();
     const payload = JSON.parse(
       (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
-    ) as readonly unknown[];
-    expect(payload).toEqual([
-      { title: "Test Result", url: "https://example.com", snippet: "A test description" },
-    ]);
+    ) as Readonly<Record<string, unknown>>;
+    expect(payload).toEqual({
+      provider: "jina",
+      ignoredFilters: ["startPublishedDate"],
+      undeclaredFilters: [],
+      results: [
+        { title: "Test Result", url: "https://example.com", snippet: "A test description" },
+      ],
+    });
   });
 
   it("keeps separate ordered results for batched searches", async () => {
@@ -122,7 +132,9 @@ describe("web MCP server", () => {
     expect(payload).toEqual([
       {
         query: "first query",
+        provider: "jina",
         results: [{ title: "First", url: "https://example.com/one", snippet: "one" }],
+        filterReports: [],
       },
       { query: "second query", error: "second query failed" },
     ]);
@@ -190,6 +202,7 @@ describe("web MCP server", () => {
       configured: true,
       envVar: null,
       reachable: false,
+      searchFilters: ["category"],
     });
   });
 
@@ -264,9 +277,35 @@ describe("web MCP executors", () => {
       },
     });
 
-    await expect(executeSearch({ query: "test" })).resolves.toEqual([
-      expect.objectContaining({ url: "https://brave.example.com" }),
-    ]);
+    await expect(executeSearch({ query: "test" })).resolves.toMatchObject({
+      provider: "brave",
+      results: [expect.objectContaining({ url: "https://brave.example.com" })],
+    });
+  });
+
+  it('serializes provider errors from an "all" search', async () => {
+    vi.stubEnv("EXA_API_KEY", "test-exa");
+    vi.stubEnv("BRAVE_API_KEY", "test-brave");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
+    mockPostJSON.mockRejectedValue(new Error("Exa unavailable"));
+    mockGetJSON.mockResolvedValue({
+      web: {
+        results: [
+          {
+            title: "Brave Result",
+            url: "https://brave.example.com",
+            description: "Partial result",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
+      },
+    });
+
+    await expect(executeSearch({ query: "test", provider: "all" })).resolves.toMatchObject({
+      results: [expect.objectContaining({ provider: "brave" })],
+      errors: [{ provider: "exa", error: "Exa unavailable" }],
+    });
   });
 
   it("guards the empty-query contract when a host skips validation", async () => {

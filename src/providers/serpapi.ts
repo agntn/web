@@ -1,4 +1,9 @@
-import type { SearchResult, SearchRequestOptions, ProviderConfig } from "../core/types.ts";
+import type {
+  SearchFilterCapabilities,
+  SearchResult,
+  SearchRequestOptions,
+  ProviderConfig,
+} from "../core/types.ts";
 import { Provider } from "../core/provider.ts";
 import { AuthError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
@@ -26,6 +31,9 @@ interface SerpApiSearchResponse {
 class SerpApiProvider extends Provider {
   static readonly providerName = "serpapi";
   static readonly defaultBaseURL = "https://serpapi.com";
+  static readonly searchFilterCapabilities = {
+    filters: [],
+  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 

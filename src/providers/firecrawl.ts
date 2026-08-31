@@ -1,4 +1,5 @@
 import type {
+  SearchFilterCapabilities,
   SearchResult,
   SearchRequestOptions,
   SearchResponse,
@@ -58,6 +59,7 @@ interface FirecrawlScrapeResponse {
 }
 
 const FIRECRAWL_MAX_RESULTS = 100;
+const FIRECRAWL_SEARCH_CATEGORIES = ["news"] as const;
 
 function clampMaxResults(max?: number): number {
   return Math.min(Math.max(max ?? 10, 1), FIRECRAWL_MAX_RESULTS);
@@ -66,6 +68,10 @@ function clampMaxResults(max?: number): number {
 class FirecrawlProvider extends Provider {
   static readonly providerName = "firecrawl";
   static readonly defaultBaseURL = "https://api.firecrawl.dev";
+  static readonly searchFilterCapabilities = {
+    filters: ["includeDomains", "excludeDomains", "category"],
+    categories: FIRECRAWL_SEARCH_CATEGORIES,
+  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 
@@ -123,8 +129,14 @@ function searchBody(query: string, options?: SearchRequestOptions): Record<strin
     query,
     limit: clampMaxResults(options?.maxResults),
     ...domainFilters(options),
-    ...(options?.category === "news" ? { sources: ["news"] } : {}),
+    ...(isFirecrawlSearchCategory(options?.category) ? { sources: [options.category] } : {}),
   };
+}
+
+function isFirecrawlSearchCategory(
+  category: string | undefined,
+): category is (typeof FIRECRAWL_SEARCH_CATEGORIES)[number] {
+  return FIRECRAWL_SEARCH_CATEGORIES.some((supported) => supported === category);
 }
 
 function domainFilters(options?: SearchRequestOptions): Record<string, unknown> {

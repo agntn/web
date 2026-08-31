@@ -3,6 +3,7 @@ import type {
   ProviderConfig,
   ReadOptions,
   ReadResult,
+  SearchFilterCapabilities,
   SearchRequestOptions,
   SearchResponse,
   SearchResult,
@@ -12,6 +13,7 @@ import { InvalidProviderUrlError } from "./errors.ts";
 export interface ProviderConstructor {
   readonly providerName: string;
   readonly defaultBaseURL: string;
+  readonly searchFilterCapabilities?: SearchFilterCapabilities;
   new (config: Readonly<ProviderConfig>): Provider;
 }
 

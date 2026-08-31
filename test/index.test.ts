@@ -5,11 +5,13 @@ import {
   create,
   createReadProvider,
   createSearchProvider,
+  getSearchFilterCapabilities,
   readBatch,
   readBatchDetailed,
   readUrl,
   readUrlDetailed,
   searchBatch,
+  searchProviderDetailed,
   version,
   ReadNotSupportedError,
 } from "../src/index.ts";
@@ -51,6 +53,10 @@ describe("@agntn/web", () => {
     expect(createSearchProvider("searxng").name).toBe("searxng");
     expect(createReadProvider("jina").name).toBe("jina");
     expect(() => createReadProvider("searxng")).toThrow(ReadNotSupportedError);
+    expect(searchProviderDetailed).toBeTypeOf("function");
+    for (const provider of builtinProviders) {
+      expect(getSearchFilterCapabilities(provider)).toBeDefined();
+    }
   });
 
   it("should export read and batch operations", () => {

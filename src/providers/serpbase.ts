@@ -1,4 +1,9 @@
-import type { SearchResult, SearchRequestOptions, ProviderConfig } from "../core/types.ts";
+import type {
+  SearchFilterCapabilities,
+  SearchResult,
+  SearchRequestOptions,
+  ProviderConfig,
+} from "../core/types.ts";
 import { Provider } from "../core/provider.ts";
 import { WebError, AuthError, RateLimitError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
@@ -47,10 +52,15 @@ interface SerpBaseSearchResponse {
 }
 
 const SERPBASE_MAX_RESULTS = 20;
+const SERPBASE_SEARCH_CATEGORIES = ["images", "image", "news", "videos", "video"] as const;
 
 class SerpBaseProvider extends Provider {
   static readonly providerName = "serpbase";
   static readonly defaultBaseURL = "https://api.serpbase.dev";
+  static readonly searchFilterCapabilities = {
+    filters: ["category"],
+    categories: SERPBASE_SEARCH_CATEGORIES,
+  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 
@@ -89,6 +99,7 @@ class SerpBaseProvider extends Provider {
 function endpointForCategory(
   category: string | undefined,
 ): "/google/search" | "/google/images" | "/google/news" | "/google/videos" {
+  if (!isSerpBaseSearchCategory(category)) return "/google/search";
   switch (category) {
     case "images":
     case "image":
@@ -101,6 +112,12 @@ function endpointForCategory(
     default:
       return "/google/search";
   }
+}
+
+function isSerpBaseSearchCategory(
+  category: string | undefined,
+): category is (typeof SERPBASE_SEARCH_CATEGORIES)[number] {
+  return SERPBASE_SEARCH_CATEGORIES.some((supported) => supported === category);
 }
 
 function clampMaxResults(maxResults: number): number {

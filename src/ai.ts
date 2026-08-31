@@ -1,8 +1,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 import { builtinProviders } from "./core/providers.ts";
-import { createSearchProvider } from "./core/registry.ts";
-import { searchAll, searchWithFallback } from "./core/all.ts";
+import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
 import { readProviderNames, readUrl } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
@@ -14,7 +13,7 @@ const providerNames = [...builtinProviders, "all"] as const;
 
 export const searchTool = tool({
   description:
-    'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+    'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored.',
   inputSchema: z.object({
     query: z
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
@@ -72,14 +71,17 @@ export const searchTool = tool({
       throw new EmptyQueryError();
     }
     if (providerName === "all") {
-      return searchAll(query, searchOptions);
+      const response = await searchAllDetailed(query, searchOptions);
+      return {
+        ...response,
+        errors: response.errors.map(({ provider, error }) => ({ provider, error: error.message })),
+      };
     }
 
     if (providerName !== undefined) {
-      return createSearchProvider(providerName).search(query, searchOptions);
+      return searchProviderDetailed(providerName, query, searchOptions);
     }
-    const response = await searchWithFallback(query, searchOptions);
-    return response.results;
+    return searchWithFallback(query, searchOptions);
   },
 });
 
@@ -143,7 +145,7 @@ export const readTool = tool({
 
 export const providersTool = tool({
   description:
-    "List available web search providers, their configuration status, and the running build.",
+    "List available web search providers, their configuration and filter support, and the running build.",
   inputSchema: z.object({}),
   execute: async () => ({ runtime: runtimeInfo, providers: listProviders() }),
 });

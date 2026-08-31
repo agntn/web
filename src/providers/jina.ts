@@ -1,4 +1,5 @@
 import type {
+  SearchFilterCapabilities,
   SearchResult,
   SearchRequestOptions,
   ReadResult,
@@ -43,10 +44,15 @@ interface JinaReadResponse extends JinaEnvelope {
 }
 
 const JINA_MAX_RESULTS = 20;
+const JINA_SEARCH_CATEGORIES = ["web", "images", "news"] as const;
 
 class JinaProvider extends Provider {
   static readonly providerName = "jina";
   static readonly defaultBaseURL = "https://s.jina.ai";
+  static readonly searchFilterCapabilities = {
+    filters: ["includeDomains", "category"],
+    categories: JINA_SEARCH_CATEGORIES,
+  } as const satisfies SearchFilterCapabilities;
 
   private readonly searchBaseURL: string;
   private readonly readBaseURL: string;
@@ -150,8 +156,10 @@ function clampMaxResults(maxResults: number): number {
   return Math.min(Math.max(maxResults, 1), JINA_MAX_RESULTS);
 }
 
-function isJinaSearchType(category: string | undefined): category is "web" | "images" | "news" {
-  return category === "web" || category === "images" || category === "news";
+function isJinaSearchType(
+  category: string | undefined,
+): category is (typeof JINA_SEARCH_CATEGORIES)[number] {
+  return JINA_SEARCH_CATEGORIES.some((supported) => supported === category);
 }
 
 function mapSearchResult(result: Readonly<JinaResult>): SearchResult {

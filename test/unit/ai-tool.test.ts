@@ -127,15 +127,18 @@ describe("searchTool", () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
-    const results = (await searchTool.execute!(
+    const response = await searchTool.execute!(
       { query: "test query", provider: "exa" },
       { toolCallId: "call-1", messages: [] },
-    )) as readonly { readonly url: string; readonly title: string }[];
+    );
 
     expect(mockPostJSON).toHaveBeenCalledOnce();
-    expect(results).toHaveLength(1);
-    expect(results[0].url).toBe("https://example.com");
-    expect(results[0].title).toBe("Test Result");
+    expect(response).toMatchObject({
+      provider: "exa",
+      ignoredFilters: [],
+      undeclaredFilters: [],
+      results: [expect.objectContaining({ url: "https://example.com", title: "Test Result" })],
+    });
   });
 
   it("returns one ordered outcome per query in a batch", async () => {
@@ -150,7 +153,12 @@ describe("searchTool", () => {
     );
 
     expect(outcomes).toEqual([
-      { query: "first query", results: [expect.objectContaining({ title: "Test Result" })] },
+      {
+        query: "first query",
+        provider: "exa",
+        results: [expect.objectContaining({ title: "Test Result" })],
+        filterReports: [],
+      },
       { query: "second query", error: "second query failed" },
     ]);
   });
@@ -166,18 +174,34 @@ describe("searchTool", () => {
     mockGetJSON.mockResolvedValue(braveResponse);
 
     const outcomes = await searchTool.execute!(
-      { query: ["first query", "second query"] },
+      { query: ["first query", "second query"], startPublishedDate: "2024-01-01" },
       { toolCallId: "call-batch-fallback", messages: [] },
     );
 
     expect(outcomes).toEqual([
       {
         query: "first query",
+        provider: "brave",
         results: [expect.objectContaining({ url: "https://brave.example.com" })],
+        filterReports: [
+          {
+            provider: "brave",
+            ignoredFilters: ["startPublishedDate"],
+            undeclaredFilters: [],
+          },
+        ],
       },
       {
         query: "second query",
+        provider: "brave",
         results: [expect.objectContaining({ url: "https://brave.example.com" })],
+        filterReports: [
+          {
+            provider: "brave",
+            ignoredFilters: ["startPublishedDate"],
+            undeclaredFilters: [],
+          },
+        ],
       },
     ]);
     expect(availabilityProbe).toHaveBeenCalledOnce();
@@ -200,14 +224,16 @@ describe("searchTool", () => {
     process.env.BRAVE_API_KEY = "test-brave-key";
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const results = (await searchTool.execute!(
+    const response = await searchTool.execute!(
       { query: "test query" },
       { toolCallId: "call-2", messages: [] },
-    )) as readonly { readonly url: string }[];
+    );
 
     expect(mockGetJSON).toHaveBeenCalledOnce();
-    expect(results).toHaveLength(1);
-    expect(results[0].url).toBe("https://brave.example.com");
+    expect(response).toMatchObject({
+      provider: "brave",
+      results: [expect.objectContaining({ url: "https://brave.example.com" })],
+    });
   });
 
   it("tries the next configured provider when automatic search gets 402", async () => {
@@ -218,13 +244,15 @@ describe("searchTool", () => {
     );
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const results = (await searchTool.execute!(
+    const response = await searchTool.execute!(
       { query: "test query" },
       { toolCallId: "call-fallback", messages: [] },
-    )) as readonly { readonly url: string }[];
+    );
 
-    expect(results).toHaveLength(1);
-    expect(results[0].url).toBe("https://brave.example.com");
+    expect(response).toMatchObject({
+      provider: "brave",
+      results: [expect.objectContaining({ url: "https://brave.example.com" })],
+    });
   });
 
   it("keeps 402 visible when Exa was requested explicitly", async () => {
@@ -247,14 +275,16 @@ describe("searchTool", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
     mockGetJSON.mockResolvedValue(searxngResponse);
 
-    const results = (await searchTool.execute!(
+    const response = await searchTool.execute!(
       { query: "test query" },
       { toolCallId: "call-3", messages: [] },
-    )) as readonly { readonly url: string }[];
+    );
 
     expect(mockGetJSON).toHaveBeenCalledOnce();
-    expect(results).toHaveLength(1);
-    expect(results[0].url).toBe("https://searxng.example.com");
+    expect(response).toMatchObject({
+      provider: "searxng",
+      results: [expect.objectContaining({ url: "https://searxng.example.com" })],
+    });
   });
 
   it("passes maxResults to provider", async () => {
@@ -315,18 +345,56 @@ describe("searchTool", () => {
     expect(body.endPublishedDate).toBe("2024-12-31");
   });
 
+  it("reports a date filter ignored by an explicit provider", async () => {
+    process.env.BRAVE_API_KEY = "test-brave-key";
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    const response = await searchTool.execute!(
+      { query: "test", provider: "brave", startPublishedDate: "2024-01-01" },
+      { toolCallId: "call-ignored-date", messages: [] },
+    );
+
+    expect(response).toMatchObject({
+      provider: "brave",
+      ignoredFilters: ["startPublishedDate"],
+      undeclaredFilters: [],
+      results: [expect.objectContaining({ url: "https://brave.example.com" })],
+    });
+  });
+
   it('passes filters through to searchAll with "all" provider', async () => {
     process.env.EXA_API_KEY = "test-exa-key";
+    process.env.BRAVE_API_KEY = "test-brave-key";
     mockPostJSON.mockResolvedValue(exaResponse);
+    mockGetJSON.mockResolvedValue(braveResponse);
 
-    const results = await searchTool.execute!(
-      { query: "test", provider: "all", includeDomains: ["github.com"], maxResults: 5 },
+    const response = await searchTool.execute!(
+      {
+        query: "test",
+        provider: "all",
+        includeDomains: ["github.com"],
+        startPublishedDate: "2024-01-01",
+        maxResults: 5,
+      },
       { toolCallId: "call-all-filters", messages: [] },
     );
 
-    expect(Array.isArray(results)).toBe(true);
+    expect(response).toMatchObject({
+      results: [
+        expect.objectContaining({ provider: "exa" }),
+        expect.objectContaining({ provider: "brave" }),
+      ],
+      filterReports: [
+        {
+          provider: "brave",
+          ignoredFilters: ["includeDomains", "startPublishedDate"],
+          undeclaredFilters: [],
+        },
+      ],
+    });
     const [, body] = mockPostJSON.mock.calls[0];
     expect(body.includeDomains).toEqual(["github.com"]);
+    expect(body.startPublishedDate).toBe("2024-01-01");
     expect(body.numResults).toBe(5);
   });
 
@@ -361,15 +429,36 @@ describe("searchTool", () => {
     mockPostJSON.mockResolvedValue(exaResponse);
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const results = await searchTool.execute!(
+    const response = await searchTool.execute!(
       { query: "test", provider: "all" },
       { toolCallId: "call-5", messages: [] },
     );
 
-    expect(results.length).toBeGreaterThanOrEqual(1);
-    expect(Array.isArray(results)).toBe(true);
-    expect(results[0]).toHaveProperty("url");
-    expect(results[0]).toHaveProperty("title");
+    expect(response).toMatchObject({
+      results: [
+        expect.objectContaining({ url: "https://example.com", title: "Test Result" }),
+        expect.objectContaining({ url: "https://brave.example.com", title: "Brave Result" }),
+      ],
+      filterReports: [],
+    });
+  });
+
+  it('serializes provider errors from an "all" search', async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    process.env.BRAVE_API_KEY = "test-brave-key";
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
+    mockPostJSON.mockRejectedValue(new Error("Exa unavailable"));
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    const response = await searchTool.execute!(
+      { query: "test", provider: "all" },
+      { toolCallId: "call-all-partial", messages: [] },
+    );
+
+    expect(response).toMatchObject({
+      results: [expect.objectContaining({ provider: "brave" })],
+      errors: [{ provider: "exa", error: "Exa unavailable" }],
+    });
   });
 
   it("returns a query error when all batch providers fail", async () => {
@@ -394,7 +483,18 @@ describe("providersTool", () => {
 
     expect(result).toMatchObject({ runtime: runtimeInfo });
     expect(result.providers).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "exa" })]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "exa",
+          searchFilters: [
+            "includeDomains",
+            "excludeDomains",
+            "category",
+            "startPublishedDate",
+            "endPublishedDate",
+          ],
+        }),
+      ]),
     );
   });
 });

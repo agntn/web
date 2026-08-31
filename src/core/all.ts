@@ -1,5 +1,15 @@
-import type { SearchResult, SearchRequestOptions } from "./types.ts";
+import type {
+  ReadonlySearchResult,
+  SearchFilterName,
+  SearchRequestOptions,
+  SearchResult,
+} from "./types.ts";
 import type { WebSearchProviderName } from "./providers.ts";
+import {
+  hasSearchFilterWarning,
+  searchFilterReport,
+  type SearchFilterReport,
+} from "./search-filters.ts";
 import {
   UnknownProviderError,
   NoProviderConfiguredError,
@@ -27,12 +37,20 @@ export interface ProviderError {
 export interface SearchAllResponse {
   results: SearchAllResult[];
   errors: ProviderError[];
+  filterReports: SearchFilterReport[];
+}
+
+/** Results from one named provider with effective filter diagnostics. */
+export interface SearchProviderResult {
+  readonly provider: string;
+  readonly results: readonly SearchResult[];
+  readonly ignoredFilters: readonly SearchFilterName[];
+  readonly undeclaredFilters: readonly SearchFilterName[];
 }
 
 /** Result from automatic search after any payment fallback. */
-export interface SearchWithFallbackResult {
+export interface SearchWithFallbackResult extends SearchProviderResult {
   readonly provider: WebSearchProviderName;
-  readonly results: readonly SearchResult[];
 }
 
 /** Automatic search prepared with one snapshot of configured providers. */
@@ -88,6 +106,23 @@ export async function searchWithFallback(
 
   const providerNames = await resolveAutomaticProviderNames();
   return searchProviderNamesWithFallback(providerNames, query, options);
+}
+
+/**
+ * Search one named provider and report filters it could not apply.
+ * @param providerName - Registered provider name.
+ * @param query - Search query.
+ * @param options - Search options forwarded to the provider.
+ * @returns {Promise<SearchProviderResult>} Results and effective filter diagnostics.
+ */
+export async function searchProviderDetailed(
+  providerName: string,
+  query: string,
+  options?: Readonly<SearchRequestOptions>,
+): Promise<SearchProviderResult> {
+  validateSearchInput(query, options);
+  validateProviderNames([providerName]);
+  return searchProvider(providerName, query, options);
 }
 
 /**
@@ -154,41 +189,54 @@ async function resolveAutomaticProviderNames(): Promise<readonly WebSearchProvid
   throw new NoProviderAvailableError(configuredProviders);
 }
 
-async function searchProvider(
-  providerName: WebSearchProviderName,
+async function searchProvider<TProvider extends string>(
+  providerName: TProvider,
   query: string,
   options?: Readonly<SearchRequestOptions>,
-): Promise<SearchWithFallbackResult> {
+): Promise<SearchProviderResult & { readonly provider: TProvider }> {
   const results = await createSearchProvider(providerName).search(query, options);
-  return { provider: providerName, results };
+  const report = searchFilterReport(providerName, options);
+  return { ...report, provider: providerName, results };
 }
 
 function isPaymentRequired(error: unknown): error is HTTPError {
   return error instanceof HTTPError && error.statusCode === 402;
 }
 
+type ReadonlySearchProviderResult = Readonly<Omit<SearchProviderResult, "results">> & {
+  readonly results: readonly ReadonlySearchResult[];
+};
+
+type ProviderSearchOutcome =
+  | { readonly status: "fulfilled"; readonly value: ReadonlySearchProviderResult }
+  | { readonly status: "rejected"; readonly reason: unknown };
+
 function searchProviders(
   providerNames: readonly string[],
   query: string,
-  options: SearchRequestOptions,
-): Promise<readonly PromiseSettledResult<readonly SearchAllResult[]>[]> {
-  return Promise.allSettled(
-    providerNames.map(async (name) => {
-      const results = await createSearchProvider(name).search(query, options);
-      return results.map((result) => ({ ...result, provider: name }));
-    }),
-  );
+  options: Readonly<SearchRequestOptions>,
+): Promise<readonly ProviderSearchOutcome[]> {
+  return Promise.allSettled(providerNames.map((name) => searchProvider(name, query, options)));
 }
 
-function collectProviderResults<T extends SearchAllResult>(
+function collectProviderResults(
   providerNames: readonly string[],
-  settled: readonly Readonly<PromiseSettledResult<readonly T[]>>[],
+  settled: readonly ProviderSearchOutcome[],
 ): SearchAllResponse {
   const results: SearchAllResult[] = [];
   const errors: ProviderError[] = [];
+  const filterReports: SearchFilterReport[] = [];
   for (const [index, outcome] of settled.entries()) {
     if (outcome.status === "fulfilled") {
-      results.push(...outcome.value);
+      results.push(
+        ...outcome.value.results.map((result) =>
+          mutableResultWithProvider(result, outcome.value.provider),
+        ),
+      );
+      if (hasSearchFilterWarning(outcome.value)) {
+        const { provider, ignoredFilters, undeclaredFilters } = outcome.value;
+        filterReports.push({ provider, ignoredFilters, undeclaredFilters });
+      }
     } else {
       errors.push({
         provider: providerNames[index],
@@ -196,7 +244,20 @@ function collectProviderResults<T extends SearchAllResult>(
       });
     }
   }
-  return { results: deduplicateByUrl(results), errors };
+  return { results: deduplicateByUrl(results), errors, filterReports };
+}
+
+function mutableResultWithProvider(
+  result: ReadonlySearchResult,
+  provider: string,
+): SearchAllResult {
+  const { highlights, metadata, ...rest } = result;
+  return {
+    ...rest,
+    ...(highlights ? { highlights: [...highlights] } : {}),
+    ...(metadata ? { metadata: { ...metadata } } : {}),
+    provider,
+  };
 }
 
 function deduplicateByUrl<T extends { readonly url: string; readonly score?: number }>(

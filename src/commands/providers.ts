@@ -24,11 +24,18 @@ export default defineCommand({
     }
 
     consola.log(`web ${version}`);
-    for (const { name, envVar, configured } of status) {
+    for (const { name, envVar, configured, searchFilters, searchCategories } of status) {
+      const filters = searchFilters?.join(",") || "none";
+      const categories = searchCategories?.length
+        ? ` categories=${searchCategories.join(",")}`
+        : "";
+      const capabilityLabel = `  \x1B[90mfilters=${filters}${categories}\x1B[0m`;
       if (configured) {
-        consola.log(`  \x1B[32m\u2713\x1B[0m ${name}`);
+        consola.log(`  \x1B[32m\u2713\x1B[0m ${name}${capabilityLabel}`);
       } else {
-        consola.log(`  \x1B[31m\u2717\x1B[0m ${name}  \x1B[90m${envVar} not set\x1B[0m`);
+        consola.log(
+          `  \x1B[31m\u2717\x1B[0m ${name}  \x1B[90m${envVar} not set\x1B[0m${capabilityLabel}`,
+        );
       }
     }
   },

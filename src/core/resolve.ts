@@ -4,9 +4,10 @@ import {
   providerDetectionOrder,
   type WebSearchProviderName,
 } from "./providers.ts";
-import { create, has } from "./registry.ts";
+import { create, getSearchFilterCapabilities, has } from "./registry.ts";
 import { NoProviderAvailableError, NoProviderConfiguredError } from "./errors.ts";
 import { isAvailabilityProvider } from "./provider.ts";
+import type { SearchFilterName } from "./types.ts";
 
 function configuredProviderEntries(): Array<readonly [string, WebSearchProviderName]> {
   return providerDetectionOrder.flatMap((name) => {
@@ -56,15 +57,13 @@ export interface ProviderStatus {
    * no reachability probe was performed (trust `configured`).
    */
   reachable?: boolean;
+  readonly searchFilters?: readonly SearchFilterName[];
+  readonly searchCategories?: readonly string[];
 }
 
 export function listProviders(): ProviderStatus[] {
   const available = detectAvailableProviders();
-  return builtinProviders.map((name) => ({
-    name,
-    configured: available.includes(name),
-    envVar: providerApiKeyEnvVar(name),
-  }));
+  return builtinProviders.map((name) => providerStatus(name, available.includes(name)));
 }
 
 /**
@@ -99,7 +98,7 @@ export async function listProvidersAsync(): Promise<ProviderStatus[]> {
   return Promise.all(
     builtinProviders.map(async (name) => {
       const configured = available.includes(name);
-      const base: ProviderStatus = { name, configured, envVar: providerApiKeyEnvVar(name) };
+      const base = providerStatus(name, configured);
       if (!configured) return base;
       const reachable = await probeConfiguredProvider(name);
       return reachable === undefined ? base : { ...base, reachable };
@@ -127,6 +126,19 @@ export async function resolveDefaultProviderAsync(): Promise<WebSearchProviderNa
     throw new NoProviderConfiguredError();
   }
   throw new NoProviderAvailableError(candidates);
+}
+
+function providerStatus(name: WebSearchProviderName, configured: boolean): ProviderStatus {
+  const capabilities = getSearchFilterCapabilities(name);
+  return {
+    name,
+    configured,
+    envVar: providerApiKeyEnvVar(name),
+    ...(capabilities === undefined ? {} : { searchFilters: capabilities.filters }),
+    ...(capabilities?.categories === undefined
+      ? {}
+      : { searchCategories: capabilities.categories }),
+  };
 }
 
 async function probeConfiguredProvider(name: WebSearchProviderName): Promise<boolean | undefined> {

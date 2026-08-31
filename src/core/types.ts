@@ -13,6 +13,11 @@ export interface SearchResult {
   metadata?: Record<string, unknown>;
 }
 
+export type ReadonlySearchResult = Readonly<Omit<SearchResult, "highlights" | "metadata">> & {
+  readonly highlights?: readonly string[];
+  readonly metadata?: Readonly<Record<string, unknown>>;
+};
+
 export interface SearchResponse {
   results: SearchResult[];
   metadata?: Record<string, unknown>;
@@ -33,6 +38,22 @@ export type SearchRequestOptions = Readonly<
   readonly includeDomains?: readonly string[];
   readonly excludeDomains?: readonly string[];
 };
+
+export const searchFilterNames = [
+  "includeDomains",
+  "excludeDomains",
+  "category",
+  "startPublishedDate",
+  "endPublishedDate",
+] as const;
+
+export type SearchFilterName = (typeof searchFilterNames)[number];
+
+/** Search filters a provider forwards, including any accepted category values. */
+export interface SearchFilterCapabilities {
+  readonly filters: readonly SearchFilterName[];
+  readonly categories?: readonly string[];
+}
 
 export interface ReadResult {
   url: string;

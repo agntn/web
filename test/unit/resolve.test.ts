@@ -133,5 +133,56 @@ describe("resolve", () => {
       expect(context?.envVar).toBe("CONTEXT_DEV_API_KEY");
       expect(tinyfish?.envVar).toBe("TINYFISH_API_KEY");
     });
+
+    it("should expose the effective search filter matrix", () => {
+      const matrix = Object.fromEntries(
+        listProviders().map(({ name, searchFilters, searchCategories }) => [
+          name,
+          {
+            filters: searchFilters,
+            ...(searchCategories === undefined ? {} : { categories: searchCategories }),
+          },
+        ]),
+      );
+
+      expect(matrix).toEqual({
+        brave: { filters: [] },
+        context: { filters: ["includeDomains", "excludeDomains"] },
+        exa: {
+          filters: [
+            "includeDomains",
+            "excludeDomains",
+            "category",
+            "startPublishedDate",
+            "endPublishedDate",
+          ],
+        },
+        firecrawl: {
+          filters: ["includeDomains", "excludeDomains", "category"],
+          categories: ["news"],
+        },
+        jina: {
+          filters: ["includeDomains", "category"],
+          categories: ["web", "images", "news"],
+        },
+        tavily: { filters: ["includeDomains", "excludeDomains"] },
+        tinyfish: {
+          filters: [
+            "includeDomains",
+            "excludeDomains",
+            "category",
+            "startPublishedDate",
+            "endPublishedDate",
+          ],
+          categories: ["news", "research_paper"],
+        },
+        serpapi: { filters: [] },
+        serpbase: {
+          filters: ["category"],
+          categories: ["images", "image", "news", "videos", "video"],
+        },
+        searxng: { filters: ["category"] },
+      });
+    });
   });
 });
