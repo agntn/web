@@ -16,6 +16,77 @@ describe("Pi extension", () => {
     );
   });
 
+  it("registers reverse image search as a separate tool", () => {
+    expect(captureTools().has("web_search_image")).toBe(true);
+  });
+
+  it("executes reverse image search through the live SerpAPI provider", async () => {
+    const previousKey = process.env.SERPAPI_API_KEY;
+    process.env.SERPAPI_API_KEY = "test-key";
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input instanceof Request
+              ? input.url
+              : "";
+      const requestUrl = new URL(url);
+      expect(requestUrl.searchParams.get("engine")).toBe("google_lens");
+      return new Response(
+        JSON.stringify({
+          search_metadata: { id: "lens-id", status: "Success" },
+          visual_matches: [
+            {
+              position: 1,
+              title: "Matching page",
+              link: "https://example.com/page",
+              image: "https://example.com/full.jpg",
+              image_width: 1200,
+              image_height: 900,
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    resetDefaultClientForTests();
+
+    try {
+      const searchImageTool = captureTools().get("web_search_image");
+      if (!searchImageTool) throw new Error("web_search_image was not registered");
+      const execution: unknown = Reflect.apply(
+        searchImageTool.execute.bind(searchImageTool),
+        undefined,
+        [
+          "test-call",
+          { url: "https://example.com/input.jpg", maxResults: 5 },
+          undefined,
+          undefined,
+          undefined,
+        ],
+      );
+
+      await expect(execution).resolves.toHaveProperty("details.provider", "serpapi");
+      await expect(execution).resolves.toHaveProperty(
+        "details.results.0.pageUrl",
+        "https://example.com/page",
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringContaining("[provider=serpapi]"),
+      );
+      expect(fetchMock).toHaveBeenCalledOnce();
+    } finally {
+      if (previousKey === undefined) delete process.env.SERPAPI_API_KEY;
+      else process.env.SERPAPI_API_KEY = previousKey;
+      vi.unstubAllGlobals();
+      resetDefaultClientForTests();
+    }
+  });
+
   it("accepts a search provider added by the live web module", async () => {
     const providerName = `liveprovider${Math.random().toString(36).slice(2)}`;
     Reflect.apply(Array.prototype.push, builtinProviders, [providerName]);

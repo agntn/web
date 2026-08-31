@@ -2,13 +2,20 @@ import type { ProviderConfig, SearchFilterCapabilities } from "./types.ts";
 import { providerApiKeyEnvVar } from "./providers.ts";
 import {
   Provider,
+  isImageSearchProvider,
   isReadProvider,
   isSearchProvider,
+  type ImageSearchProvider,
   type ProviderConstructor,
   type ReadProvider,
   type SearchProvider,
 } from "./provider.ts";
-import { ReadNotSupportedError, SearchNotSupportedError, UnknownProviderError } from "./errors.ts";
+import {
+  ImageSearchNotSupportedError,
+  ReadNotSupportedError,
+  SearchNotSupportedError,
+  UnknownProviderError,
+} from "./errors.ts";
 
 const providerClasses = new Map<string, ProviderConstructor>();
 
@@ -51,6 +58,23 @@ export function createSearchProvider(
   const provider = create(name, config);
   if (!isSearchProvider(provider)) {
     throw new SearchNotSupportedError(name);
+  }
+  return provider;
+}
+
+/**
+ * Create a provider that implements reverse image search.
+ * @param name - Registered provider name.
+ * @param config - Provider configuration.
+ * @returns {Provider & ImageSearchProvider} A provider with reverse image search support.
+ */
+export function createImageSearchProvider(
+  name: string,
+  config?: Readonly<ProviderConfig>,
+): Provider & ImageSearchProvider {
+  const provider = create(name, config);
+  if (!isImageSearchProvider(provider)) {
+    throw new ImageSearchNotSupportedError(name);
   }
   return provider;
 }

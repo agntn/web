@@ -9,9 +9,14 @@ import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { builtinProviders } from "./core/providers.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
+import {
+  imageSearchProviderNames,
+  searchByImage,
+  type ImageSearchProviderName,
+} from "./core/image.ts";
 import { readProviderNames, readUrlDetailed, type ReadProviderName } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
-import { EmptyQueryError } from "./core/errors.ts";
+import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
 import type { SearchRequestOptions } from "./core/types.ts";
 import "./providers/index.ts";
@@ -95,6 +100,41 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         openWorldHint: true,
       },
       execute: executeSearch,
+    },
+    {
+      name: "web_search_image",
+      title: "Web Image Search",
+      description:
+        "Find public pages containing or resembling an image available by URL. Returns matched page and image URLs with dimensions and rank metadata.",
+      inputSchema: Type.Object({
+        url: Type.String({
+          description: "Public HTTP or HTTPS image URL",
+          minLength: 1,
+        }),
+        provider: Type.Optional(
+          Type.Union(
+            imageSearchProviderNames.map((name) => Type.Literal(name)),
+            {
+              description: "Reverse image search provider. Defaults to SerpAPI Google Lens.",
+            },
+          ),
+        ),
+        maxResults: Type.Optional(
+          Type.Integer({
+            description: `Maximum matches to return (default: 10, max: ${MAX_RESULTS_HARD_CAP})`,
+            minimum: 1,
+            maximum: MAX_RESULTS_HARD_CAP,
+          }),
+        ),
+      }),
+      annotations: {
+        title: "Web Image Search",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+      execute: executeImageSearch,
     },
     {
       name: "web_read",
@@ -222,6 +262,26 @@ async function runSearch(
 }
 
 /**
+ * Guards reverse image search when a host skips schema validation.
+ * @param args - Untrusted tool arguments.
+ * @returns {Promise<unknown>} Normalized reverse image matches.
+ */
+export async function executeImageSearch(
+  args: Readonly<Record<string, unknown>>,
+): Promise<unknown> {
+  const url = stringArg("url", args.url);
+  if (!url?.trim()) throw new EmptyImageUrlError();
+  const maxResults = intArg("maxResults", args.maxResults);
+  if (maxResults !== undefined && maxResults > MAX_RESULTS_HARD_CAP) {
+    throw new TypeError(`maxResults must be at most ${MAX_RESULTS_HARD_CAP}`);
+  }
+  return searchByImage(url, {
+    provider: imageSearchProviderArg(args.provider),
+    maxResults,
+  });
+}
+
+/**
  * Mirrors {@link executeSearch}: guards the read contract when validation was skipped.
  * @param {Readonly<Record<string, unknown>>} args - Untrusted tool arguments.
  * @returns {Promise<unknown>} Read result payload.
@@ -282,6 +342,15 @@ function searchProviderArg(value: unknown): (typeof providerNames)[number] | und
   const provider = providerNames.find((name) => name === value);
   if (!provider) {
     throw new TypeError(`provider must be one of: ${providerNames.join(", ")}`);
+  }
+  return provider;
+}
+
+function imageSearchProviderArg(value: unknown): ImageSearchProviderName | undefined {
+  if (value === undefined) return undefined;
+  const provider = imageSearchProviderNames.find((name) => name === value);
+  if (!provider) {
+    throw new TypeError(`provider must be one of: ${imageSearchProviderNames.join(", ")}`);
   }
   return provider;
 }

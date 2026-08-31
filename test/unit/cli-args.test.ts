@@ -8,6 +8,10 @@ describe("CLI main args", () => {
       "read",
       "https://example.com",
     ]);
+    expect(normalizeMainArgs(["search-image", "https://example.com/image.jpg"])).toEqual([
+      "search-image",
+      "https://example.com/image.jpg",
+    ]);
     expect(normalizeMainArgs(["providers"])).toEqual(["providers"]);
     expect(normalizeMainArgs(["mcp"])).toEqual(["mcp"]);
   });

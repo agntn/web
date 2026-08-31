@@ -1,8 +1,10 @@
 import type {
-  SearchFilterCapabilities,
-  SearchResult,
-  SearchRequestOptions,
+  ImageSearchRequestOptions,
+  ImageSearchResult,
   ProviderConfig,
+  SearchFilterCapabilities,
+  SearchRequestOptions,
+  SearchResult,
 } from "../core/types.ts";
 import { Provider } from "../core/provider.ts";
 import { AuthError, normalizeError } from "../core/errors.ts";
@@ -26,6 +28,29 @@ interface SerpApiSearchResponse {
     readonly status: string;
   };
   readonly organic_results?: readonly SerpApiResult[];
+}
+
+interface SerpApiVisualMatch {
+  readonly position?: number;
+  readonly title?: string;
+  readonly link?: string;
+  readonly source?: string;
+  readonly thumbnail?: string;
+  readonly thumbnail_width?: number;
+  readonly thumbnail_height?: number;
+  readonly image?: string;
+  readonly image_width?: number;
+  readonly image_height?: number;
+  readonly exact_matches?: boolean;
+}
+
+interface SerpApiImageSearchResponse {
+  readonly search_metadata?: {
+    readonly id: string;
+    readonly status: string;
+  };
+  readonly visual_matches?: readonly SerpApiVisualMatch[];
+  readonly error?: string;
 }
 
 class SerpApiProvider extends Provider {
@@ -55,6 +80,48 @@ class SerpApiProvider extends Provider {
       throw normalizeError(error, "serpapi");
     }
   }
+
+  async searchByImage(
+    imageUrl: string,
+    options?: ImageSearchRequestOptions,
+  ): Promise<ImageSearchResult[]> {
+    try {
+      const url = new URL(`${this.baseURL}/search`);
+      url.searchParams.set("engine", "google_lens");
+      url.searchParams.set("type", "visual_matches");
+      url.searchParams.set("url", imageUrl);
+      url.searchParams.set("api_key", this.apiKey);
+      const response = await this.client.getJSON<SerpApiImageSearchResponse>(url.href);
+      if (response.error) throw new Error(response.error);
+      return (response.visual_matches ?? [])
+        .flatMap(mapImageResult)
+        .slice(0, options?.maxResults ?? 10);
+    } catch (error) {
+      throw normalizeError(error, "serpapi");
+    }
+  }
+}
+
+function mapImageResult(result: SerpApiVisualMatch): ImageSearchResult[] {
+  const imageUrl = result.image ?? result.thumbnail;
+  if (!result.link || !imageUrl) return [];
+
+  return [
+    {
+      pageUrl: result.link,
+      imageUrl,
+      title: result.title ?? result.source ?? "",
+      provider: "serpapi",
+      source: result.source,
+      thumbnailUrl: result.thumbnail,
+      imageWidth: result.image_width,
+      imageHeight: result.image_height,
+      thumbnailWidth: result.thumbnail_width,
+      thumbnailHeight: result.thumbnail_height,
+      position: result.position,
+      exactMatch: result.exact_matches,
+    },
+  ];
 }
 
 function mapResult(result: SerpApiResult): SearchResult {

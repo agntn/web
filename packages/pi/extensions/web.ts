@@ -5,6 +5,8 @@ import type { AgentToolResult, ExtensionAPI, Theme } from "@earendil-works/pi-co
 import { Text } from "@earendil-works/pi-tui";
 import { Type, type Static } from "typebox";
 import type {
+  ImageSearchProviderName,
+  ImageSearchResult,
   ProviderStatus,
   ReadBatchDetailedItem,
   ReadOptions,
@@ -50,6 +52,13 @@ type SearchBatchDetails = {
 };
 
 type SearchDetails = SearchSingleDetails | SearchAllDetails | SearchBatchDetails;
+
+type ImageSearchDetails = {
+  readonly url: string;
+  readonly provider: ImageSearchProviderName;
+  readonly maxResults?: number;
+  readonly results: readonly ImageSearchResult[];
+};
 
 type ReadDetails =
   | {
@@ -103,6 +112,8 @@ const PROVIDERS = [
   "tinyfish",
 ] as const;
 const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) tries configured providers in order after HTTP 402. Use "all" to query every configured provider in parallel.`;
+const IMAGE_SEARCH_PROVIDER_HINT =
+  "Reverse image search provider. Defaults to SerpAPI Google Lens and is validated against web.imageSearchProviderNames at execution time.";
 const READ_PROVIDER_HINT =
   'Read provider to use. "auto" (or omit) starts with Jina and falls back to other configured readers after HTTP 402 or 409. Validated against web.readProviderNames at execution time.';
 
@@ -149,6 +160,18 @@ const searchParameters = Type.Object({
   endPublishedDate: Type.Optional(
     Type.String({
       description: "ISO date filter: only results published before this date.",
+    }),
+  ),
+});
+
+const imageSearchParameters = Type.Object({
+  url: Type.String({ description: "Public HTTP or HTTPS image URL." }),
+  provider: Type.Optional(Type.String({ description: IMAGE_SEARCH_PROVIDER_HINT })),
+  maxResults: Type.Optional(
+    Type.Integer({
+      description: `Maximum matches to return. Defaults to ${DEFAULT_MAX_RESULTS}.`,
+      minimum: 1,
+      maximum: MAX_RESULTS_HARD_CAP,
     }),
   ),
 });
@@ -330,6 +353,43 @@ export default function webExtension(pi: ExtensionAPI) {
           ignoredFilters: response.ignoredFilters,
           undeclaredFilters: response.undeclaredFilters,
         },
+      };
+    },
+  });
+
+  pi.registerTool({
+    name: "web_search_image",
+    label: "Web Image Search",
+    description:
+      "Read-only/open-world reverse image search: find public pages containing or resembling an image available by URL. Returns matched page and image URLs with dimensions and rank metadata.",
+    promptSnippet: "Find pages containing or resembling a public image URL with web_search_image.",
+    promptGuidelines: [
+      "Use web_search_image for reverse image lookup. Use web_search for text queries and web_read for page content.",
+    ],
+    parameters: imageSearchParameters,
+    renderCall(args, theme) {
+      return new Text(
+        `${theme.fg("toolTitle", theme.bold("web_search_image"))} ${theme.fg("muted", truncateSingleLine(args.url, 120))}`,
+        0,
+        0,
+      );
+    },
+    async execute(_toolCallId, params): Promise<AgentToolResult<ImageSearchDetails>> {
+      const web = await loadWeb();
+      const provider = normalizeImageSearchProviderInput(
+        params.provider,
+        web.imageSearchProviderNames,
+      );
+      const url = params.url.trim();
+      if (!url) throw new web.EmptyImageUrlError();
+      const results = await web.searchByImage(url, {
+        provider,
+        maxResults: params.maxResults,
+      });
+      const header = `[provider=${provider}] ${results.length} image match(es) for ${truncateSingleLine(url, 200)}`;
+      return {
+        content: [{ type: "text", text: withHeader(header, formatImageSearchResults(results)) }],
+        details: { url, provider, maxResults: params.maxResults, results },
       };
     },
   });
@@ -541,6 +601,20 @@ function normalizeSearchProviderInput(
   return rawProvider;
 }
 
+function normalizeImageSearchProviderInput(
+  provider: string | undefined,
+  providerNames: readonly ImageSearchProviderName[],
+): ImageSearchProviderName {
+  const rawProvider = provider?.trim() || providerNames[0];
+  const matched = providerNames.find((name) => name === rawProvider);
+  if (!matched) {
+    throw new Error(
+      `Unknown reverse image search provider "${rawProvider}". Available: ${providerNames.join(", ")}.`,
+    );
+  }
+  return matched;
+}
+
 function normalizeReadProviderInput(
   provider: string | undefined,
   readProviderNames: readonly ReadProviderName[],
@@ -688,6 +762,21 @@ function formatResults(results: readonly SearchResultView[]): readonly string[] 
   return results.map((r, i) => formatResult(r, i));
 }
 
+function formatImageSearchResults(
+  results: readonly Readonly<ImageSearchResult>[],
+): readonly string[] {
+  return results.map((result, index) => {
+    const title = truncateSingleLine(result.title || "(no title)", 200);
+    const dimensions =
+      result.imageWidth === undefined || result.imageHeight === undefined
+        ? ""
+        : ` ${result.imageWidth}x${result.imageHeight}`;
+    const pageUrl = truncateSingleLine(result.pageUrl, 500);
+    const imageUrl = truncateSingleLine(result.imageUrl, 500);
+    return `${index + 1}. ${title}\n   ${pageUrl}\n   ${imageUrl}${dimensions}`;
+  });
+}
+
 function formatAllResults(
   results: readonly SearchAllResultView[],
   errors: readonly ProviderErrorView[],
@@ -821,6 +910,9 @@ function renderReadCall(
 }
 
 function truncateSingleLine(text: string, maxLength: number): string {
-  const singleLine = text.replaceAll(/\s+/g, " ").trim();
+  const singleLine = text
+    .replaceAll(/\p{Cc}/gu, " ")
+    .replaceAll(/\s+/g, " ")
+    .trim();
   return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 1)}…`;
 }

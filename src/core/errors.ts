@@ -74,6 +74,22 @@ export class EmptyQueryError extends WebError {
   }
 }
 
+/** Thrown when the reverse image search URL is empty or whitespace-only. */
+export class EmptyImageUrlError extends WebError {
+  constructor() {
+    super("Image URL cannot be empty");
+    this.name = "EmptyImageUrlError";
+  }
+}
+
+/** Thrown when reverse image search receives a non-HTTP URL. */
+export class InvalidImageUrlError extends WebError {
+  constructor() {
+    super("Image URL must be an absolute HTTP or HTTPS URL");
+    this.name = "InvalidImageUrlError";
+  }
+}
+
 /** Thrown when the read URL is empty or whitespace-only. */
 export class EmptyUrlError extends WebError {
   constructor() {
@@ -99,6 +115,17 @@ export class SearchNotSupportedError extends WebError {
   constructor(provider: string) {
     super(`Provider does not support search: ${provider}`);
     this.name = "SearchNotSupportedError";
+    this.provider = provider;
+  }
+}
+
+/** Thrown when a provider does not implement reverse image search. */
+export class ImageSearchNotSupportedError extends WebError {
+  readonly provider: string;
+
+  constructor(provider: string) {
+    super(`Provider does not support reverse image search: ${provider}`);
+    this.name = "ImageSearchNotSupportedError";
     this.provider = provider;
   }
 }

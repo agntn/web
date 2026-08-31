@@ -9,11 +9,11 @@ One API for Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI,
 
 If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
 
-`@agntn/web` normalizes all of that behind a single interface. It also ships an [AI SDK](https://ai-sdk.dev/) tool and a CLI. Search is query-to-results; read is URL-to-content.
+`@agntn/web` normalizes all of that behind a single interface. It also ships [AI SDK](https://ai-sdk.dev/) tools and a CLI. Text search is query-to-results, reverse image search is image URL-to-matches, and read is URL-to-content.
 
 ## Pi extension
 
-`@agntn/web` ships with a [pi](https://pi.dev) extension that registers three tools and two commands. Install the package straight from GitHub:
+`@agntn/web` ships with a [pi](https://pi.dev) extension that registers four tools and two commands. Install the package straight from GitHub:
 
 ```bash
 pi install git:github.com/agntn/web
@@ -22,6 +22,7 @@ pi install git:github.com/agntn/web
 Provided tools:
 
 - `web_search` - search one query or a batch of queries with a single provider, or use `provider="all"` for provider fan-out
+- `web_search_image` - find pages containing or resembling an image available by public URL
 - `web_read` - read one URL or a batch of URLs and report the effective reader after fallback
 - `web_providers` - show the running build and process start, then list configuration, reachability, and search filter support
 
@@ -117,6 +118,25 @@ if (isDetailedSearchProvider(firecrawl)) {
 
 `web search --provider firecrawl --json "query"` prints the same `{ results, metadata }` envelope.
 
+### Reverse image search
+
+SerpAPI Google Lens can find public pages containing or resembling an image available by URL. This is separate from text search, so providers without image lookup support are rejected instead of receiving a fake text query:
+
+```typescript
+import { searchByImage } from "@agntn/web";
+
+const matches = await searchByImage("https://example.com/image.jpg", {
+  provider: "serpapi",
+  maxResults: 5,
+});
+
+for (const match of matches) {
+  console.log(match.pageUrl, match.imageUrl, match.imageWidth, match.imageHeight);
+}
+```
+
+The built-in reverse image provider is `serpapi`. The image URL is sent to that provider, so use a publicly accessible URL without embedded credentials or private query tokens. Results include the page URL, matched image URL, dimensions when available, provider, source, position, and exact-match metadata.
+
 ### Read a URL
 
 Use `readUrl` when you already have a URL and want normalized page content:
@@ -167,21 +187,26 @@ The `@agntn/web/ai` subpath exports ready-made tools compatible with [Vercel AI 
 
 ```typescript
 import { generateText } from "ai";
-import { readTool, searchTool } from "@agntn/web/ai";
+import { readTool, searchImageTool, searchTool } from "@agntn/web/ai";
 
 const { text } = await generateText({
   model: yourModel,
-  tools: { web_search: searchTool, web_read: readTool },
+  tools: {
+    web_search: searchTool,
+    web_search_image: searchImageTool,
+    web_read: readTool,
+  },
   prompt: "Find the latest TypeScript release notes",
 });
 ```
 
-`searchTool` accepts one query or an array of queries. Explicit and automatic scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters }`; `provider="all"` returns `{ results, errors, filterReports }`. `readTool` accepts one URL or an array of URLs, and batch calls use the outcome shapes above:
+`searchTool` accepts one query or an array of queries. Explicit and automatic scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters }`; `provider="all"` returns `{ results, errors, filterReports }`. `searchImageTool` accepts one public image URL. `readTool` accepts one URL or an array of URLs, and batch calls use the outcome shapes above:
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
-tools: { web_search: searchTool, web_read: readTool }
+tools: { web_search: searchTool, web_search_image: searchImageTool, web_read: readTool }
 // searchTool input: { query: string | string[], provider?: "brave" | "exa" | ... | "all", maxResults?: number }
+// searchImageTool input: { url: string, provider?: "serpapi", maxResults?: number }
 // readTool input: { url: string | string[], provider?: "jina" | "context" | "firecrawl" | "tinyfish", format?: "markdown" | "text" | "html" }
 ```
 
@@ -193,18 +218,20 @@ Without an explicit provider, `searchTool` starts with the first reachable provi
 web "your query"
 web --provider brave "your query" --max-results 5
 web search "your query" --json
+web search-image https://example.com/image.jpg --max-results 5 --json
 web read https://example.com --format markdown --json
 web read https://example.com/one https://example.com/two --json
 web providers
 ```
 
-| Command              | Description                                   |
-| -------------------- | --------------------------------------------- |
-| `web <query>`        | Search the web using the default provider     |
-| `web search <query>` | Search the web using a provider               |
-| `web read <url...>`  | Read one or more URLs into normalized content |
-| `web providers`      | List built-in providers                       |
-| `web mcp`            | Run the MCP server over stdio                 |
+| Command                  | Description                                   |
+| ------------------------ | --------------------------------------------- |
+| `web <query>`            | Search the web using the default provider     |
+| `web search <query>`     | Search the web using a provider               |
+| `web search-image <url>` | Find matching pages from a public image URL   |
+| `web read <url...>`      | Read one or more URLs into normalized content |
+| `web providers`          | List built-in providers                       |
+| `web mcp`                | Run the MCP server over stdio                 |
 
 Read commands use automatic selection unless `--provider` is set. Scalar JSON is `{ result, requestedProvider, provider, attempts }`; batch successes add `url` to that shape. Any failed batch item makes the command exit 1 without discarding successes.
 
@@ -213,6 +240,7 @@ Read commands use automatic selection unless `--provider` is set. Scalar JSON is
 `web mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio exposing the same capabilities as the agent tools:
 
 - `web_search` - search one query or a batch, or use `provider="all"` for provider fan-out
+- `web_search_image` - find matching pages and images from a public image URL
 - `web_read` - read one URL or a batch and return effective provider provenance
 - `web_providers` - show the running build and process start, then list configuration and search filter support
 
@@ -224,13 +252,13 @@ claude mcp add web --scope user -- web mcp
 
 The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`createMcpServer()`) when your host provides its own transport.
 
-| Flag                              | Description                                                               |
-| --------------------------------- | ------------------------------------------------------------------------- |
-| `--provider <name>`               | Provider to use (search: first configured; read: auto starting with Jina) |
-| `--max-results <n>`               | Maximum search results to return (default: `10`)                          |
-| `--format <markdown\|text\|html>` | Preferred read format                                                     |
-| `--max-tokens <n>`                | Maximum read tokens when supported                                        |
-| `--json`                          | Output as JSON                                                            |
+| Flag                              | Description                                                                             |
+| --------------------------------- | --------------------------------------------------------------------------------------- |
+| `--provider <name>`               | Provider to use (text: first configured; image: SerpAPI; read: auto starting with Jina) |
+| `--max-results <n>`               | Maximum text or image search results to return (default: `10`)                          |
+| `--format <markdown\|text\|html>` | Preferred read format                                                                   |
+| `--max-tokens <n>`                | Maximum read tokens when supported                                                      |
+| `--json`                          | Output as JSON                                                                          |
 
 ## Providers
 
@@ -242,7 +270,7 @@ The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`
 | Firecrawl   | `FIRECRAWL_API_KEY`   | Bearer header      | Credit-based free tier                 |
 | Jina        | `JINA_API_KEY`        | Bearer header      | Required for search; optional for read |
 | SearXNG     | -                     | None               | Self-hosted                            |
-| SerpAPI     | `SERPAPI_API_KEY`     | Query param        | 100 queries/mo                         |
+| SerpAPI     | `SERPAPI_API_KEY`     | Query param        | 100 queries/mo; Google Lens supported  |
 | SerpBase    | `SERPBASE_API_KEY`    | `X-API-Key` header | 100 searches to start                  |
 | Tavily      | `TAVILY_API_KEY`      | Body               | 1k queries/mo                          |
 | TinyFish    | `TINYFISH_API_KEY`    | `X-API-Key` header | Free at $0; Search access required     |
@@ -322,6 +350,25 @@ interface SearchResult {
 ```
 
 Optional fields depend on what the provider returns. Exa provides `score`, `text`, and `highlights`. TinyFish provides publisher and research metadata. Jina provides result `text` and metadata when available. Brave provides `favicon`. Not all providers populate all fields.
+
+Reverse image results keep page and image identity separate:
+
+```typescript
+interface ImageSearchResult {
+  pageUrl: string;
+  imageUrl: string;
+  title: string;
+  provider: string;
+  source?: string;
+  thumbnailUrl?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  thumbnailWidth?: number;
+  thumbnailHeight?: number;
+  position?: number;
+  exactMatch?: boolean;
+}
+```
 
 Read results use the same naming for URL-to-content:
 

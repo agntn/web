@@ -2,6 +2,7 @@ import { tool } from "ai";
 import { z } from "zod";
 import { builtinProviders } from "./core/providers.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
+import { imageSearchProviderNames, searchByImage } from "./core/image.ts";
 import { readProviderNames, readUrl } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
@@ -83,6 +84,26 @@ export const searchTool = tool({
     }
     return searchWithFallback(query, searchOptions);
   },
+});
+
+export const searchImageTool = tool({
+  description:
+    "Find public pages containing or resembling an image available by URL. Uses a provider with reverse image search support and returns page URLs, matched images, dimensions, and rank metadata.",
+  inputSchema: z.object({
+    url: z.url().describe("Public HTTP or HTTPS image URL"),
+    provider: z
+      .enum(imageSearchProviderNames)
+      .optional()
+      .describe("Reverse image search provider. Defaults to SerpAPI Google Lens."),
+    maxResults: z
+      .number()
+      .int()
+      .min(1)
+      .max(20)
+      .optional()
+      .describe("Maximum matches to return. Defaults to 10."),
+  }),
+  execute: async ({ url, provider, maxResults }) => searchByImage(url, { provider, maxResults }),
 });
 
 export const readTool = tool({

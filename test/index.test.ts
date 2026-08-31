@@ -3,6 +3,7 @@ import {
   Provider,
   builtinProviders,
   create,
+  createImageSearchProvider,
   createReadProvider,
   createSearchProvider,
   getSearchFilterCapabilities,
@@ -11,8 +12,10 @@ import {
   readUrl,
   readUrlDetailed,
   searchBatch,
+  searchByImage,
   searchProviderDetailed,
   version,
+  ImageSearchNotSupportedError,
   ReadNotSupportedError,
 } from "../src/index.ts";
 
@@ -52,6 +55,10 @@ describe("@agntn/web", () => {
   it("should export capability-aware provider constructors", () => {
     expect(createSearchProvider("searxng").name).toBe("searxng");
     expect(createReadProvider("jina").name).toBe("jina");
+    expect(createImageSearchProvider("serpapi", { apiKey: "test-api-key" }).name).toBe("serpapi");
+    expect(() => createImageSearchProvider("brave", { apiKey: "test-api-key" })).toThrow(
+      ImageSearchNotSupportedError,
+    );
     expect(() => createReadProvider("searxng")).toThrow(ReadNotSupportedError);
     expect(searchProviderDetailed).toBeTypeOf("function");
     for (const provider of builtinProviders) {
@@ -62,6 +69,7 @@ describe("@agntn/web", () => {
   it("should export read and batch operations", () => {
     expect(readUrl).toBeTypeOf("function");
     expect(readUrlDetailed).toBeTypeOf("function");
+    expect(searchByImage).toBeTypeOf("function");
     expect(searchBatch).toBeTypeOf("function");
     expect(readBatch).toBeTypeOf("function");
     expect(readBatchDetailed).toBeTypeOf("function");
