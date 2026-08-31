@@ -23,8 +23,9 @@ vi.mock("../../src/core/client.ts", () => ({
   })),
 }));
 
-import { readTool, searchTool } from "../../src/ai.ts";
+import { providersTool, readTool, searchTool } from "../../src/ai.ts";
 import { EmptyQueryError, EmptyUrlError, HTTPError } from "../../src/core/errors.ts";
+import { runtimeInfo } from "../../src/version.ts";
 
 const exaResponse = {
   requestId: "test-req",
@@ -384,6 +385,17 @@ describe("searchTool", () => {
     expect(outcomes).toEqual([
       { query: "test", error: "Search providers failed: exa: Exa unavailable" },
     ]);
+  });
+});
+
+describe("providersTool", () => {
+  it("returns the loaded runtime identity with provider status", async () => {
+    const result = await providersTool.execute!({}, { toolCallId: "providers-call", messages: [] });
+
+    expect(result).toMatchObject({ runtime: runtimeInfo });
+    expect(result.providers).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "exa" })]),
+    );
   });
 });
 

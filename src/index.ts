@@ -1,6 +1,7 @@
 import "./providers/index.ts";
 
-export { version } from "./version.ts";
+export { version, runtimeInfo } from "./version.ts";
+export type { RuntimeInfo } from "./version.ts";
 
 export { builtinProviders, type WebSearchProviderName } from "./core/providers.ts";
 

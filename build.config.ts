@@ -1,4 +1,7 @@
 import { defineBuildConfig } from "obuild/config";
+import { createSourceBuildId } from "./src/build-id.ts";
+
+const buildId = createSourceBuildId(import.meta.dirname);
 
 export default defineBuildConfig({
   entries: [
@@ -9,6 +12,14 @@ export default defineBuildConfig({
   ],
   hooks: {
     rolldownConfig(config) {
+      config.transform = {
+        ...config.transform,
+        define: {
+          ...config.transform?.define,
+          __AGNTN_WEB_BUILD_ID__: JSON.stringify(buildId),
+        },
+      };
+
       if (Array.isArray(config.plugins)) {
         config.plugins = config.plugins.filter(
           (plugin: unknown) =>

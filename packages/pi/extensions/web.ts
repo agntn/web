@@ -10,6 +10,7 @@ import type {
   ReadOptions,
   ReadProviderName,
   ReadResult,
+  RuntimeInfo,
   SearchAllResult,
   SearchBatchItem,
   SearchRequestOptions,
@@ -387,7 +388,7 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_providers",
     label: "Web Providers",
     description:
-      "Read-only/idempotent local/env status: list built-in web search providers and which ones are currently configured via environment variables.",
+      "Read-only/idempotent local/env status: show the running web build and list built-in search providers with their current configuration.",
     promptSnippet: "List configured web providers.",
     promptGuidelines: [
       "Use web_providers before web_search if it is unclear which providers are available.",
@@ -399,18 +400,26 @@ export default function webExtension(pi: ExtensionAPI) {
     async execute(
       _toolCallId: string,
       _params: EmptyParams,
-    ): Promise<AgentToolResult<{ readonly providers: readonly ProviderStatus[] }>> {
+    ): Promise<
+      AgentToolResult<{
+        readonly runtime: RuntimeInfo;
+        readonly providers: readonly ProviderStatus[];
+      }>
+    > {
       const web = await loadWeb();
       const statuses = await web.listProvidersAsync();
       const lines = statuses.map((s) => formatProviderStatus(s));
+      const runtimeLine = `web ${web.runtimeInfo.version} build ${web.runtimeInfo.buildId}, started ${web.runtimeInfo.processStartedAt}`;
       return {
         content: [
           {
             type: "text",
-            text: lines.length > 0 ? lines.join("\n") : "No providers registered.",
+            text: [runtimeLine, ...(lines.length > 0 ? lines : ["No providers registered."])].join(
+              "\n",
+            ),
           },
         ],
-        details: { providers: statuses },
+        details: { runtime: web.runtimeInfo, providers: statuses },
       };
     },
   });

@@ -23,7 +23,7 @@ Provided tools:
 
 - `web_search` - search one query or a batch of queries with a single provider, or use `provider="all"` for provider fan-out
 - `web_read` - read one URL or a batch of URLs and report the effective reader after fallback
-- `web_providers` - list built-in providers, env-var configuration, and reachability status
+- `web_providers` - show the running build and process start, then list provider configuration and reachability
 
 Provided slash commands:
 
@@ -214,7 +214,7 @@ Read commands use automatic selection unless `--provider` is set. Scalar JSON is
 
 - `web_search` - search one query or a batch, or use `provider="all"` for provider fan-out
 - `web_read` - read one URL or a batch and return effective provider provenance
-- `web_providers` - list providers and their configuration status
+- `web_providers` - show the running build and process start, then list provider configuration
 
 Register it with any MCP client:
 

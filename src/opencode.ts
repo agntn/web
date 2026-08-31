@@ -7,6 +7,7 @@ import { searchAll, searchWithFallback } from "./core/all.ts";
 import { readProviderNames, readUrl } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { listProviders } from "./core/resolve.ts";
+import { runtimeInfo } from "./version.ts";
 import "./providers/index.ts";
 
 const z = tool.schema;
@@ -76,10 +77,11 @@ const WebPlugin: Plugin = async () => ({
       },
     }),
     web_providers: tool({
-      description: "List available web search providers and their configuration status.",
+      description:
+        "List available web search providers, their configuration status, and the running build.",
       args: {},
       async execute() {
-        return encode(listProviders());
+        return encode({ runtime: runtimeInfo, providers: listProviders() });
       },
     }),
   },
