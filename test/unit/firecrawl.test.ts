@@ -304,6 +304,7 @@ describe("firecrawl provider", () => {
         formats: ["markdown"],
         onlyMainContent: true,
       });
+      expect(body.maxAge).toBeUndefined();
       expect(headers).toMatchObject({
         Authorization: "Bearer fc-test-key",
       });
@@ -362,6 +363,14 @@ describe("firecrawl provider", () => {
 
       const [, body] = mockPostJSON.mock.calls[0];
       expect(body.timeout).toBe(30000);
+    });
+
+    it("sets maxAge to zero when cache is bypassed", async () => {
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      await provider.read("https://example.com", { noCache: true });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.maxAge).toBe(0);
     });
 
     it("sets onlyMainContent to true by default", async () => {
