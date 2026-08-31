@@ -161,6 +161,7 @@ function scrapeBody(url: string, options?: Readonly<ReadOptions>): Record<string
     formats: [normalizeFormat(options?.format)],
     onlyMainContent: true,
     ...(options?.timeout ? { timeout: options.timeout * 1000 } : {}),
+    ...(options?.noCache ? { maxAge: 0 } : {}),
   };
 }
 
