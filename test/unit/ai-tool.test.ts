@@ -23,7 +23,7 @@ vi.mock("../../src/core/client.ts", () => ({
   })),
 }));
 
-import { providersTool, readTool, searchTool } from "../../src/ai.ts";
+import { providersTool, readTool, searchImageTool, searchTool } from "../../src/ai.ts";
 import { EmptyQueryError, EmptyUrlError, HTTPError } from "../../src/core/errors.ts";
 import { runtimeInfo } from "../../src/version.ts";
 
@@ -474,6 +474,53 @@ describe("searchTool", () => {
     expect(outcomes).toEqual([
       { query: "test", error: "Search providers failed: exa: Exa unavailable" },
     ]);
+  });
+});
+
+describe("searchImageTool", () => {
+  beforeEach(() => {
+    mockGetJSON.mockReset();
+    savedEnv.SERPAPI_API_KEY = process.env.SERPAPI_API_KEY;
+    process.env.SERPAPI_API_KEY = "test-key";
+  });
+
+  afterEach(() => {
+    if (savedEnv.SERPAPI_API_KEY === undefined) delete process.env.SERPAPI_API_KEY;
+    else process.env.SERPAPI_API_KEY = savedEnv.SERPAPI_API_KEY;
+  });
+
+  it("returns normalized Google Lens visual matches", async () => {
+    mockGetJSON.mockResolvedValueOnce({
+      search_metadata: { id: "lens-id", status: "Success" },
+      visual_matches: [
+        {
+          position: 1,
+          title: "Matching page",
+          link: "https://example.com/page",
+          source: "Example",
+          image: "https://example.com/full.jpg",
+          image_width: 1200,
+          image_height: 900,
+        },
+      ],
+    });
+
+    const result = await searchImageTool.execute!(
+      { url: "https://example.com/input.jpg", maxResults: 5 },
+      { toolCallId: "search-image-call", messages: [] },
+    );
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        pageUrl: "https://example.com/page",
+        imageUrl: "https://example.com/full.jpg",
+        provider: "serpapi",
+        position: 1,
+      }),
+    ]);
+    const requestUrl = new URL(String(mockGetJSON.mock.calls[0]?.[0]));
+    expect(requestUrl.searchParams.get("engine")).toBe("google_lens");
+    expect(requestUrl.searchParams.get("type")).toBe("visual_matches");
   });
 });
 

@@ -1,4 +1,4 @@
-const passthroughFirstArgs = new Set(["search", "read", "providers", "mcp"]);
+const passthroughFirstArgs = new Set(["search", "search-image", "read", "providers", "mcp"]);
 
 const helpOrVersionFlags = new Set(["-h", "--help", "-v", "--version"]);
 

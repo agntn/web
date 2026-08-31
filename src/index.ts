@@ -12,6 +12,9 @@ export type {
   SearchRequestOptions,
   SearchFilterName,
   SearchFilterCapabilities,
+  ImageSearchResult,
+  ImageSearchOptions,
+  ImageSearchRequestOptions,
   ReadResult,
   ReadOptions,
   ProviderConfig,
@@ -21,6 +24,7 @@ export {
   Provider,
   isSearchProvider,
   isDetailedSearchProvider,
+  isImageSearchProvider,
   isReadProvider,
   isAvailabilityProvider,
 } from "./core/provider.ts";
@@ -28,6 +32,7 @@ export type {
   ProviderConstructor,
   SearchProvider,
   DetailedSearchProvider,
+  ImageSearchProvider,
   ReadProvider,
   AvailabilityProvider,
 } from "./core/provider.ts";
@@ -40,9 +45,12 @@ export {
   UnknownProviderError,
   InvalidProviderUrlError,
   SearchNotSupportedError,
+  ImageSearchNotSupportedError,
   NoProviderConfiguredError,
   NoProviderAvailableError,
   EmptyQueryError,
+  EmptyImageUrlError,
+  InvalidImageUrlError,
   EmptyUrlError,
   ReadNotSupportedError,
   InvalidDateFilterError,
@@ -56,6 +64,7 @@ export {
   register,
   create,
   createSearchProvider,
+  createImageSearchProvider,
   createReadProvider,
   providers,
   has,
@@ -77,6 +86,9 @@ export type {
   ProviderError,
 } from "./core/all.ts";
 export type { SearchFilterReport } from "./core/search-filters.ts";
+
+export { imageSearchProviderNames, searchByImage } from "./core/image.ts";
+export type { ImageSearchProviderName, ImageSearchByUrlOptions } from "./core/image.ts";
 
 export { readProviderNames, readUrl, readUrlDetailed } from "./core/read.ts";
 export type { ReadProviderName, ReadUrlOptions, ReadUrlDetailedResult } from "./core/read.ts";

@@ -15,12 +15,42 @@ vi.mock("../../src/core/client.ts", () => ({
   })),
 }));
 
-import { createSearchProvider, has } from "../../src/core/registry.ts";
+import { createImageSearchProvider, createSearchProvider, has } from "../../src/core/registry.ts";
 import { AuthError } from "../../src/core/errors.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
 // Triggers self-registration of serpapi provider
 import "../../src/providers/index.ts";
+
+const imageSearchResponse = {
+  search_metadata: {
+    id: "lens-id",
+    status: "Success",
+  },
+  visual_matches: [
+    {
+      position: 1,
+      title: "Matching page",
+      link: "https://example.com/page",
+      source: "Example",
+      source_icon: "https://example.com/favicon.png",
+      thumbnail: "https://example.com/thumb.jpg",
+      thumbnail_width: 240,
+      thumbnail_height: 180,
+      image: "https://example.com/full.jpg",
+      image_width: 1200,
+      image_height: 900,
+      exact_matches: true,
+    },
+    {
+      position: 2,
+      title: "Second page",
+      link: "https://example.org/page",
+      source: "Example Org",
+      thumbnail: "https://example.org/thumb.jpg",
+    },
+  ],
+};
 
 const serpApiResponse = {
   search_metadata: {
@@ -69,6 +99,62 @@ describe("serpapi provider", () => {
     it("returns serpapi", () => {
       const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
       expect(provider.name).toBe("serpapi");
+    });
+  });
+
+  describe("searchByImage()", () => {
+    it("uses the Google Lens visual matches endpoint", async () => {
+      mockGetJSON.mockResolvedValueOnce(imageSearchResponse);
+      const provider = createImageSearchProvider("serpapi", {
+        apiKey: "test-key",
+        baseURL: "https://proxy.example.com/serpapi",
+      });
+
+      await provider.searchByImage("https://images.example.com/input photo.jpg", { maxResults: 1 });
+
+      const [requestUrl] = mockGetJSON.mock.calls[0];
+      const url = new URL(requestUrl);
+      expect(url.origin).toBe("https://proxy.example.com");
+      expect(url.pathname).toBe("/serpapi/search");
+      expect(url.searchParams.get("engine")).toBe("google_lens");
+      expect(url.searchParams.get("type")).toBe("visual_matches");
+      expect(url.searchParams.get("url")).toBe("https://images.example.com/input photo.jpg");
+      expect(url.searchParams.get("api_key")).toBe("test-key");
+    });
+
+    it("surfaces API errors instead of returning an empty match list", async () => {
+      mockGetJSON.mockResolvedValueOnce({ error: "Google Lens could not fetch the image" });
+      const provider = createImageSearchProvider("serpapi", { apiKey: "test-key" });
+
+      await expect(provider.searchByImage("https://images.example.com/input.jpg")).rejects.toThrow(
+        "Google Lens could not fetch the image",
+      );
+    });
+
+    it("maps image matches and applies maxResults locally", async () => {
+      mockGetJSON.mockResolvedValueOnce(imageSearchResponse);
+      const provider = createImageSearchProvider("serpapi", { apiKey: "test-key" });
+
+      const results = await provider.searchByImage("https://images.example.com/input.jpg", {
+        maxResults: 1,
+      });
+
+      expect(results).toEqual([
+        {
+          pageUrl: "https://example.com/page",
+          imageUrl: "https://example.com/full.jpg",
+          title: "Matching page",
+          provider: "serpapi",
+          source: "Example",
+          thumbnailUrl: "https://example.com/thumb.jpg",
+          imageWidth: 1200,
+          imageHeight: 900,
+          thumbnailWidth: 240,
+          thumbnailHeight: 180,
+          position: 1,
+          exactMatch: true,
+        },
+      ]);
     });
   });
 

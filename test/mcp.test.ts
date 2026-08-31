@@ -24,9 +24,10 @@ vi.mock("../src/core/client.ts", () => ({
   })),
 }));
 
-import { createMcpServer, executeRead, executeSearch } from "../src/mcp.ts";
+import { createMcpServer, executeImageSearch, executeRead, executeSearch } from "../src/mcp.ts";
 import { version } from "../src/version.ts";
 import {
+  EmptyImageUrlError,
   EmptyQueryError,
   EmptyUrlError,
   HTTPError,
@@ -56,20 +57,21 @@ afterEach(async () => {
 });
 
 describe("web MCP server", () => {
-  it("advertises the three capability tools as read-only", async () => {
+  it("advertises the four capability tools as read-only", async () => {
     const client = await connectTestClient();
 
     const response = await client.listTools();
 
     expect(response.tools.map((tool) => tool.name)).toEqual([
       "web_search",
+      "web_search_image",
       "web_read",
       "web_providers",
     ]);
     for (const tool of response.tools) {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     }
-    expect(response.tools[2]?.annotations).toMatchObject({ openWorldHint: false });
+    expect(response.tools[3]?.annotations).toMatchObject({ openWorldHint: false });
   });
 
   it("returns provider results as JSON text for web_search", async () => {
@@ -106,6 +108,40 @@ describe("web MCP server", () => {
         { title: "Test Result", url: "https://example.com", snippet: "A test description" },
       ],
     });
+  });
+
+  it("returns reverse image matches as JSON text", async () => {
+    vi.stubEnv("SERPAPI_API_KEY", "test-key");
+    mockGetJSON.mockReset();
+    mockGetJSON.mockResolvedValue({
+      search_metadata: { id: "lens-id", status: "Success" },
+      visual_matches: [
+        {
+          position: 1,
+          title: "Matching page",
+          link: "https://example.com/page",
+          image: "https://example.com/full.jpg",
+        },
+      ],
+    });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search_image",
+      arguments: { url: "https://example.com/input.jpg", maxResults: 5 },
+    });
+
+    expect(response.isError).toBeUndefined();
+    const payload = JSON.parse(
+      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
+    ) as readonly unknown[];
+    expect(payload).toEqual([
+      expect.objectContaining({
+        pageUrl: "https://example.com/page",
+        imageUrl: "https://example.com/full.jpg",
+        provider: "serpapi",
+      }),
+    ]);
   });
 
   it("keeps separate ordered results for batched searches", async () => {
@@ -311,6 +347,17 @@ describe("web MCP executors", () => {
   it("guards the empty-query contract when a host skips validation", async () => {
     await expect(executeSearch({})).rejects.toBeInstanceOf(EmptyQueryError);
     await expect(executeSearch({ query: "   " })).rejects.toBeInstanceOf(EmptyQueryError);
+  });
+
+  it("guards reverse image search when schema validation is skipped", async () => {
+    await expect(executeImageSearch({ url: "" })).rejects.toBeInstanceOf(EmptyImageUrlError);
+    await expect(
+      executeImageSearch({ url: "https://example.com/input.jpg", provider: "brave" }),
+    ).rejects.toBeInstanceOf(TypeError);
+    await expect(
+      executeImageSearch({ url: "https://example.com/input.jpg", maxResults: 21 }),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(mockGetJSON).not.toHaveBeenCalled();
   });
 
   it("distinguishes automatic and explicit reader provenance", async () => {

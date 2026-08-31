@@ -4,6 +4,7 @@ import { encode } from "@toon-format/toon";
 import { builtinProviders } from "./core/providers.ts";
 import { createSearchProvider } from "./core/registry.ts";
 import { searchAll, searchWithFallback } from "./core/all.ts";
+import { imageSearchProviderNames, searchByImage } from "./core/image.ts";
 import { readProviderNames, readUrl } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
 import { listProviders } from "./core/resolve.ts";
@@ -45,6 +46,27 @@ const WebPlugin: Plugin = async () => ({
         }
         const response = await searchWithFallback(query, { maxResults });
         return encode(response.results);
+      },
+    }),
+    web_search_image: tool({
+      description:
+        "Find public pages containing or resembling an image available by URL. Returns matched page and image URLs with dimensions and rank metadata.",
+      args: {
+        url: z.string().url().describe("Public HTTP or HTTPS image URL"),
+        provider: z
+          .enum(imageSearchProviderNames)
+          .optional()
+          .describe("Reverse image search provider. Defaults to SerpAPI Google Lens."),
+        maxResults: z
+          .number()
+          .int()
+          .min(1)
+          .max(20)
+          .optional()
+          .describe("Maximum matches to return. Defaults to 10."),
+      },
+      async execute(args) {
+        return encode(await searchByImage(args.url, args));
       },
     }),
     web_read: tool({

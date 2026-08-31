@@ -55,6 +55,30 @@ export interface SearchFilterCapabilities {
   readonly categories?: readonly string[];
 }
 
+/** One public page and image returned by reverse image search. */
+export interface ImageSearchResult {
+  pageUrl: string;
+  imageUrl: string;
+  title: string;
+  provider: string;
+  source?: string;
+  thumbnailUrl?: string;
+  imageWidth?: number;
+  imageHeight?: number;
+  thumbnailWidth?: number;
+  thumbnailHeight?: number;
+  position?: number;
+  exactMatch?: boolean;
+}
+
+/** Options shared by reverse image search providers. */
+export interface ImageSearchOptions {
+  maxResults?: number;
+}
+
+/** Immutable reverse image search options accepted by providers. */
+export type ImageSearchRequestOptions = Readonly<ImageSearchOptions>;
+
 export interface ReadResult {
   url: string;
   title?: string;

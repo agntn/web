@@ -1,5 +1,7 @@
 import { defaultClient, type Client } from "./client.ts";
 import type {
+  ImageSearchRequestOptions,
+  ImageSearchResult,
   ProviderConfig,
   ReadOptions,
   ReadResult,
@@ -59,6 +61,11 @@ export interface DetailedSearchProvider {
   searchDetailed(query: string, options?: SearchRequestOptions): Promise<SearchResponse>;
 }
 
+/** Provider capability for finding public pages from an image URL. */
+export interface ImageSearchProvider {
+  searchByImage(url: string, options?: ImageSearchRequestOptions): Promise<ImageSearchResult[]>;
+}
+
 export interface ReadProvider {
   read(url: string, options?: Readonly<ReadOptions>): Promise<ReadResult>;
 }
@@ -75,6 +82,17 @@ export function isDetailedSearchProvider(
   provider: object,
 ): provider is Provider & DetailedSearchProvider {
   return "searchDetailed" in provider && typeof provider.searchDetailed === "function";
+}
+
+/**
+ * Return whether a provider implements reverse image search.
+ * @param provider - Provider instance to inspect.
+ * @returns {boolean} Whether the capability is present.
+ */
+export function isImageSearchProvider(
+  provider: object,
+): provider is Provider & ImageSearchProvider {
+  return "searchByImage" in provider && typeof provider.searchByImage === "function";
 }
 
 export function isReadProvider(provider: object): provider is Provider & ReadProvider {
