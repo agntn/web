@@ -28,7 +28,7 @@ export async function readUrl(
   try {
     return await createReadProvider(providerName).read(trimmedUrl, readOptions);
   } catch (error) {
-    if (!shouldFallback(requestedProviderName, error)) throw error;
+    if (!shouldFallback(requestedProviderName, providerName, error)) throw error;
     return readFromConfiguredFallbacks(trimmedUrl, readOptions, providerName, error);
   }
 }
@@ -65,12 +65,20 @@ function configuredReadProviders(initialProvider: string): ReadProviderName[] {
   );
 }
 
-function shouldFallback(requestedProvider: string | undefined, error: unknown): boolean {
-  return !requestedProvider && isPaymentRequired(error);
+function shouldFallback(
+  requestedProvider: string | undefined,
+  initialProvider: string,
+  error: unknown,
+): boolean {
+  return !requestedProvider && (isPaymentRequired(error) || isJinaConflict(initialProvider, error));
 }
 
 function isPaymentRequired(error: unknown): error is HTTPError {
   return error instanceof HTTPError && error.statusCode === 402;
+}
+
+function isJinaConflict(provider: string, error: unknown): error is HTTPError {
+  return provider === "jina" && error instanceof HTTPError && error.statusCode === 409;
 }
 
 function isBuiltinProvider(name: string): boolean {

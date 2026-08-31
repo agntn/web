@@ -133,7 +133,7 @@ const page = await readUrl("https://example.com/article", {
 console.log(page.title, page.content);
 ```
 
-Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Context.dev, Firecrawl, and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`.
+Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Context.dev, Firecrawl, and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`. Without an explicit provider, `readUrl` starts with Jina and tries configured readers if Jina returns HTTP 402 or 409. Explicit provider selection stays strict.
 
 ### Batch operations
 
