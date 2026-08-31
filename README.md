@@ -359,7 +359,7 @@ interface ReadUrlOptions {
 }
 ```
 
-The built-in read providers are `jina`, `context`, `firecrawl`, and `tinyfish`. Custom registered provider names also work at runtime.
+The built-in read providers are `jina`, `context`, `firecrawl`, and `tinyfish`. Custom registered provider names also work at runtime. Jina supports `maxTokens`; Firecrawl rejects that option instead of silently ignoring it.
 
 ## Development
 

@@ -7,7 +7,7 @@ import type {
   ProviderConfig,
 } from "../core/types.ts";
 import { Provider } from "../core/provider.ts";
-import { AuthError, normalizeError } from "../core/errors.ts";
+import { AuthError, WebError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface FirecrawlWebResult {
@@ -101,6 +101,10 @@ class FirecrawlProvider extends Provider {
   }
 
   async read(url: string, options?: Readonly<ReadOptions>): Promise<ReadResult> {
+    if (options?.maxTokens !== undefined) {
+      throw new WebError("Firecrawl does not support the maxTokens read option");
+    }
+
     try {
       const response = await this.client.postJSON<FirecrawlScrapeResponse>(
         `${this.baseURL}/v2/scrape`,

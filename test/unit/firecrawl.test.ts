@@ -23,7 +23,7 @@ vi.mock("../../src/core/client.ts", () => ({
 
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import { isDetailedSearchProvider, isReadProvider } from "../../src/core/provider.ts";
-import { AuthError } from "../../src/core/errors.ts";
+import { AuthError, WebError } from "../../src/core/errors.ts";
 import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 
 // Triggers self-registration of firecrawl provider
@@ -324,6 +324,15 @@ describe("firecrawl provider", () => {
         "https://docs.firecrawl.dev",
       ]);
       expect(result.image).toBe("https://www.firecrawl.dev/og.png");
+    });
+
+    it("rejects maxTokens before sending a scrape request", async () => {
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+
+      await expect(provider.read("https://example.com", { maxTokens: 500 })).rejects.toThrowError(
+        new WebError("Firecrawl does not support the maxTokens read option"),
+      );
+      expect(mockPostJSON).not.toHaveBeenCalled();
     });
 
     it("passes format option to formats array", async () => {
