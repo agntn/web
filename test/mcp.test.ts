@@ -10,6 +10,7 @@ const providerEnvKeys = [
   "CONTEXT_DEV_API_KEY",
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
+  "MOJEEK_API_KEY",
   "TAVILY_API_KEY",
   "TINYFISH_API_KEY",
   "SERPAPI_API_KEY",

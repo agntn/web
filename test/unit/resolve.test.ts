@@ -12,6 +12,7 @@ const envKeys = [
   "CONTEXT_DEV_API_KEY",
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
+  "MOJEEK_API_KEY",
   "TAVILY_API_KEY",
   "TINYFISH_API_KEY",
   "SERPAPI_API_KEY",
@@ -50,12 +51,14 @@ describe("resolve", () => {
       process.env.BRAVE_API_KEY = "test-key";
       process.env.CONTEXT_DEV_API_KEY = "test-key";
       process.env.JINA_API_KEY = "test-key";
+      process.env.MOJEEK_API_KEY = "test-key";
       process.env.TINYFISH_API_KEY = "test-key";
       const available = detectAvailableProviders();
       expect(available).toContain("exa");
       expect(available).toContain("brave");
       expect(available).toContain("context");
       expect(available).toContain("jina");
+      expect(available).toContain("mojeek");
       expect(available).toContain("tinyfish");
     });
 
@@ -164,6 +167,9 @@ describe("resolve", () => {
         jina: {
           filters: ["includeDomains", "category"],
           categories: ["web", "images", "news"],
+        },
+        mojeek: {
+          filters: ["includeDomains", "excludeDomains", "startPublishedDate", "endPublishedDate"],
         },
         tavily: { filters: ["includeDomains", "excludeDomains"] },
         tinyfish: {

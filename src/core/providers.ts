@@ -4,6 +4,7 @@ export const builtinProviders = [
   "exa",
   "firecrawl",
   "jina",
+  "mojeek",
   "searxng",
   "serpapi",
   "serpbase",
@@ -19,6 +20,7 @@ const providerApiKeyEnvVars = {
   exa: "EXA_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
   jina: "JINA_API_KEY",
+  mojeek: "MOJEEK_API_KEY",
   searxng: null,
   serpapi: "SERPAPI_API_KEY",
   serpbase: "SERPBASE_API_KEY",
@@ -36,6 +38,7 @@ export const providerDetectionOrder = [
   "tinyfish",
   "serpapi",
   "serpbase",
+  "mojeek",
 ] as const satisfies readonly WebSearchProviderName[];
 
 export function providerApiKeyEnvVar(name: string): string | null {

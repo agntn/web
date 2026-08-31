@@ -2,6 +2,7 @@ import "./exa.ts";
 import "./brave.ts";
 import "./context.ts";
 import "./jina.ts";
+import "./mojeek.ts";
 import "./tavily.ts";
 import "./tinyfish.ts";
 import "./serpapi.ts";

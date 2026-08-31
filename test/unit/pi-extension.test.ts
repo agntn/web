@@ -6,7 +6,7 @@ import { builtinProviders } from "../../src/index.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { providerApiKeyEnvVar } from "../../src/core/providers.ts";
 
-type CapturedTool = Readonly<Pick<ToolDefinition, "name" | "execute">>;
+type CapturedTool = Readonly<Pick<ToolDefinition, "name" | "parameters" | "execute">>;
 type CapturedCommand = Parameters<ExtensionAPI["registerCommand"]>[1];
 
 describe("Pi extension", () => {
@@ -18,6 +18,16 @@ describe("Pi extension", () => {
 
   it("registers reverse image search as a separate tool", () => {
     expect(captureTools().has("web_search_image")).toBe(true);
+  });
+
+  it("advertises every built-in text search provider", () => {
+    const searchTool = captureTools().get("web_search");
+    if (!searchTool) throw new Error("web_search was not registered");
+
+    const parameters = JSON.stringify(searchTool.parameters);
+    for (const provider of builtinProviders) {
+      expect(parameters).toContain(`, ${provider}`);
+    }
   });
 
   it("executes reverse image search through the live SerpAPI provider", async () => {

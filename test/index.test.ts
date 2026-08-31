@@ -31,6 +31,7 @@ describe("@agntn/web", () => {
       "exa",
       "firecrawl",
       "jina",
+      "mojeek",
       "searxng",
       "serpapi",
       "serpbase",
