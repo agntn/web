@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
-import {
-  NoProviderConfiguredError,
-  SearchNotSupportedError,
-  UnknownProviderError,
-} from "../../src/core/errors.ts";
+import { HTTPError, SearchNotSupportedError, UnknownProviderError } from "../../src/core/errors.ts";
 
 const mockLog = vi.fn<(message: unknown) => void>();
 const mockInfo = vi.fn<(message: unknown) => void>();
@@ -18,7 +14,8 @@ const mockCreate = vi.fn((name: string, config: Readonly<Record<string, unknown>
     ? { search: mockSearch, searchDetailed: mockSearchDetailed }
     : { search: mockSearch };
 });
-const mockResolveDefaultProvider = vi.fn(() => "brave");
+const mockDetectAvailableProviders = vi.fn(() => ["exa", "brave"]);
+const mockDetectAvailableProvidersAsync = vi.fn(async () => ["exa", "brave"]);
 
 vi.mock("consola", () => ({
   consola: {
@@ -29,13 +26,15 @@ vi.mock("consola", () => ({
 }));
 
 vi.mock("../../src/core/registry.ts", () => ({
-  createSearchProvider: (name: string, config: Readonly<Record<string, unknown>>) =>
+  createSearchProvider: (name: string, config: Readonly<Record<string, unknown>> = {}) =>
     mockCreate(name, config),
+  has: vi.fn(() => true),
   providers: vi.fn(() => ["brave", "exa"]),
 }));
 
 vi.mock("../../src/core/resolve.ts", () => ({
-  resolveDefaultProvider: () => mockResolveDefaultProvider(),
+  detectAvailableProviders: () => mockDetectAvailableProviders(),
+  detectAvailableProvidersAsync: () => mockDetectAvailableProvidersAsync(),
 }));
 
 vi.mock("../../src/providers/index.ts", () => ({}));
@@ -83,7 +82,8 @@ describe("search command", () => {
     mockSearch.mockReset();
     mockSearchDetailed.mockReset();
     mockCreate.mockClear();
-    mockResolveDefaultProvider.mockClear();
+    mockDetectAvailableProviders.mockClear();
+    mockDetectAvailableProvidersAsync.mockClear();
     mockSearch.mockResolvedValue([]);
     mockSearchDetailed.mockResolvedValue({
       results: [],
@@ -100,18 +100,26 @@ describe("search command", () => {
     stdoutSpy = undefined;
   });
 
-  it("uses resolved default provider when provider arg is omitted", async () => {
-    await runSearch({ provider: undefined });
+  it("falls through automatic providers after HTTP 402", async () => {
+    const results = [{ url: "https://example.com", title: "Example", snippet: "Result" }];
+    mockSearch
+      .mockRejectedValueOnce(new HTTPError(402, "https://api.exa.ai/search", "Payment required"))
+      .mockResolvedValueOnce(results);
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-    expect(mockResolveDefaultProvider).toHaveBeenCalledOnce();
-    expect(mockCreate).toHaveBeenCalledWith("brave", {});
+    await runSearch({ provider: undefined, json: true });
+
+    expect(mockCreate.mock.calls.map(([name]) => name)).toEqual(["exa", "brave"]);
+    expect(stdoutSpy).toHaveBeenCalledWith(`${JSON.stringify(results, null, 2)}\n`);
   });
 
-  it("uses explicit provider when provider arg is set", async () => {
-    await runSearch({ provider: "exa" });
+  it("keeps HTTP 402 visible for an explicit provider", async () => {
+    const failure = new HTTPError(402, "https://api.exa.ai/search", "Payment required");
+    mockSearch.mockRejectedValueOnce(failure);
 
-    expect(mockResolveDefaultProvider).not.toHaveBeenCalled();
-    expect(mockCreate).toHaveBeenCalledWith("exa", {});
+    await expect(runSearch({ provider: "exa" })).rejects.toBe(failure);
+
+    expect(mockCreate.mock.calls.map(([name]) => name)).toEqual(["exa"]);
   });
 
   it("prints detailed provider metadata in JSON output", async () => {
@@ -148,8 +156,7 @@ describe("search command", () => {
   it("treats empty string provider as omitted", async () => {
     await runSearch({ provider: "" });
 
-    expect(mockResolveDefaultProvider).toHaveBeenCalledOnce();
-    expect(mockCreate).toHaveBeenCalledWith("brave", {});
+    expect(mockCreate).toHaveBeenCalledWith("exa", {});
   });
 
   it("exits with a helpful message for non-numeric --max-results", async () => {
@@ -182,12 +189,12 @@ describe("search command", () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
-  it("reports unknown provider using resolved provider name", async () => {
+  it("reports an unknown explicit provider by name", async () => {
     mockCreate.mockImplementationOnce(() => {
       throw new UnknownProviderError("brave");
     });
 
-    await expect(runSearch({ provider: undefined })).rejects.toThrow("__EXIT__");
+    await expect(runSearch({ provider: "brave" })).rejects.toThrow("__EXIT__");
 
     expect(mockError).toHaveBeenCalledWith("Unknown provider: brave");
     expect(exitSpy).toHaveBeenCalledWith(1);
@@ -221,9 +228,8 @@ describe("search command", () => {
   });
 
   it("shows a helpful message when no provider is configured", async () => {
-    mockResolveDefaultProvider.mockImplementationOnce(() => {
-      throw new NoProviderConfiguredError();
-    });
+    mockDetectAvailableProvidersAsync.mockResolvedValueOnce([]);
+    mockDetectAvailableProviders.mockReturnValueOnce([]);
 
     await expect(runSearch({ provider: undefined })).rejects.toThrow("__EXIT__");
 

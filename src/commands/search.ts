@@ -36,15 +36,20 @@ export default defineCommand({
   },
   async run({ args }) {
     const registry = await import("../core/registry.ts");
-    const providerTypes = await import("../core/provider.ts");
-    const resolve = await import("../core/resolve.ts");
     const parsed = parseSearchArguments(args);
-    let providerName = parsed.provider;
+    const providerName = parsed.provider;
     try {
-      providerName ||= resolve.resolveDefaultProvider();
       await import("../providers/index.ts");
-      const provider = registry.createSearchProvider(providerName, {});
-      await writeSearchResult(provider, providerTypes, parsed);
+      if (providerName) {
+        const providerTypes = await import("../core/provider.ts");
+        const provider = registry.createSearchProvider(providerName, {});
+        await writeSearchResult(provider, providerTypes, parsed);
+        return;
+      }
+
+      const { searchWithFallback } = await import("../core/all.ts");
+      const response = await searchWithFallback(parsed.query, { maxResults: parsed.maxResults });
+      writeSearchResults(response.results, parsed.json);
     } catch (error) {
       await handleSearchError(error, providerName, registry);
     }
@@ -88,7 +93,16 @@ async function writeSearchResult(
     return;
   }
   const results = await provider.search(args.query, { maxResults: args.maxResults });
-  if (args.json) {
+  writeSearchResults(results, args.json);
+}
+
+function writeSearchResults(
+  results: readonly Readonly<
+    Pick<import("../core/types.ts").SearchResult, "title" | "url" | "snippet">
+  >[],
+  json: boolean,
+): void {
+  if (json) {
     process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
     return;
   }
