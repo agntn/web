@@ -13,6 +13,8 @@ import type {
   RuntimeInfo,
   SearchAllResult,
   SearchBatchItem,
+  SearchFilterName,
+  SearchFilterReport,
   SearchRequestOptions,
   SearchResult,
   WebSearchProviderName,
@@ -25,6 +27,8 @@ type SearchSingleDetails = {
   readonly options: SearchRequestOptions;
   readonly count: number;
   readonly results: readonly SearchResult[];
+  readonly ignoredFilters: readonly SearchFilterName[];
+  readonly undeclaredFilters: readonly SearchFilterName[];
 };
 
 type SearchAllDetails = {
@@ -34,6 +38,7 @@ type SearchAllDetails = {
   readonly count: number;
   readonly results: readonly SearchAllResult[];
   readonly errors: { provider: string; error: string }[];
+  readonly filterReports: readonly SearchFilterReport[];
 };
 
 type SearchBatchDetails = {
@@ -193,7 +198,7 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_search",
     label: "Web Search",
     description:
-      "Read-only/open-world network search: query one configured provider (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Always returns {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Context.dev adds relevance metadata, Firecrawl adds markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, TinyFish adds publisher and research metadata, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata.",
+      "Read-only/open-world network search: query one configured provider (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Responses report filters the selected provider ignored. Each result includes {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Context.dev adds relevance metadata, Firecrawl adds markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, TinyFish adds publisher and research metadata, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata.",
     promptSnippet:
       "Search the web with web_search. Pass a query array for independent batch results, or use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
@@ -253,7 +258,13 @@ export default function webExtension(pi: ExtensionAPI) {
         });
         const result: AgentToolResult<SearchDetails> = {
           content: [
-            { type: "text", text: withHeader(header, formatAllResults(results, response.errors)) },
+            {
+              type: "text",
+              text: withHeader(
+                header,
+                formatAllResults(results, response.errors, response.filterReports),
+              ),
+            },
           ],
           details: {
             mode: "all",
@@ -265,29 +276,34 @@ export default function webExtension(pi: ExtensionAPI) {
               provider: e.provider,
               error: e.error.message,
             })),
+            filterReports: response.filterReports,
           },
         };
         return result;
       }
 
       if (providerName !== undefined) {
-        const results = await web.createSearchProvider(providerName).search(query, searchOptions);
+        const response = await web.searchProviderDetailed(providerName, query, searchOptions);
         const header = buildHeader({
           mode: "single",
           provider: providerName,
           query,
-          count: results.length,
+          count: response.results.length,
           autoSelected: false,
+          ignoredFilters: response.ignoredFilters,
+          undeclaredFilters: response.undeclaredFilters,
         });
         return {
-          content: [{ type: "text", text: withHeader(header, formatResults(results)) }],
+          content: [{ type: "text", text: withHeader(header, formatResults(response.results)) }],
           details: {
             mode: "single",
             query,
             provider: providerName,
             options: searchOptions,
-            count: results.length,
-            results,
+            count: response.results.length,
+            results: response.results,
+            ignoredFilters: response.ignoredFilters,
+            undeclaredFilters: response.undeclaredFilters,
           },
         };
       }
@@ -299,6 +315,8 @@ export default function webExtension(pi: ExtensionAPI) {
         query,
         count: response.results.length,
         autoSelected: true,
+        ignoredFilters: response.ignoredFilters,
+        undeclaredFilters: response.undeclaredFilters,
       });
       return {
         content: [{ type: "text", text: withHeader(header, formatResults(response.results)) }],
@@ -309,6 +327,8 @@ export default function webExtension(pi: ExtensionAPI) {
           options: searchOptions,
           count: response.results.length,
           results: response.results,
+          ignoredFilters: response.ignoredFilters,
+          undeclaredFilters: response.undeclaredFilters,
         },
       };
     },
@@ -388,10 +408,10 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_providers",
     label: "Web Providers",
     description:
-      "Read-only/idempotent local/env status: show the running web build and list built-in search providers with their current configuration.",
+      "Read-only/idempotent local/env status: show the running web build and list built-in providers with configuration and search filter support.",
     promptSnippet: "List configured web providers.",
     promptGuidelines: [
-      "Use web_providers before web_search if it is unclear which providers are available.",
+      "Use web_providers before web_search if provider availability or filter support is unclear.",
     ],
     parameters: emptyParameters,
     renderCall(_args, theme) {
@@ -585,6 +605,8 @@ type HeaderOpts =
       readonly query: string;
       readonly count: number;
       readonly autoSelected: boolean;
+      readonly ignoredFilters: readonly SearchFilterName[];
+      readonly undeclaredFilters: readonly SearchFilterName[];
     }
   | {
       readonly mode: "all";
@@ -597,7 +619,12 @@ type HeaderOpts =
 function buildHeader(o: HeaderOpts): string {
   if (o.mode === "single") {
     const tag = o.autoSelected ? " (auto-selected default)" : "";
-    return `[provider=${o.provider}] ${o.count} result(s) for "${o.query}"${tag}`;
+    const ignored = o.ignoredFilters.length === 0 ? "" : ` [ignored=${o.ignoredFilters.join(",")}]`;
+    const undeclared =
+      o.undeclaredFilters.length === 0
+        ? ""
+        : ` [filter support undeclared=${o.undeclaredFilters.join(",")}]`;
+    return `[provider=${o.provider}] ${o.count} result(s) for "${o.query}"${tag}${ignored}${undeclared}`;
   }
   const list = o.okProviders.length > 0 ? ` [${o.okProviders.join(", ")}]` : "";
   const errs = o.errCount > 0 ? ` (+${o.errCount} provider error(s))` : "";
@@ -614,20 +641,31 @@ function formatProviderStatus(s: Readonly<ProviderStatus>): string {
   //   ✓  configured AND reachable (or no probe = trust env)
   //   ⚠  configured BUT probe returned false (e.g. SearXNG endpoint down)
   //   ·  not configured (no env var / not registered)
-  let symbol = "·";
-  if (s.configured) {
-    symbol = s.reachable === false ? "⚠" : "✓";
-  }
+  const symbol = providerStatusSymbol(s);
   const envLabel = s.envVar ? ` (${s.envVar})` : "";
   const reachabilityNote = s.configured && s.reachable === false ? " - unreachable" : "";
-  return `${symbol} ${s.name}${envLabel}${reachabilityNote}`;
+  const filters = s.searchFilters?.join(",") || "none";
+  const categories = s.searchCategories?.length
+    ? ` categories=${s.searchCategories.join(",")}`
+    : "";
+  return `${symbol} ${s.name}${envLabel}${reachabilityNote} filters=${filters}${categories}`;
+}
+
+function providerStatusSymbol(status: Readonly<ProviderStatus>): string {
+  if (!status.configured) return "·";
+  return status.reachable === false ? "⚠" : "✓";
 }
 
 type SearchResultView = Readonly<Pick<SearchResult, "url" | "title" | "snippet">>;
 type SearchAllResultView = SearchResultView & Readonly<Pick<SearchAllResult, "provider">>;
 type SearchBatchItemView =
   | { readonly query: string; readonly error: string }
-  | { readonly query: string; readonly results: readonly SearchResultView[] };
+  | {
+      readonly query: string;
+      readonly provider: string;
+      readonly results: readonly SearchResultView[];
+      readonly filterReports: readonly SearchFilterReport[];
+    };
 type ReadBatchItemView =
   | { readonly url: string; readonly error: string }
   | {
@@ -653,8 +691,13 @@ function formatResults(results: readonly SearchResultView[]): readonly string[] 
 function formatAllResults(
   results: readonly SearchAllResultView[],
   errors: readonly ProviderErrorView[],
+  filterReports: readonly SearchFilterReport[],
 ): readonly string[] {
-  const lines = results.map((r, i) => `${formatResult(r, i)}\n   [${r.provider}]`);
+  const lines =
+    results.length === 0
+      ? ["No results."]
+      : results.map((r, i) => `${formatResult(r, i)}\n   [${r.provider}]`);
+  lines.push(...formatFilterReports(filterReports));
   if (errors.length > 0) {
     lines.push("", "Provider errors:");
     for (const e of errors) {
@@ -668,11 +711,30 @@ function formatSearchBatch(outcomes: readonly SearchBatchItemView[]): string {
   return outcomes
     .map((outcome, index) => {
       const header = `[${index + 1}] ${outcome.query}`;
-      return "error" in outcome
-        ? `${header}\nError: ${outcome.error}`
-        : withHeader(header, formatResults(outcome.results));
+      if ("error" in outcome) return `${header}\nError: ${outcome.error}`;
+      const lines = [
+        ...(outcome.results.length === 0 ? ["No results."] : formatResults(outcome.results)),
+        ...formatFilterReports(outcome.filterReports),
+      ];
+      return withHeader(`${header} [provider=${outcome.provider}]`, lines);
     })
     .join("\n\n");
+}
+
+function formatFilterReports(reports: readonly SearchFilterReport[]): readonly string[] {
+  if (reports.length === 0) return [];
+  const lines = ["", "Filter warnings:"];
+  for (const report of reports) {
+    if (report.ignoredFilters.length > 0) {
+      lines.push(`  ${report.provider}: ignored ${report.ignoredFilters.join(", ")}`);
+    }
+    if (report.undeclaredFilters.length > 0) {
+      lines.push(
+        `  ${report.provider}: support undeclared for ${report.undeclaredFilters.join(", ")}`,
+      );
+    }
+  }
+  return lines;
 }
 
 function formatReadBatch(outcomes: readonly ReadBatchItemView[]): string {

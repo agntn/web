@@ -1,5 +1,6 @@
 import type {
   ProviderConfig,
+  SearchFilterCapabilities,
   ReadOptions,
   ReadResult,
   SearchRequestOptions,
@@ -63,10 +64,21 @@ interface TinyfishFetchResponse {
 
 const TINYFISH_MAX_FETCH_TIMEOUT_MS = 110_000;
 const TINYFISH_CLIENT_TIMEOUT_MS = 150_000;
+const TINYFISH_SEARCH_CATEGORIES = ["news", "research_paper"] as const;
 
 class TinyfishProvider extends Provider {
   static readonly providerName = "tinyfish";
   static readonly defaultBaseURL = "https://api.search.tinyfish.ai";
+  static readonly searchFilterCapabilities = {
+    filters: [
+      "includeDomains",
+      "excludeDomains",
+      "category",
+      "startPublishedDate",
+      "endPublishedDate",
+    ],
+    categories: TINYFISH_SEARCH_CATEGORIES,
+  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
   private readonly readBaseURL: string;
@@ -139,8 +151,14 @@ function domainSearchParams(options?: SearchRequestOptions): Record<string, stri
 }
 
 function categorySearchParams(category?: string): Record<string, string> {
-  if (category !== "news" && category !== "research_paper") return {};
+  if (!isTinyfishSearchCategory(category)) return {};
   return { domain_type: category };
+}
+
+function isTinyfishSearchCategory(
+  category: string | undefined,
+): category is (typeof TINYFISH_SEARCH_CATEGORIES)[number] {
+  return TINYFISH_SEARCH_CATEGORIES.some((supported) => supported === category);
 }
 
 function dateSearchParams(options?: SearchRequestOptions): Record<string, string> {

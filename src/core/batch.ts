@@ -1,9 +1,19 @@
 import { EmptyQueryError, EmptyUrlError } from "./errors.ts";
-import { prepareSearchWithFallback, searchAllDetailed } from "./all.ts";
-import { createSearchProvider } from "./registry.ts";
+import {
+  prepareSearchWithFallback,
+  searchAllDetailed,
+  searchProviderDetailed,
+  type SearchProviderResult,
+} from "./all.ts";
 import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
 import type { WebSearchProviderName } from "./providers.ts";
-import type { ReadResult, SearchRequestOptions, SearchResult } from "./types.ts";
+import { hasSearchFilterWarning, type SearchFilterReport } from "./search-filters.ts";
+import type {
+  ReadonlySearchResult,
+  ReadResult,
+  SearchRequestOptions,
+  SearchResult,
+} from "./types.ts";
 
 /** Maximum number of network operations accepted by one agent-tool batch. */
 export const MAX_BATCH_ITEMS = 10;
@@ -15,7 +25,12 @@ export type SearchBatchOptions = SearchRequestOptions & {
 
 /** One successful or failed query outcome. */
 export type SearchBatchItem =
-  | { readonly query: string; readonly results: readonly SearchResult[] }
+  | {
+      readonly query: string;
+      readonly provider: string;
+      readonly results: readonly SearchResult[];
+      readonly filterReports: readonly SearchFilterReport[];
+    }
   | { readonly query: string; readonly error: string };
 
 /** One successful or failed URL outcome. */
@@ -57,10 +72,7 @@ export async function searchBatch(
     try {
       const search = await prepareSearchWithFallback(searchOptions);
       return mapSearchOutcomes(
-        await settleBatch(queries, async (query) => {
-          const response = await search(query);
-          return response.results;
-        }),
+        await settleBatch(queries, async (query) => singleBatchResult(await search(query))),
       );
     } catch (error) {
       return queries.map((query) => ({ query, error: errorMessage(error) }));
@@ -68,9 +80,10 @@ export async function searchBatch(
   }
 
   try {
-    const provider = createSearchProvider(requestedProvider);
     return mapSearchOutcomes(
-      await settleBatch(queries, (query) => provider.search(query, searchOptions)),
+      await settleBatch(queries, async (query) =>
+        singleBatchResult(await searchProviderDetailed(requestedProvider, query, searchOptions)),
+      ),
     );
   } catch (error) {
     return queries.map((query) => ({ query, error: errorMessage(error) }));
@@ -118,16 +131,34 @@ type BatchOutcome<TResult> =
   | { readonly ok: true; readonly input: string; readonly value: TResult }
   | { readonly ok: false; readonly input: string; readonly error: string };
 
+interface BatchSearchResult {
+  readonly provider: string;
+  readonly results: readonly ReadonlySearchResult[];
+  readonly filterReports: readonly SearchFilterReport[];
+}
+
+type ReadonlySearchProviderResult = Readonly<Omit<SearchProviderResult, "results">> & {
+  readonly results: readonly ReadonlySearchResult[];
+};
+
 async function searchAllForBatch(
   query: string,
-  options: SearchRequestOptions,
-): Promise<readonly SearchResult[]> {
+  options: Readonly<SearchRequestOptions>,
+): Promise<BatchSearchResult> {
   const response = await searchAllDetailed(query, options);
   if (response.results.length === 0 && response.errors.length > 0) {
     const errors = response.errors.map(({ provider, error }) => `${provider}: ${error.message}`);
     throw new Error(`Search providers failed: ${errors.join("; ")}`);
   }
-  return response.results;
+  return { provider: "all", results: response.results, filterReports: response.filterReports };
+}
+
+function singleBatchResult(response: ReadonlySearchProviderResult): BatchSearchResult {
+  const { provider, ignoredFilters, undeclaredFilters } = response;
+  const filterReports = hasSearchFilterWarning(response)
+    ? [{ provider, ignoredFilters, undeclaredFilters }]
+    : [];
+  return { provider, results: response.results, filterReports };
 }
 
 async function settleBatch<TResult>(
@@ -145,14 +176,28 @@ async function settleBatch<TResult>(
   );
 }
 
-function mapSearchOutcomes<TResult extends readonly SearchResult[]>(
-  outcomes: readonly BatchOutcome<TResult>[],
+function mapSearchOutcomes(
+  outcomes: readonly BatchOutcome<BatchSearchResult>[],
 ): readonly SearchBatchItem[] {
   return outcomes.map((outcome): SearchBatchItem =>
     outcome.ok
-      ? { query: outcome.input, results: outcome.value }
+      ? {
+          query: outcome.input,
+          provider: outcome.value.provider,
+          results: outcome.value.results.map(mutableSearchResult),
+          filterReports: outcome.value.filterReports,
+        }
       : { query: outcome.input, error: outcome.error },
   );
+}
+
+function mutableSearchResult(result: ReadonlySearchResult): SearchResult {
+  const { highlights, metadata, ...rest } = result;
+  return {
+    ...rest,
+    ...(highlights ? { highlights: [...highlights] } : {}),
+    ...(metadata ? { metadata: { ...metadata } } : {}),
+  };
 }
 
 function validateBatch(

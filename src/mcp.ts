@@ -8,8 +8,7 @@ import {
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { builtinProviders } from "./core/providers.ts";
-import { createSearchProvider } from "./core/registry.ts";
-import { searchAll, searchWithFallback } from "./core/all.ts";
+import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
 import { readProviderNames, readUrlDetailed, type ReadProviderName } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError } from "./core/errors.ts";
@@ -37,7 +36,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_search",
       title: "Web Search",
       description:
-        'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results.',
+        'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored.',
       inputSchema: Type.Object({
         query: Type.Union(
           [
@@ -159,7 +158,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_providers",
       title: "Web Providers",
       description:
-        "List available web search providers, their configuration status, and the running build.",
+        "List available web search providers, their configuration and filter support, and the running build.",
       inputSchema: Type.Object({}),
       annotations: {
         title: "Web Providers",
@@ -209,14 +208,17 @@ async function runSearch(
     return searchBatch(query, { provider: requestedProvider, ...searchOptions });
   }
   if (requestedProvider === "all") {
-    return searchAll(query, searchOptions);
+    const response = await searchAllDetailed(query, searchOptions);
+    return {
+      ...response,
+      errors: response.errors.map(({ provider, error }) => ({ provider, error: error.message })),
+    };
   }
 
   if (requestedProvider !== undefined) {
-    return createSearchProvider(requestedProvider).search(query, searchOptions);
+    return searchProviderDetailed(requestedProvider, query, searchOptions);
   }
-  const response = await searchWithFallback(query, searchOptions);
-  return response.results;
+  return searchWithFallback(query, searchOptions);
 }
 
 /**

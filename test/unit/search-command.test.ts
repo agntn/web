@@ -28,6 +28,7 @@ vi.mock("consola", () => ({
 vi.mock("../../src/core/registry.ts", () => ({
   createSearchProvider: (name: string, config: Readonly<Record<string, unknown>> = {}) =>
     mockCreate(name, config),
+  getSearchFilterCapabilities: vi.fn(() => undefined),
   has: vi.fn(() => true),
   providers: vi.fn(() => ["brave", "exa"]),
 }));

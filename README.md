@@ -23,7 +23,7 @@ Provided tools:
 
 - `web_search` - search one query or a batch of queries with a single provider, or use `provider="all"` for provider fan-out
 - `web_read` - read one URL or a batch of URLs and report the effective reader after fallback
-- `web_providers` - show the running build and process start, then list provider configuration and reachability
+- `web_providers` - show the running build and process start, then list configuration, reachability, and search filter support
 
 Provided slash commands:
 
@@ -159,7 +159,7 @@ const searches = await searchBatch(["TypeScript 7", "Node.js releases"], {
 const pages = await readBatch(["https://example.com/one", "https://example.com/two"]);
 ```
 
-Each search outcome is `{ query, results }` or `{ query, error }`. Each read outcome is `{ url, result }` or `{ url, error }`.
+Each successful search outcome is `{ query, provider, results, filterReports }`; failures are `{ query, error }`. Each read outcome is `{ url, result }` or `{ url, error }`.
 
 ### AI SDK tool
 
@@ -176,7 +176,7 @@ const { text } = await generateText({
 });
 ```
 
-`searchTool` accepts one query or an array of queries. `readTool` accepts one URL or an array of URLs. Batch calls use the outcome shapes above, while scalar calls keep their original result shape:
+`searchTool` accepts one query or an array of queries. Explicit and automatic scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters }`; `provider="all"` returns `{ results, errors, filterReports }`. `readTool` accepts one URL or an array of URLs, and batch calls use the outcome shapes above:
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
@@ -214,7 +214,7 @@ Read commands use automatic selection unless `--provider` is set. Scalar JSON is
 
 - `web_search` - search one query or a batch, or use `provider="all"` for provider fan-out
 - `web_read` - read one URL or a batch and return effective provider provenance
-- `web_providers` - show the running build and process start, then list provider configuration
+- `web_providers` - show the running build and process start, then list configuration and search filter support
 
 Register it with any MCP client:
 
@@ -354,7 +354,22 @@ interface SearchOptions {
 }
 ```
 
-`maxResults` works with every search provider. TinyFish supports domain and date filters plus `news` and `research_paper` categories. Context.dev, Exa, and Tavily support domain filters, while Jina supports include filters through `site`. Other category support varies by provider.
+`maxResults` works with every search provider. The other filters are provider-specific:
+
+| Provider    | Domain filters   | Category values                              | Date bounds |
+| ----------- | ---------------- | -------------------------------------------- | ----------- |
+| Brave       | none             | none                                         | none        |
+| Context.dev | include, exclude | none                                         | none        |
+| Exa         | include, exclude | forwarded as given                           | start, end  |
+| Firecrawl   | include, exclude | `news`                                       | none        |
+| Jina        | include          | `web`, `images`, `news`                      | none        |
+| SearXNG     | none             | forwarded as given                           | none        |
+| SerpAPI     | none             | none                                         | none        |
+| SerpBase    | none             | `image`, `images`, `news`, `video`, `videos` | none        |
+| Tavily      | include, exclude | none                                         | none        |
+| TinyFish    | include, exclude | `news`, `research_paper`                     | start, end  |
+
+`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters` and `undeclaredFilters`. `searchAllDetailed()` keeps the same diagnostics in `filterReports`. Custom providers without capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the matrix as `searchFilters` and optional `searchCategories`.
 
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 

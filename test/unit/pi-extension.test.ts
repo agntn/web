@@ -90,7 +90,7 @@ describe("Pi extension", () => {
       if (!searchTool) throw new Error("web_search was not registered");
       const execution: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
         "test-call",
-        { query: "test query" },
+        { query: "test query", startPublishedDate: "2024-01-01" },
         undefined,
         undefined,
         undefined,
@@ -105,6 +105,13 @@ describe("Pi extension", () => {
         "content.0.text",
         expect.stringContaining("[provider=brave]"),
       );
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringContaining("[ignored=startPublishedDate]"),
+      );
+      await expect(execution).resolves.toHaveProperty("details.ignoredFilters", [
+        "startPublishedDate",
+      ]);
       const searchUrls = requestedUrls.filter((url) => !url.startsWith("http://localhost:8080"));
       expect(searchUrls).toHaveLength(2);
       expect(searchUrls[0]).toBe("https://api.exa.ai/search");
@@ -142,6 +149,20 @@ describe("Pi extension", () => {
       await expect(execution).resolves.toHaveProperty(
         "content.0.text",
         expect.stringMatching(/^web \S+ build [a-f0-9]{12}, started /),
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringContaining("jina (JINA_API_KEY) filters=includeDomains,category"),
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "details.providers",
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "jina",
+            searchFilters: ["includeDomains", "category"],
+            searchCategories: ["web", "images", "news"],
+          }),
+        ]),
       );
     } finally {
       vi.unstubAllGlobals();

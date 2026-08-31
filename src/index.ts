@@ -10,6 +10,8 @@ export type {
   SearchResponse,
   SearchOptions,
   SearchRequestOptions,
+  SearchFilterName,
+  SearchFilterCapabilities,
   ReadResult,
   ReadOptions,
   ProviderConfig,
@@ -57,16 +59,24 @@ export {
   createReadProvider,
   providers,
   has,
+  getSearchFilterCapabilities,
 } from "./core/registry.ts";
 
-export { searchAll, searchAllDetailed, searchWithFallback } from "./core/all.ts";
+export {
+  searchAll,
+  searchAllDetailed,
+  searchProviderDetailed,
+  searchWithFallback,
+} from "./core/all.ts";
 export type {
   SearchAllOptions,
   SearchAllResult,
   SearchAllResponse,
+  SearchProviderResult,
   SearchWithFallbackResult,
   ProviderError,
 } from "./core/all.ts";
+export type { SearchFilterReport } from "./core/search-filters.ts";
 
 export { readProviderNames, readUrl, readUrlDetailed } from "./core/read.ts";
 export type { ReadProviderName, ReadUrlOptions, ReadUrlDetailedResult } from "./core/read.ts";

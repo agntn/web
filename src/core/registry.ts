@@ -1,4 +1,4 @@
-import type { ProviderConfig } from "./types.ts";
+import type { ProviderConfig, SearchFilterCapabilities } from "./types.ts";
 import { providerApiKeyEnvVar } from "./providers.ts";
 import {
   Provider,
@@ -68,6 +68,10 @@ export function createReadProvider(
 
 export function providers(): string[] {
   return Array.from(providerClasses.keys());
+}
+
+export function getSearchFilterCapabilities(name: string): SearchFilterCapabilities | undefined {
+  return providerClasses.get(name)?.searchFilterCapabilities;
 }
 
 export function has(name: string): boolean {

@@ -15,6 +15,8 @@ type ProviderStatus = {
   readonly name: string;
   readonly envVar: string | null;
   readonly configured: boolean;
+  readonly searchFilters?: readonly string[];
+  readonly searchCategories?: readonly string[];
 };
 
 const envKeys = [
@@ -77,6 +79,9 @@ describe("providers command", () => {
       const output = mockLog.mock.calls.map((c) => String(c[0])).join("\n");
       expect(output).toContain("\u2713");
       expect(output).toContain("exa");
+      expect(output).toContain(
+        "filters=includeDomains,excludeDomains,category,startPublishedDate,endPublishedDate",
+      );
     });
 
     it("shows unconfigured provider with cross and env var hint", async () => {
@@ -121,6 +126,7 @@ describe("providers command", () => {
         name: "brave",
         envVar: "BRAVE_API_KEY",
         configured: true,
+        searchFilters: [],
       });
     });
 
@@ -134,6 +140,13 @@ describe("providers command", () => {
         name: "exa",
         envVar: "EXA_API_KEY",
         configured: false,
+        searchFilters: [
+          "includeDomains",
+          "excludeDomains",
+          "category",
+          "startPublishedDate",
+          "endPublishedDate",
+        ],
       });
     });
 
@@ -147,6 +160,7 @@ describe("providers command", () => {
         name: "searxng",
         envVar: null,
         configured: true,
+        searchFilters: ["category"],
       });
     });
 

@@ -23,7 +23,12 @@ vi.mock("../../src/core/client.ts", () => ({
   })),
 }));
 
-import { searchAll, searchAllDetailed, searchWithFallback } from "../../src/core/all.ts";
+import {
+  searchAll,
+  searchAllDetailed,
+  searchProviderDetailed,
+  searchWithFallback,
+} from "../../src/core/all.ts";
 import {
   UnknownProviderError,
   NoProviderConfiguredError,
@@ -435,6 +440,43 @@ describe("searchAllDetailed", () => {
 
     expect(response.results).toHaveLength(1);
     expect(response.errors).toHaveLength(0);
+    expect(response.filterReports).toEqual([]);
+  });
+
+  it("reports ignored filters per successful provider", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockPostJSON.mockResolvedValue(exaResponse);
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    const response = await searchAllDetailed("test", {
+      providers: ["exa", "brave"],
+      startPublishedDate: "2024-01-01",
+    });
+
+    expect(response.filterReports).toEqual([
+      {
+        provider: "brave",
+        ignoredFilters: ["startPublishedDate"],
+        undeclaredFilters: [],
+      },
+    ]);
+  });
+
+  it("reports value-limited category support", async () => {
+    process.env.JINA_API_KEY = "test-jina";
+    mockGetJSON.mockResolvedValue({ code: 200, status: 20000, data: [] });
+
+    await expect(
+      searchProviderDetailed("jina", "test", { category: "general" }),
+    ).resolves.toMatchObject({
+      provider: "jina",
+      ignoredFilters: ["category"],
+      undeclaredFilters: [],
+    });
+    await expect(
+      searchProviderDetailed("jina", "test", { category: "news" }),
+    ).resolves.toMatchObject({ ignoredFilters: [], undeclaredFilters: [] });
   });
 
   it("reports failed providers in errors array", async () => {
@@ -549,9 +591,13 @@ describe("searchWithFallback", () => {
     );
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    await expect(searchWithFallback("test")).resolves.toMatchObject({
+    await expect(
+      searchWithFallback("test", { startPublishedDate: "2024-01-01" }),
+    ).resolves.toMatchObject({
       provider: "brave",
       results: [expect.objectContaining({ url: "https://b.com" })],
+      ignoredFilters: ["startPublishedDate"],
+      undeclaredFilters: [],
     });
   });
 

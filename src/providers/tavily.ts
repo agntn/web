@@ -1,4 +1,9 @@
-import type { SearchResult, SearchRequestOptions, ProviderConfig } from "../core/types.ts";
+import type {
+  SearchFilterCapabilities,
+  SearchResult,
+  SearchRequestOptions,
+  ProviderConfig,
+} from "../core/types.ts";
 import { Provider } from "../core/provider.ts";
 import { AuthError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
@@ -32,6 +37,9 @@ interface TavilySearchResponse {
 class TavilyProvider extends Provider {
   static readonly providerName = "tavily";
   static readonly defaultBaseURL = "https://api.tavily.com";
+  static readonly searchFilterCapabilities = {
+    filters: ["includeDomains", "excludeDomains"],
+  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 

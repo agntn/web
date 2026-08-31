@@ -5,6 +5,7 @@ import {
   SearchNotSupportedError,
   UnknownProviderError,
 } from "../../src/core/errors.ts";
+import { searchProviderDetailed } from "../../src/core/all.ts";
 import { Provider } from "../../src/core/provider.ts";
 import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 
@@ -181,6 +182,18 @@ describe("registry", () => {
       register(ReadOnlyProvider);
 
       expect(() => createSearchProvider(testProviderName3)).toThrow(SearchNotSupportedError);
+    });
+
+    it("keeps undeclared custom filter support distinct from ignored filters", async () => {
+      register(MockProvider);
+
+      await expect(
+        searchProviderDetailed(testProviderName, "query", { includeDomains: ["example.com"] }),
+      ).resolves.toMatchObject({
+        provider: testProviderName,
+        ignoredFilters: [],
+        undeclaredFilters: ["includeDomains"],
+      });
     });
   });
 });
