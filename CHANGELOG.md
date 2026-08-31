@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.4.0
+
+[compare changes](https://github.com/agntn/web/compare/v0.3.1...v0.4.0)
+
+### 🚀 Enhancements
+
+- **read:** Report effective fallback provider ([#80](https://github.com/agntn/web/pull/80))
+- Identify the running web build ([#81](https://github.com/agntn/web/pull/81))
+- **search:** ⚠️  Reveal dropped filters ([#82](https://github.com/agntn/web/pull/82))
+- Add reverse image search by URL ([#83](https://github.com/agntn/web/pull/83))
+- **search:** Support Mojeek ([#84](https://github.com/agntn/web/pull/84))
+
+### 🩹 Fixes
+
+- **pi:** Leave omitted read provider unset ([#67](https://github.com/agntn/web/pull/67))
+- **search:** Fall through providers after 402 ([#68](https://github.com/agntn/web/pull/68))
+- **build:** Stop broken source map warnings ([#69](https://github.com/agntn/web/pull/69))
+- **cli:** Keep searching after the first 402 ([#75](https://github.com/agntn/web/pull/75))
+- **firecrawl:** Honor noCache for reads ([#76](https://github.com/agntn/web/pull/76))
+- **typecheck:** Check build configuration ([#77](https://github.com/agntn/web/pull/77))
+- **read:** Retry readers after Jina 409 ([#78](https://github.com/agntn/web/pull/78))
+- **firecrawl:** Stop ignoring maxTokens ([#79](https://github.com/agntn/web/pull/79))
+
+### 🏡 Chore
+
+- Replace copied ox policy with @agntn/ox ([#66](https://github.com/agntn/web/pull/66))
+
+#### ⚠️ Breaking Changes
+
+- **search:** ⚠️  Reveal dropped filters ([#82](https://github.com/agntn/web/pull/82))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen <aeitwoen@gmail.com>
+
 ## v0.3.1
 
 [compare changes](https://github.com/agntn/web/compare/v0.3.0...v0.3.1)
