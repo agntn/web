@@ -105,6 +105,7 @@ const PROVIDERS = [
   "exa",
   "firecrawl",
   "jina",
+  "mojeek",
   "searxng",
   "serpapi",
   "serpbase",

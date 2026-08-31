@@ -76,6 +76,7 @@ describe("searchAll", () => {
     delete process.env.CONTEXT_DEV_API_KEY;
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.JINA_API_KEY;
+    delete process.env.MOJEEK_API_KEY;
     delete process.env.TAVILY_API_KEY;
     delete process.env.TINYFISH_API_KEY;
     delete process.env.SERPAPI_API_KEY;
@@ -426,6 +427,7 @@ describe("searchAllDetailed", () => {
     delete process.env.CONTEXT_DEV_API_KEY;
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.JINA_API_KEY;
+    delete process.env.MOJEEK_API_KEY;
     delete process.env.TAVILY_API_KEY;
     delete process.env.TINYFISH_API_KEY;
     delete process.env.SERPAPI_API_KEY;
