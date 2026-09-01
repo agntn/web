@@ -8,7 +8,7 @@
 
 - **read:** Report effective fallback provider ([#80](https://github.com/agntn/web/pull/80))
 - Identify the running web build ([#81](https://github.com/agntn/web/pull/81))
-- **search:** ⚠️  Reveal dropped filters ([#82](https://github.com/agntn/web/pull/82))
+- **search:** ⚠️ Reveal dropped filters ([#82](https://github.com/agntn/web/pull/82))
 - Add reverse image search by URL ([#83](https://github.com/agntn/web/pull/83))
 - **search:** Support Mojeek ([#84](https://github.com/agntn/web/pull/84))
 
@@ -29,7 +29,7 @@
 
 #### ⚠️ Breaking Changes
 
-- **search:** ⚠️  Reveal dropped filters ([#82](https://github.com/agntn/web/pull/82))
+- **search:** ⚠️ Reveal dropped filters ([#82](https://github.com/agntn/web/pull/82))
 
 ### ❤️ Contributors
 
