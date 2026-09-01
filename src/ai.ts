@@ -26,6 +26,10 @@ export const searchTool = tool({
         'Provider to use. Automatic selection tries other configured providers after HTTP 402. Use "all" for parallel search.',
       ),
     maxResults: z.number().min(1).max(20).optional().describe("Max results (default: 10)"),
+    highlights: z
+      .boolean()
+      .optional()
+      .describe("Return passages relevant to the query when supported. Defaults to true."),
     includeDomains: z
       .array(z.string())
       .optional()
@@ -50,6 +54,7 @@ export const searchTool = tool({
     query,
     provider: providerName,
     maxResults,
+    highlights,
     includeDomains,
     excludeDomains,
     category,
@@ -58,6 +63,7 @@ export const searchTool = tool({
   }) => {
     const searchOptions = {
       maxResults,
+      highlights,
       includeDomains,
       excludeDomains,
       category,

@@ -97,6 +97,53 @@ describe("Pi extension", () => {
     }
   });
 
+  it("passes the highlights preference through web_search", async () => {
+    const previousKey = process.env.FIRECRAWL_API_KEY;
+    process.env.FIRECRAWL_API_KEY = "test-key";
+    const requestBodies: unknown[] = [];
+    const fetchMock = vi.fn(async (input: unknown, init?: { readonly body?: string }) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url !== "https://api.firecrawl.dev/v2/search") {
+        throw new Error(`Unexpected request: ${url}`);
+      }
+      const bodyText =
+        input instanceof Request
+          ? await input.clone().text()
+          : typeof init?.body === "string"
+            ? init.body
+            : "";
+      requestBodies.push(JSON.parse(bodyText) as unknown);
+      return new Response(JSON.stringify({ success: true, data: { web: [] } }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    resetDefaultClientForTests();
+
+    try {
+      const searchTool = captureTools().get("web_search");
+      if (!searchTool) throw new Error("web_search was not registered");
+      const execution: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
+        "test-call",
+        { query: "test query", provider: "firecrawl", highlights: false },
+        undefined,
+        undefined,
+        undefined,
+      ]);
+
+      await expect(execution).resolves.toHaveProperty("details.options.highlights", false);
+      expect(requestBodies).toEqual([
+        expect.objectContaining({ query: "test query", highlights: false }),
+      ]);
+    } finally {
+      if (previousKey === undefined) delete process.env.FIRECRAWL_API_KEY;
+      else process.env.FIRECRAWL_API_KEY = previousKey;
+      vi.unstubAllGlobals();
+      resetDefaultClientForTests();
+    }
+  });
+
   it("accepts a search provider added by the live web module", async () => {
     const providerName = `liveprovider${Math.random().toString(36).slice(2)}`;
     Reflect.apply(Array.prototype.push, builtinProviders, [providerName]);

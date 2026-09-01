@@ -48,6 +48,7 @@ type SearchRunArgs = {
   readonly query: string;
   readonly provider?: string;
   readonly "max-results": string;
+  readonly highlights: boolean;
   readonly json: boolean;
   [key: string]: string | number | boolean | readonly string[] | undefined;
 };
@@ -56,6 +57,7 @@ const defaultArgs: SearchRunArgs = {
   _: [],
   query: "test query",
   "max-results": "10",
+  highlights: true,
   json: false,
 };
 
@@ -128,7 +130,10 @@ describe("search command", () => {
 
     await runSearch({ provider: "firecrawl", json: true });
 
-    expect(mockSearchDetailed).toHaveBeenCalledWith("test query", { maxResults: 10 });
+    expect(mockSearchDetailed).toHaveBeenCalledWith("test query", {
+      maxResults: 10,
+      highlights: true,
+    });
     expect(mockSearch).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledWith(
       `${JSON.stringify(
@@ -149,9 +154,21 @@ describe("search command", () => {
 
     await runSearch({ provider: "exa", json: true });
 
-    expect(mockSearch).toHaveBeenCalledWith("test query", { maxResults: 10 });
+    expect(mockSearch).toHaveBeenCalledWith("test query", {
+      maxResults: 10,
+      highlights: true,
+    });
     expect(mockSearchDetailed).not.toHaveBeenCalled();
     expect(stdoutSpy).toHaveBeenCalledWith(`${JSON.stringify(results, null, 2)}\n`);
+  });
+
+  it("passes disabled highlights to the provider", async () => {
+    await runSearch({ provider: "firecrawl", highlights: false });
+
+    expect(mockSearch).toHaveBeenCalledWith("test query", {
+      maxResults: 10,
+      highlights: false,
+    });
   });
 
   it("treats empty string provider as omitted", async () => {

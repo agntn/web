@@ -119,6 +119,7 @@ describe("firecrawl provider", () => {
       expect(body).toMatchObject({
         query: "test query",
         limit: 10,
+        highlights: true,
       });
       expect(headers).toMatchObject({
         Authorization: "Bearer fc-test-key",
@@ -186,6 +187,14 @@ describe("firecrawl provider", () => {
       expect(body.limit).toBe(5);
     });
 
+    it("can disable search highlights", async () => {
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      await provider.search("test query", { highlights: false });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.highlights).toBe(false);
+    });
+
     it("passes includeDomains in body", async () => {
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { includeDomains: ["github.com"] });
@@ -210,13 +219,23 @@ describe("firecrawl provider", () => {
       expect(body.sources).toEqual(["news"]);
     });
 
-    it("combines web and news results when news data is present", async () => {
+    it("preserves highlighted web descriptions and news snippets", async () => {
       mockPostJSON.mockResolvedValueOnce({
         success: true,
         data: {
-          web: [{ title: "Web Result", description: "web desc", url: "https://example.com/web" }],
+          web: [
+            {
+              title: "Web Result",
+              description: "## Relevant web passage",
+              url: "https://example.com/web",
+            },
+          ],
           news: [
-            { title: "News Result", description: "news desc", url: "https://example.com/news" },
+            {
+              title: "News Result",
+              snippet: "## Relevant news passage",
+              url: "https://example.com/news",
+            },
           ],
         },
       });
@@ -224,9 +243,10 @@ describe("firecrawl provider", () => {
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
       const results = await provider.search("test query", { category: "news" });
 
-      expect(results).toHaveLength(2);
-      expect(results[0].title).toBe("Web Result");
-      expect(results[1].title).toBe("News Result");
+      expect(results.map(({ snippet }) => snippet)).toEqual([
+        "## Relevant web passage",
+        "## Relevant news passage",
+      ]);
     });
 
     it("slices combined results to maxResults", async () => {
@@ -240,7 +260,7 @@ describe("firecrawl provider", () => {
           })),
           news: Array.from({ length: 5 }, (_, i) => ({
             title: `News ${i}`,
-            description: "",
+            snippet: "",
             url: `https://example.com/n${i}`,
           })),
         },

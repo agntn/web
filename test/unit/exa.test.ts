@@ -128,6 +128,14 @@ describe("exa provider", () => {
       expect(results[0].title).toBe("");
     });
 
+    it("can disable search highlights", async () => {
+      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      await provider.search("test query", { highlights: false });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.contents).toEqual({ text: true, highlights: false });
+    });
+
     it("falls back to truncated text when no highlights", async () => {
       const longText = "A".repeat(300);
       mockPostJSON.mockResolvedValueOnce({
