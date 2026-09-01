@@ -28,6 +28,12 @@ export default defineCommand({
       description: "Maximum number of results",
       default: "10",
     },
+    highlights: {
+      type: "boolean",
+      description: "Return query-relevant passages when supported",
+      negativeDescription: "Disable query-relevant passages when supported",
+      default: true,
+    },
     json: {
       type: "boolean",
       description: "Output as JSON",
@@ -48,7 +54,10 @@ export default defineCommand({
       }
 
       const { searchWithFallback } = await import("../core/all.ts");
-      const response = await searchWithFallback(parsed.query, { maxResults: parsed.maxResults });
+      const response = await searchWithFallback(parsed.query, {
+        maxResults: parsed.maxResults,
+        highlights: parsed.highlights,
+      });
       writeSearchResults(response.results, parsed.json);
     } catch (error) {
       await handleSearchError(error, providerName, registry);
@@ -60,6 +69,7 @@ type SearchCommandArgs = {
   readonly query: string;
   readonly provider?: string;
   readonly "max-results": string;
+  readonly highlights: boolean;
   readonly json: boolean;
 };
 
@@ -67,6 +77,7 @@ type ParsedSearchArguments = {
   readonly query: string;
   readonly provider?: string;
   readonly maxResults: number;
+  readonly highlights: boolean;
   readonly json: boolean;
 };
 
@@ -78,6 +89,7 @@ function parseSearchArguments(args: SearchCommandArgs): ParsedSearchArguments {
     query: args.query,
     provider: args.provider,
     maxResults: maxResults.value,
+    highlights: args.highlights,
     json: args.json,
   };
 }
@@ -88,11 +100,17 @@ async function writeSearchResult(
   args: Readonly<ParsedSearchArguments>,
 ): Promise<void> {
   if (args.json && providerTypes.isDetailedSearchProvider(provider)) {
-    const response = await provider.searchDetailed(args.query, { maxResults: args.maxResults });
+    const response = await provider.searchDetailed(args.query, {
+      maxResults: args.maxResults,
+      highlights: args.highlights,
+    });
     process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
     return;
   }
-  const results = await provider.search(args.query, { maxResults: args.maxResults });
+  const results = await provider.search(args.query, {
+    maxResults: args.maxResults,
+    highlights: args.highlights,
+  });
   writeSearchResults(results, args.json);
 }
 

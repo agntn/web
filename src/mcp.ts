@@ -69,6 +69,11 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
             maximum: MAX_RESULTS_HARD_CAP,
           }),
         ),
+        highlights: Type.Optional(
+          Type.Boolean({
+            description: "Return query-relevant passages when supported. Defaults to true.",
+          }),
+        ),
         includeDomains: Type.Optional(
           Type.Array(Type.String(), {
             description:
@@ -229,6 +234,7 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
 
   const searchOptions = {
     maxResults,
+    highlights: boolArg("highlights", args.highlights),
     includeDomains: domainListArg("includeDomains", args.includeDomains),
     excludeDomains: domainListArg("excludeDomains", args.excludeDomains),
     category: stringArg("category", args.category),

@@ -30,21 +30,26 @@ const WebPlugin: Plugin = async () => ({
             'Provider to use. Automatic selection tries other configured providers after HTTP 402. Use "all" for parallel search.',
           ),
         maxResults: z.number().min(1).max(20).optional().describe("Max results (default: 10)"),
+        highlights: z
+          .boolean()
+          .optional()
+          .describe("Return query-relevant passages when supported. Defaults to true."),
       },
       async execute(args) {
-        const { query, provider: providerName, maxResults } = args;
+        const { query, provider: providerName, maxResults, highlights } = args;
+        const searchOptions = { maxResults, highlights };
 
         if (Array.isArray(query)) {
-          return encode(await searchBatch(query, { provider: providerName, maxResults }));
+          return encode(await searchBatch(query, { provider: providerName, ...searchOptions }));
         }
         if (providerName === "all") {
-          return encode(await searchAll(query, { maxResults }));
+          return encode(await searchAll(query, searchOptions));
         }
 
         if (providerName !== undefined) {
-          return encode(await createSearchProvider(providerName).search(query, { maxResults }));
+          return encode(await createSearchProvider(providerName).search(query, searchOptions));
         }
-        const response = await searchWithFallback(query, { maxResults });
+        const response = await searchWithFallback(query, searchOptions);
         return encode(response.results);
       },
     }),

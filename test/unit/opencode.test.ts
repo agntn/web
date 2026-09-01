@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolContext } from "@opencode-ai/plugin";
 
-const { mockGetJSON } = vi.hoisted(() => ({ mockGetJSON: vi.fn() }));
+const { mockGetJSON, mockPostJSON } = vi.hoisted(() => ({
+  mockGetJSON: vi.fn(),
+  mockPostJSON: vi.fn(),
+}));
 
 vi.mock("../../src/core/client.ts", () => ({
-  defaultClient: () => ({ getJSON: mockGetJSON }),
+  defaultClient: () => ({ getJSON: mockGetJSON, postJSON: mockPostJSON }),
 }));
 
 vi.mock("@opencode-ai/plugin", async () => {
@@ -18,17 +21,35 @@ vi.mock("@opencode-ai/plugin", async () => {
 
 import WebPlugin from "../../src/opencode.ts";
 
-describe("OpenCode reverse image search tool", () => {
-  const previousKey = process.env.SERPAPI_API_KEY;
+describe("OpenCode web tools", () => {
+  const previousSerpApiKey = process.env.SERPAPI_API_KEY;
+  const previousExaKey = process.env.EXA_API_KEY;
 
   beforeEach(() => {
     process.env.SERPAPI_API_KEY = "test-key";
     mockGetJSON.mockReset();
+    mockPostJSON.mockReset();
   });
 
   afterEach(() => {
-    if (previousKey === undefined) delete process.env.SERPAPI_API_KEY;
-    else process.env.SERPAPI_API_KEY = previousKey;
+    if (previousSerpApiKey === undefined) delete process.env.SERPAPI_API_KEY;
+    else process.env.SERPAPI_API_KEY = previousSerpApiKey;
+    if (previousExaKey === undefined) delete process.env.EXA_API_KEY;
+    else process.env.EXA_API_KEY = previousExaKey;
+  });
+
+  it("passes the highlights preference through web_search", async () => {
+    process.env.EXA_API_KEY = "test-key";
+    mockPostJSON.mockResolvedValueOnce({ requestId: "request", results: [] });
+    const hooks = await WebPlugin({} as Parameters<typeof WebPlugin>[0]);
+    const search = hooks.tool?.web_search;
+    if (!search) throw new Error("web_search was not registered");
+
+    await search.execute({ query: "test", provider: "exa", highlights: false }, toolContext());
+
+    expect(mockPostJSON.mock.calls[0]?.[1]).toMatchObject({
+      contents: { text: true, highlights: false },
+    });
   });
 
   it("registers web_search_image and returns serialized normalized matches", async () => {

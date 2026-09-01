@@ -137,6 +137,11 @@ const searchParameters = Type.Object({
       maximum: MAX_RESULTS_HARD_CAP,
     }),
   ),
+  highlights: Type.Optional(
+    Type.Boolean({
+      description: "Return query-relevant passages when supported. Defaults to true.",
+    }),
+  ),
   includeDomains: Type.Optional(
     Type.Array(Type.String(), {
       description:
@@ -222,13 +227,13 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_search",
     label: "Web Search",
     description:
-      "Read-only/open-world network search: query one configured provider (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Responses report filters the selected provider ignored. Each result includes {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Context.dev adds relevance metadata, Firecrawl adds markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, TinyFish adds publisher and research metadata, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata.",
+      "Read-only/open-world network search: query one configured provider (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Responses report filters the selected provider ignored. Each result includes {url, title, snippet}; optional fields vary by provider: Exa adds summary/highlights/full text + score/author/image, Context.dev adds relevance metadata, Firecrawl returns query-relevant passages in snippet and markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily adds full raw_content + score, TinyFish adds publisher and research metadata, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata.",
     promptSnippet:
       "Search the web with web_search. Pass a query array for independent batch results, or use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
       "Use web_search when the user explicitly asks for fresh web information, news, references, or links.",
       "Prefer a single provider when the user names one; use provider=all when freshness or coverage matters and at least two providers are configured.",
-      "For AI-style summaries/highlights/full page text prefer Exa; for Jina Search Foundation results use Jina; for TinyFish news or research metadata use TinyFish; for raw full page content prefer Tavily; for classic SERP metadata Brave/SerpAPI/SerpBase/SearXNG are fine.",
+      "For separate AI summaries/highlights/full page text prefer Exa; for query-relevant result passages use Firecrawl; for Jina Search Foundation results use Jina; for TinyFish news or research metadata use TinyFish; for raw full page content prefer Tavily; for classic SERP metadata Brave/SerpAPI/SerpBase/SearXNG are fine.",
       "Pass maxResults conservatively (5-10) unless the user asks for more.",
       "Forward includeDomains/excludeDomains/startPublishedDate/endPublishedDate when the user gives concrete filters.",
     ],
@@ -241,6 +246,7 @@ export default function webExtension(pi: ExtensionAPI) {
       const providerName = normalizeSearchProviderInput(params.provider, web.builtinProviders);
       const searchOptions: SearchRequestOptions = stripUndefined({
         maxResults: params.maxResults,
+        highlights: params.highlights,
         includeDomains: params.includeDomains,
         excludeDomains: params.excludeDomains,
         category: params.category,
@@ -638,6 +644,7 @@ function normalizeReadFormat(format: string | undefined): ReadOptions["format"] 
 
 type SearchOptionValues = {
   readonly maxResults?: number;
+  readonly highlights?: boolean;
   readonly includeDomains?: readonly string[];
   readonly excludeDomains?: readonly string[];
   readonly startPublishedDate?: string;
@@ -648,6 +655,7 @@ type SearchOptionValues = {
 function stripUndefined(input: SearchOptionValues): SearchRequestOptions {
   return {
     ...(input.maxResults === undefined ? {} : { maxResults: input.maxResults }),
+    ...(input.highlights === undefined ? {} : { highlights: input.highlights }),
     ...(input.includeDomains === undefined ? {} : { includeDomains: input.includeDomains }),
     ...(input.excludeDomains === undefined ? {} : { excludeDomains: input.excludeDomains }),
     ...(input.startPublishedDate === undefined
@@ -877,6 +885,7 @@ function searchCallBasics(
   return [
     params.provider ? `provider=${params.provider}` : undefined,
     params.maxResults === undefined ? undefined : `max=${params.maxResults}`,
+    params.highlights === false ? "highlights=false" : undefined,
     params.category ? `cat=${params.category}` : undefined,
   ].filter(isDefined);
 }

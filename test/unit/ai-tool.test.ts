@@ -142,6 +142,19 @@ describe("searchTool", () => {
     });
   });
 
+  it("passes the highlights preference to providers", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    mockPostJSON.mockResolvedValue(exaResponse);
+
+    await searchTool.execute!(
+      { query: "test query", provider: "exa", highlights: false },
+      { toolCallId: "call-highlights", messages: [] },
+    );
+
+    const [, body] = mockPostJSON.mock.calls[0];
+    expect(body.contents).toEqual({ text: true, highlights: false });
+  });
+
   it("returns one ordered outcome per query in a batch", async () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON

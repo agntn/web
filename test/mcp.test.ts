@@ -345,6 +345,20 @@ describe("web MCP executors", () => {
     });
   });
 
+  it("passes highlights through and validates the boolean at the boundary", async () => {
+    vi.stubEnv("EXA_API_KEY", "test-exa");
+    mockPostJSON.mockResolvedValue({ requestId: "request", results: [] });
+
+    await executeSearch({ query: "test", provider: "exa", highlights: false });
+
+    expect(mockPostJSON.mock.calls[0]?.[1]).toMatchObject({
+      contents: { text: true, highlights: false },
+    });
+    await expect(
+      executeSearch({ query: "test", provider: "exa", highlights: "false" }),
+    ).rejects.toBeInstanceOf(TypeError);
+  });
+
   it("guards the empty-query contract when a host skips validation", async () => {
     await expect(executeSearch({})).rejects.toBeInstanceOf(EmptyQueryError);
     await expect(executeSearch({ query: "   " })).rejects.toBeInstanceOf(EmptyQueryError);

@@ -25,6 +25,7 @@ export interface SearchResponse {
 
 export interface SearchOptions {
   maxResults?: number;
+  highlights?: boolean;
   includeDomains?: string[];
   excludeDomains?: string[];
   startPublishedDate?: string;

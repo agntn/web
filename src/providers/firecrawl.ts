@@ -11,28 +11,25 @@ import { Provider } from "../core/provider.ts";
 import { AuthError, WebError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
-interface FirecrawlWebResult {
+interface FirecrawlSearchResult {
   readonly title: string;
-  readonly description: string;
   readonly url: string;
   readonly markdown?: string;
-  readonly html?: string;
-  readonly links?: readonly string[];
-  readonly position?: number;
-  readonly metadata?: {
-    readonly title?: string;
-    readonly description?: string;
-    readonly sourceURL?: string;
-    readonly statusCode?: number;
-    readonly error?: string;
-  };
+}
+
+interface FirecrawlWebResult extends FirecrawlSearchResult {
+  readonly description: string;
+}
+
+interface FirecrawlNewsResult extends FirecrawlSearchResult {
+  readonly snippet: string;
 }
 
 interface FirecrawlSearchResponse {
   readonly success: boolean;
   readonly data?: {
     readonly web?: readonly FirecrawlWebResult[];
-    readonly news?: readonly FirecrawlWebResult[];
+    readonly news?: readonly FirecrawlNewsResult[];
   };
   readonly id?: string;
   readonly warning?: string | null;
@@ -128,6 +125,7 @@ function searchBody(query: string, options?: SearchRequestOptions): Record<strin
   return {
     query,
     limit: clampMaxResults(options?.maxResults),
+    highlights: options?.highlights ?? true,
     ...domainFilters(options),
     ...(isFirecrawlSearchCategory(options?.category) ? { sources: [options.category] } : {}),
   };
@@ -210,11 +208,11 @@ function normalizeFormat(format?: string): "markdown" | "html" {
   return "markdown";
 }
 
-function mapSearchResult(result: FirecrawlWebResult): SearchResult {
+function mapSearchResult(result: FirecrawlWebResult | FirecrawlNewsResult): SearchResult {
   return {
     url: result.url,
     title: result.title,
-    snippet: result.description,
+    snippet: "description" in result ? result.description : result.snippet,
     text: result.markdown,
   };
 }

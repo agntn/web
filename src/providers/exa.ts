@@ -74,7 +74,7 @@ class ExaProvider extends Provider {
       excludeDomains: options?.excludeDomains,
       startPublishedDate: options?.startPublishedDate,
       endPublishedDate: options?.endPublishedDate,
-      contents: { text: true, highlights: true },
+      contents: { text: true, highlights: includeHighlights(options) },
     } satisfies ExaSearchRequest;
 
     try {
@@ -86,6 +86,10 @@ class ExaProvider extends Provider {
       throw normalizeError(error, "exa");
     }
   }
+}
+
+function includeHighlights(options?: SearchRequestOptions): boolean {
+  return options?.highlights ?? true;
 }
 
 function mapResult(result: ExaResult): SearchResult {
