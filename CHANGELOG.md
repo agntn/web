@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.5.0
+
+[compare changes](https://github.com/agntn/web/compare/v0.4.0...v0.5.0)
+
+### 🚀 Enhancements
+
+- **read:** Filter Firecrawl pages with CSS selectors ([#85](https://github.com/agntn/web/pull/85))
+- **firecrawl:** Control search highlights ([#86](https://github.com/agntn/web/pull/86))
+- **search:** Route Firecrawl research queries ([#87](https://github.com/agntn/web/pull/87))
+- **tui:** Add OMP tools and compact web output ([#89](https://github.com/agntn/web/pull/89))
+
+### 🩹 Fixes
+
+- **search:** ⚠️  Split Firecrawl search filters ([#88](https://github.com/agntn/web/pull/88))
+- **search:** Report every successful provider ([#91](https://github.com/agntn/web/pull/91))
+
+#### ⚠️ Breaking Changes
+
+- **search:** ⚠️  Split Firecrawl search filters ([#88](https://github.com/agntn/web/pull/88))
+
+### ❤️ Contributors
+
+- Aeitwoen <aeitwoen@gmail.com>
+- Ori ([@oritwoen](https://github.com/oritwoen))
+
 ## v0.4.0
 
 [compare changes](https://github.com/agntn/web/compare/v0.3.1...v0.4.0)
