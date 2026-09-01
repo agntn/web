@@ -56,7 +56,7 @@ interface FirecrawlScrapeResponse {
 }
 
 const FIRECRAWL_MAX_RESULTS = 100;
-const FIRECRAWL_SEARCH_CATEGORIES = ["news"] as const;
+const FIRECRAWL_SEARCH_CATEGORIES = ["news", "research"] as const;
 
 function clampMaxResults(max?: number): number {
   return Math.min(Math.max(max ?? 10, 1), FIRECRAWL_MAX_RESULTS);
@@ -127,14 +127,14 @@ function searchBody(query: string, options?: SearchRequestOptions): Record<strin
     limit: clampMaxResults(options?.maxResults),
     highlights: options?.highlights ?? true,
     ...domainFilters(options),
-    ...(isFirecrawlSearchCategory(options?.category) ? { sources: [options.category] } : {}),
+    ...categoryFilter(options?.category),
   };
 }
 
-function isFirecrawlSearchCategory(
-  category: string | undefined,
-): category is (typeof FIRECRAWL_SEARCH_CATEGORIES)[number] {
-  return FIRECRAWL_SEARCH_CATEGORIES.some((supported) => supported === category);
+function categoryFilter(category?: string): Record<string, unknown> {
+  if (category === "news") return { sources: [category] };
+  if (category === "research") return { categories: [category] };
+  return {};
 }
 
 function domainFilters(options?: SearchRequestOptions): Record<string, unknown> {

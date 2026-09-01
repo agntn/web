@@ -219,6 +219,14 @@ describe("firecrawl provider", () => {
       expect(body.sources).toEqual(["news"]);
     });
 
+    it("sets categories to research when category is research", async () => {
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      await provider.search("test query", { category: "research" });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.categories).toEqual(["research"]);
+    });
+
     it("preserves highlighted web descriptions and news snippets", async () => {
       mockPostJSON.mockResolvedValueOnce({
         success: true,
@@ -272,12 +280,13 @@ describe("firecrawl provider", () => {
       expect(results).toHaveLength(5);
     });
 
-    it("does not set sources when category is not news", async () => {
+    it("does not set provider filters for an unsupported category", async () => {
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { category: "general" });
 
       const [, body] = mockPostJSON.mock.calls[0];
       expect(body.sources).toBeUndefined();
+      expect(body.categories).toBeUndefined();
     });
 
     it("returns empty array when web results are missing", async () => {
