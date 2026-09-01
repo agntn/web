@@ -427,7 +427,7 @@ interface SearchOptions {
 
 Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
-`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters` and `undeclaredFilters`. `searchAllDetailed()` keeps the same diagnostics in `filterReports`. Custom providers without capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the matrix as `searchFilters` and optional `searchCategories`.
+`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters` and `undeclaredFilters`. `searchAllDetailed()` keeps the same diagnostics in `filterReports` and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Custom providers without capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the matrix as `searchFilters` and optional `searchCategories`.
 
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 

@@ -47,6 +47,7 @@ type SearchAllDetails = {
   readonly options: SearchRequestOptions;
   readonly count: number;
   readonly results: readonly SearchAllResult[];
+  readonly successfulProviders: readonly string[];
   readonly errors: { provider: string; error: string }[];
   readonly filterReports: readonly SearchFilterReport[];
 };
@@ -313,12 +314,11 @@ export default function webExtension(pi: ExtensionAPI) {
       if (providerName === "all") {
         const response = await web.searchAllDetailed(query, searchOptions);
         const results = response.results;
-        const okProviders = Array.from(new Set(results.map((r) => r.provider))).sort();
         const header = buildHeader({
           mode: "all",
           query,
           count: results.length,
-          okProviders,
+          successfulProviders: response.successfulProviders,
           errCount: response.errors.length,
         });
         const result: AgentToolResult<SearchDetails> = {
@@ -337,6 +337,7 @@ export default function webExtension(pi: ExtensionAPI) {
             options: searchOptions,
             count: results.length,
             results,
+            successfulProviders: response.successfulProviders,
             errors: response.errors.map((e) => ({
               provider: e.provider,
               error: e.error.message,
@@ -730,7 +731,7 @@ type HeaderOpts =
       readonly mode: "all";
       readonly query: string;
       readonly count: number;
-      readonly okProviders: readonly string[];
+      readonly successfulProviders: readonly string[];
       readonly errCount: number;
     };
 
@@ -744,9 +745,9 @@ function buildHeader(o: HeaderOpts): string {
         : ` [filter support undeclared=${o.undeclaredFilters.join(",")}]`;
     return `[provider=${o.provider}] ${o.count} result(s) for "${o.query}"${tag}${ignored}${undeclared}`;
   }
-  const list = o.okProviders.length > 0 ? ` [${o.okProviders.join(", ")}]` : "";
+  const list = o.successfulProviders.length > 0 ? ` [${o.successfulProviders.join(", ")}]` : "";
   const errs = o.errCount > 0 ? ` (+${o.errCount} provider error(s))` : "";
-  return `[provider=all] ${o.count} result(s) for "${o.query}" via ${o.okProviders.length} provider(s)${list}${errs}`;
+  return `[provider=all] ${o.count} result(s) for "${o.query}" via ${o.successfulProviders.length} provider(s)${list}${errs}`;
 }
 
 function withHeader(header: string, body: readonly string[]): string {

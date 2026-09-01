@@ -445,6 +445,40 @@ describe("searchAllDetailed", () => {
     expect(response.filterReports).toEqual([]);
   });
 
+  it("reports providers that succeed without retained results", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockPostJSON.mockResolvedValue({
+      requestId: "test-req",
+      results: [{ id: "1", url: "https://example.com/same", title: "Exa result" }],
+    });
+    mockGetJSON.mockImplementation(async (url) =>
+      url.includes("api.search.brave.com")
+        ? {
+            web: {
+              results: [
+                {
+                  url: "https://example.com/same",
+                  title: "Brave result",
+                  description: "duplicate",
+                  extra_snippets: [],
+                  meta_url: { favicon: "" },
+                },
+              ],
+            },
+          }
+        : { results: [] },
+    );
+
+    const response = await searchAllDetailed("test", {
+      providers: ["exa", "brave", "searxng"],
+    });
+
+    expect(response.results).toHaveLength(1);
+    expect(response.errors).toEqual([]);
+    expect(response.successfulProviders).toEqual(["exa", "brave", "searxng"]);
+  });
+
   it("reports ignored filters per successful provider", async () => {
     process.env.EXA_API_KEY = "test-exa";
     process.env.BRAVE_API_KEY = "test-brave";

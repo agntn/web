@@ -36,6 +36,7 @@ export interface ProviderError {
 
 export interface SearchAllResponse {
   results: SearchAllResult[];
+  successfulProviders: string[];
   errors: ProviderError[];
   filterReports: SearchFilterReport[];
 }
@@ -73,8 +74,8 @@ export async function searchAll(
 }
 
 /**
- * Like {@link searchAll}, but also returns per-provider errors so callers
- * can tell which providers failed and why.
+ * Like {@link searchAll}, but also returns successful provider names,
+ * filter diagnostics, and errors for each provider.
  * @param {string} query - Search query.
  * @param {SearchAllOptions} options - Provider and result options.
  * @returns {Promise<SearchAllResponse>} Results and provider failures.
@@ -224,10 +225,12 @@ function collectProviderResults(
   settled: readonly ProviderSearchOutcome[],
 ): SearchAllResponse {
   const results: SearchAllResult[] = [];
+  const successfulProviders = new Set<string>();
   const errors: ProviderError[] = [];
   const filterReports: SearchFilterReport[] = [];
   for (const [index, outcome] of settled.entries()) {
     if (outcome.status === "fulfilled") {
+      successfulProviders.add(outcome.value.provider);
       results.push(
         ...outcome.value.results.map((result) =>
           mutableResultWithProvider(result, outcome.value.provider),
@@ -244,7 +247,12 @@ function collectProviderResults(
       });
     }
   }
-  return { results: deduplicateByUrl(results), errors, filterReports };
+  return {
+    results: deduplicateByUrl(results),
+    successfulProviders: [...successfulProviders],
+    errors,
+    filterReports,
+  };
 }
 
 function mutableResultWithProvider(

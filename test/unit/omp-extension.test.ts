@@ -97,6 +97,7 @@ describe("OMP extension", () => {
           mode: "all",
           count: 14,
           results: [],
+          successfulProviders: ["brave", "jina"],
           errors: [{ provider: "exa", error: "down" }],
         },
       },
@@ -105,7 +106,7 @@ describe("OMP extension", () => {
     );
 
     expect(renderedText(call)).toBe("⠹ ⌕ Web Search 2 queries all · top 8");
-    expect(renderedText(result)).toBe("✓ found 14 results · 1 provider error");
+    expect(renderedText(result)).toBe("✓ found 14 results · 2 providers · 1 provider error");
     expect(renderedText(result)).not.toContain("Web Search");
   });
 

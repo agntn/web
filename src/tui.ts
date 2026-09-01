@@ -356,9 +356,15 @@ function batchMeta(items: readonly unknown[], label: string): string[] {
   return [`${items.length} ${label}`, ...(failed > 0 ? [`${failed} failed`] : [])];
 }
 
+function successfulProvidersMeta(details: Readonly<Record<string, unknown>>): string | undefined {
+  const count = listLength(details, "successfulProviders");
+  if (count === undefined) return undefined;
+  return `${count} provider${count === 1 ? "" : "s"}`;
+}
+
 function scalarSearchMeta(details: Readonly<Record<string, unknown>>): string[] {
   const count = scalar(details, "count") ?? listLength(details, "results")?.toString();
-  const provider = scalar(details, "provider");
+  const provider = scalar(details, "provider") ?? successfulProvidersMeta(details);
   const errors = listLength(details, "errors") ?? 0;
   const meta = count ? [`${sanitizeTerminalText(count, META_WIDTH)} results`] : [];
   if (provider) meta.push(sanitizeTerminalText(provider, META_WIDTH));

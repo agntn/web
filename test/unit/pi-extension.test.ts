@@ -240,6 +240,81 @@ describe("Pi extension", () => {
     }
   });
 
+  it("counts providers whose results were deduplicated from an all search", async () => {
+    const previousExaKey = process.env.EXA_API_KEY;
+    const previousBraveKey = process.env.BRAVE_API_KEY;
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url =
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input instanceof Request
+              ? input.url
+              : "";
+      if (url === "https://api.exa.ai/search") {
+        return new Response(
+          JSON.stringify({
+            requestId: "request",
+            results: [{ id: "exa-result", title: "Exa result", url: "https://example.com/same" }],
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (url.startsWith("https://api.search.brave.com/res/v1/web/search")) {
+        return new Response(
+          JSON.stringify({
+            web: {
+              results: [
+                {
+                  title: "Brave result",
+                  url: "https://example.com/same",
+                  description: "duplicate",
+                  extra_snippets: [],
+                  meta_url: { favicon: "" },
+                },
+              ],
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    resetDefaultClientForTests();
+
+    try {
+      const searchTool = captureTools().get("web_search");
+      if (!searchTool) throw new Error("web_search was not registered");
+      const execution: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
+        "test-call",
+        { query: "test query", provider: "all" },
+        undefined,
+        undefined,
+        undefined,
+      ]);
+
+      await expect(execution).resolves.toHaveProperty("details.successfulProviders", [
+        "exa",
+        "brave",
+      ]);
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringContaining("via 2 provider(s) [exa, brave]"),
+      );
+    } finally {
+      if (previousExaKey === undefined) delete process.env.EXA_API_KEY;
+      else process.env.EXA_API_KEY = previousExaKey;
+      if (previousBraveKey === undefined) delete process.env.BRAVE_API_KEY;
+      else process.env.BRAVE_API_KEY = previousBraveKey;
+      vi.unstubAllGlobals();
+      resetDefaultClientForTests();
+    }
+  });
+
   it("falls past 402 when the search provider is automatic", async () => {
     const previousExaKey = process.env.EXA_API_KEY;
     const previousBraveKey = process.env.BRAVE_API_KEY;
