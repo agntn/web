@@ -28,21 +28,27 @@ export interface SearchOptions {
   highlights?: boolean;
   includeDomains?: string[];
   excludeDomains?: string[];
+  sources?: string[];
+  categories?: string[];
   startPublishedDate?: string;
   endPublishedDate?: string;
   category?: string;
 }
 
 export type SearchRequestOptions = Readonly<
-  Omit<SearchOptions, "includeDomains" | "excludeDomains">
+  Omit<SearchOptions, "includeDomains" | "excludeDomains" | "sources" | "categories">
 > & {
   readonly includeDomains?: readonly string[];
   readonly excludeDomains?: readonly string[];
+  readonly sources?: readonly string[];
+  readonly categories?: readonly string[];
 };
 
 export const searchFilterNames = [
   "includeDomains",
   "excludeDomains",
+  "sources",
+  "categories",
   "category",
   "startPublishedDate",
   "endPublishedDate",
@@ -50,7 +56,7 @@ export const searchFilterNames = [
 
 export type SearchFilterName = (typeof searchFilterNames)[number];
 
-/** Search filters a provider forwards, including any accepted category values. */
+/** Search filters a provider forwards, including any accepted singular category values. */
 export interface SearchFilterCapabilities {
   readonly filters: readonly SearchFilterName[];
   readonly categories?: readonly string[];

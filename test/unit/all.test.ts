@@ -465,6 +465,21 @@ describe("searchAllDetailed", () => {
     ]);
   });
 
+  it("reports Firecrawl source and category filters separately", async () => {
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl";
+    mockPostJSON.mockResolvedValue({ success: true, data: { web: [] } });
+
+    await expect(
+      searchProviderDetailed("firecrawl", "test", {
+        sources: ["news"],
+        categories: ["developer"],
+      }),
+    ).resolves.toMatchObject({ ignoredFilters: [], undeclaredFilters: [] });
+    await expect(
+      searchProviderDetailed("firecrawl", "test", { category: "developer" }),
+    ).resolves.toMatchObject({ ignoredFilters: ["category"], undeclaredFilters: [] });
+  });
+
   it("reports value-limited category support", async () => {
     process.env.JINA_API_KEY = "test-jina";
     mockGetJSON.mockResolvedValue({ code: 200, status: 20000, data: [] });

@@ -25,11 +25,20 @@ interface FirecrawlNewsResult extends FirecrawlSearchResult {
   readonly snippet: string;
 }
 
+interface FirecrawlImageResult {
+  readonly title: string;
+  readonly url: string;
+  readonly imageUrl: string;
+  readonly imageWidth?: number;
+  readonly imageHeight?: number;
+}
+
 interface FirecrawlSearchResponse {
   readonly success: boolean;
   readonly data?: {
     readonly web?: readonly FirecrawlWebResult[];
     readonly news?: readonly FirecrawlNewsResult[];
+    readonly images?: readonly FirecrawlImageResult[];
   };
   readonly id?: string;
   readonly warning?: string | null;
@@ -56,7 +65,6 @@ interface FirecrawlScrapeResponse {
 }
 
 const FIRECRAWL_MAX_RESULTS = 100;
-const FIRECRAWL_SEARCH_CATEGORIES = ["news", "research"] as const;
 
 function clampMaxResults(max?: number): number {
   return Math.min(Math.max(max ?? 10, 1), FIRECRAWL_MAX_RESULTS);
@@ -66,8 +74,7 @@ class FirecrawlProvider extends Provider {
   static readonly providerName = "firecrawl";
   static readonly defaultBaseURL = "https://api.firecrawl.dev";
   static readonly searchFilterCapabilities = {
-    filters: ["includeDomains", "excludeDomains", "category"],
-    categories: FIRECRAWL_SEARCH_CATEGORIES,
+    filters: ["includeDomains", "excludeDomains", "sources", "categories"],
   } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
@@ -122,19 +129,14 @@ class FirecrawlProvider extends Provider {
 }
 
 function searchBody(query: string, options?: SearchRequestOptions): Record<string, unknown> {
+  validateCategoryCombination(options?.categories);
   return {
     query,
     limit: clampMaxResults(options?.maxResults),
     highlights: options?.highlights ?? true,
     ...domainFilters(options),
-    ...categoryFilter(options?.category),
+    ...sourceAndCategoryFilters(options),
   };
-}
-
-function categoryFilter(category?: string): Record<string, unknown> {
-  if (category === "news") return { sources: [category] };
-  if (category === "research") return { categories: [category] };
-  return {};
 }
 
 function domainFilters(options?: SearchRequestOptions): Record<string, unknown> {
@@ -142,6 +144,22 @@ function domainFilters(options?: SearchRequestOptions): Record<string, unknown> 
     ...(options?.includeDomains?.length ? { includeDomains: options.includeDomains } : {}),
     ...(options?.excludeDomains?.length ? { excludeDomains: options.excludeDomains } : {}),
   };
+}
+
+function sourceAndCategoryFilters(options?: SearchRequestOptions): Record<string, unknown> {
+  return {
+    ...(options?.sources?.length ? { sources: options.sources } : {}),
+    ...(options?.categories?.length ? { categories: options.categories } : {}),
+  };
+}
+
+function validateCategoryCombination(categories?: readonly string[]): void {
+  if (
+    categories?.includes("developer") &&
+    categories.some((category) => category !== "developer")
+  ) {
+    throw new WebError('Firecrawl category "developer" cannot be combined with other categories');
+  }
 }
 
 function mapSearchResponse(
@@ -152,9 +170,12 @@ function mapSearchResponse(
 
   const web = response.data?.web ?? [];
   const news = response.data?.news ?? [];
+  const images = response.data?.images ?? [];
   const metadata = searchMetadata(response);
   return {
-    results: [...web, ...news].slice(0, clampMaxResults(maxResults)).map(mapSearchResult),
+    results: [...web, ...news, ...images]
+      .slice(0, clampMaxResults(maxResults))
+      .map(mapSearchResult),
     ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
   };
 }
@@ -208,7 +229,18 @@ function normalizeFormat(format?: string): "markdown" | "html" {
   return "markdown";
 }
 
-function mapSearchResult(result: FirecrawlWebResult | FirecrawlNewsResult): SearchResult {
+function mapSearchResult(
+  result: FirecrawlWebResult | FirecrawlNewsResult | FirecrawlImageResult,
+): SearchResult {
+  if ("imageUrl" in result) {
+    return {
+      url: result.url,
+      title: result.title,
+      snippet: "",
+      image: result.imageUrl,
+      metadata: { imageWidth: result.imageWidth, imageHeight: result.imageHeight },
+    };
+  }
   return {
     url: result.url,
     title: result.title,

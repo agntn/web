@@ -97,7 +97,7 @@ describe("Pi extension", () => {
     }
   });
 
-  it("passes the highlights preference through web_search", async () => {
+  it("passes Firecrawl search options through web_search", async () => {
     const previousKey = process.env.FIRECRAWL_API_KEY;
     process.env.FIRECRAWL_API_KEY = "test-key";
     const requestBodies: unknown[] = [];
@@ -126,7 +126,13 @@ describe("Pi extension", () => {
       if (!searchTool) throw new Error("web_search was not registered");
       const execution: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
         "test-call",
-        { query: "test query", provider: "firecrawl", highlights: false },
+        {
+          query: "test query",
+          provider: "firecrawl",
+          highlights: false,
+          sources: ["web", "news"],
+          categories: ["developer"],
+        },
         undefined,
         undefined,
         undefined,
@@ -134,7 +140,12 @@ describe("Pi extension", () => {
 
       await expect(execution).resolves.toHaveProperty("details.options.highlights", false);
       expect(requestBodies).toEqual([
-        expect.objectContaining({ query: "test query", highlights: false }),
+        expect.objectContaining({
+          query: "test query",
+          highlights: false,
+          sources: ["web", "news"],
+          categories: ["developer"],
+        }),
       ]);
     } finally {
       if (previousKey === undefined) delete process.env.FIRECRAWL_API_KEY;

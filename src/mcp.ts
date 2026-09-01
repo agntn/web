@@ -83,9 +83,21 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         excludeDomains: Type.Optional(
           Type.Array(Type.String(), { description: "Exclude results from these domains" }),
         ),
+        sources: Type.Optional(
+          Type.Array(Type.String(), {
+            description: 'Source types when supported (Firecrawl: "web", "news", "images")',
+          }),
+        ),
+        categories: Type.Optional(
+          Type.Array(Type.String(), {
+            description:
+              'Category filters when supported (Firecrawl: "research", "pdf", "developer")',
+          }),
+        ),
         category: Type.Optional(
           Type.String({
-            description: 'Search category (e.g. "news", "general"). Provider support varies.',
+            description:
+              'Single search category (e.g. "news", "general"). Provider support varies.',
           }),
         ),
         startPublishedDate: Type.Optional(
@@ -235,8 +247,10 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
   const searchOptions = {
     maxResults,
     highlights: boolArg("highlights", args.highlights),
-    includeDomains: domainListArg("includeDomains", args.includeDomains),
-    excludeDomains: domainListArg("excludeDomains", args.excludeDomains),
+    includeDomains: stringArrayArg("includeDomains", args.includeDomains),
+    excludeDomains: stringArrayArg("excludeDomains", args.excludeDomains),
+    sources: stringArrayArg("sources", args.sources),
+    categories: stringArrayArg("categories", args.categories),
     category: stringArg("category", args.category),
     startPublishedDate: stringArg("startPublishedDate", args.startPublishedDate),
     endPublishedDate: stringArg("endPublishedDate", args.endPublishedDate),
@@ -386,16 +400,12 @@ function boolArg(name: string, value: unknown): boolean | undefined {
   return value;
 }
 
-function domainListArg(name: string, value: unknown): readonly string[] | undefined {
+function stringArrayArg(name: string, value: unknown): readonly string[] | undefined {
   if (value === undefined) return undefined;
-  if (!Array.isArray(value)) {
-    throw new TypeError(`${name} must be an array of domain strings`);
-  }
-  return value.map((domain) => {
-    if (typeof domain !== "string") {
-      throw new TypeError(`${name} must be an array of domain strings`);
-    }
-    return domain;
+  if (!Array.isArray(value)) throw new TypeError(`${name} must be an array of strings`);
+  return value.map((item) => {
+    if (typeof item !== "string") throw new TypeError(`${name} must be an array of strings`);
+    return item;
   });
 }
 

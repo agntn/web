@@ -211,20 +211,31 @@ describe("firecrawl provider", () => {
       expect(body.excludeDomains).toEqual(["reddit.com"]);
     });
 
-    it("sets sources to news when category is news", async () => {
+    it("passes source types independently", async () => {
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
-      await provider.search("test query", { category: "news" });
+      await provider.search("test query", { sources: ["web", "news", "images"] });
 
       const [, body] = mockPostJSON.mock.calls[0];
-      expect(body.sources).toEqual(["news"]);
+      expect(body.sources).toEqual(["web", "news", "images"]);
+      expect(body.categories).toBeUndefined();
     });
 
-    it("sets categories to research when category is research", async () => {
+    it("passes search categories independently", async () => {
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
-      await provider.search("test query", { category: "research" });
+      await provider.search("test query", { categories: ["developer"] });
 
       const [, body] = mockPostJSON.mock.calls[0];
-      expect(body.categories).toEqual(["research"]);
+      expect(body.categories).toEqual(["developer"]);
+      expect(body.sources).toBeUndefined();
+    });
+
+    it("rejects combining developer with another category", async () => {
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+
+      await expect(
+        provider.search("test query", { categories: ["developer", "pdf"] }),
+      ).rejects.toThrow('Firecrawl category "developer" cannot be combined with other categories');
+      expect(mockPostJSON).not.toHaveBeenCalled();
     });
 
     it("preserves highlighted web descriptions and news snippets", async () => {
@@ -249,7 +260,7 @@ describe("firecrawl provider", () => {
       });
 
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
-      const results = await provider.search("test query", { category: "news" });
+      const results = await provider.search("test query", { sources: ["web", "news"] });
 
       expect(results.map(({ snippet }) => snippet)).toEqual([
         "## Relevant web passage",
@@ -275,14 +286,45 @@ describe("firecrawl provider", () => {
       });
 
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
-      const results = await provider.search("test query", { category: "news", maxResults: 5 });
+      const results = await provider.search("test query", {
+        sources: ["web", "news"],
+        maxResults: 5,
+      });
 
       expect(results).toHaveLength(5);
     });
 
-    it("does not set provider filters for an unsupported category", async () => {
+    it("maps image source results", async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {
+          images: [
+            {
+              title: "Firecrawl logo",
+              url: "https://docs.firecrawl.dev/",
+              imageUrl: "https://docs.firecrawl.dev/logo.png",
+              imageWidth: 5814,
+              imageHeight: 1200,
+            },
+          ],
+        },
+      });
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
-      await provider.search("test query", { category: "general" });
+
+      await expect(provider.search("test query", { sources: ["images"] })).resolves.toEqual([
+        {
+          title: "Firecrawl logo",
+          url: "https://docs.firecrawl.dev/",
+          snippet: "",
+          image: "https://docs.firecrawl.dev/logo.png",
+          metadata: { imageWidth: 5814, imageHeight: 1200 },
+        },
+      ]);
+    });
+
+    it("does not translate the singular category option", async () => {
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      await provider.search("test query", { category: "news" });
 
       const [, body] = mockPostJSON.mock.calls[0];
       expect(body.sources).toBeUndefined();

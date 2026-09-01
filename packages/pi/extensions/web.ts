@@ -153,9 +153,19 @@ const searchParameters = Type.Object({
       description: "Exclude results from these domains.",
     }),
   ),
+  sources: Type.Optional(
+    Type.Array(Type.String(), {
+      description: 'Source types when supported (Firecrawl: "web", "news", "images").',
+    }),
+  ),
+  categories: Type.Optional(
+    Type.Array(Type.String(), {
+      description: 'Category filters when supported (Firecrawl: "research", "pdf", "developer").',
+    }),
+  ),
   category: Type.Optional(
     Type.String({
-      description: 'Search category (e.g. "news", "general"). Provider support varies.',
+      description: 'Single search category (e.g. "news", "general"). Provider support varies.',
     }),
   ),
   startPublishedDate: Type.Optional(
@@ -235,7 +245,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Prefer a single provider when the user names one; use provider=all when freshness or coverage matters and at least two providers are configured.",
       "For separate AI summaries/highlights/full page text prefer Exa; for result passages relevant to the query use Firecrawl; for Jina Search Foundation results use Jina; for TinyFish news or research metadata use TinyFish; for raw full page content prefer Tavily; for classic SERP metadata Brave/SerpAPI/SerpBase/SearXNG are fine.",
       "Pass maxResults conservatively (5-10) unless the user asks for more.",
-      "Forward includeDomains/excludeDomains/startPublishedDate/endPublishedDate when the user gives concrete filters.",
+      "Forward domain, source, category, and date filters when the user gives concrete values.",
     ],
     parameters: searchParameters,
     renderCall(args, theme) {
@@ -249,6 +259,8 @@ export default function webExtension(pi: ExtensionAPI) {
         highlights: params.highlights,
         includeDomains: params.includeDomains,
         excludeDomains: params.excludeDomains,
+        sources: params.sources,
+        categories: params.categories,
         category: params.category,
         startPublishedDate: params.startPublishedDate,
         endPublishedDate: params.endPublishedDate,
@@ -647,6 +659,8 @@ type SearchOptionValues = {
   readonly highlights?: boolean;
   readonly includeDomains?: readonly string[];
   readonly excludeDomains?: readonly string[];
+  readonly sources?: readonly string[];
+  readonly categories?: readonly string[];
   readonly startPublishedDate?: string;
   readonly endPublishedDate?: string;
   readonly category?: string;
@@ -656,13 +670,21 @@ function stripUndefined(input: SearchOptionValues): SearchRequestOptions {
   return {
     ...(input.maxResults === undefined ? {} : { maxResults: input.maxResults }),
     ...(input.highlights === undefined ? {} : { highlights: input.highlights }),
-    ...(input.includeDomains === undefined ? {} : { includeDomains: input.includeDomains }),
-    ...(input.excludeDomains === undefined ? {} : { excludeDomains: input.excludeDomains }),
+    ...searchArrayOptions(input),
     ...(input.startPublishedDate === undefined
       ? {}
       : { startPublishedDate: input.startPublishedDate }),
     ...(input.endPublishedDate === undefined ? {} : { endPublishedDate: input.endPublishedDate }),
     ...(input.category === undefined ? {} : { category: input.category }),
+  };
+}
+
+function searchArrayOptions(input: SearchOptionValues): SearchRequestOptions {
+  return {
+    ...(input.includeDomains === undefined ? {} : { includeDomains: input.includeDomains }),
+    ...(input.excludeDomains === undefined ? {} : { excludeDomains: input.excludeDomains }),
+    ...(input.sources === undefined ? {} : { sources: input.sources }),
+    ...(input.categories === undefined ? {} : { categories: input.categories }),
   };
 }
 
@@ -886,6 +908,8 @@ function searchCallBasics(
     params.provider ? `provider=${params.provider}` : undefined,
     params.maxResults === undefined ? undefined : `max=${params.maxResults}`,
     params.highlights === false ? "highlights=false" : undefined,
+    params.sources?.length ? `sources=${params.sources.join(",")}` : undefined,
+    params.categories?.length ? `categories=${params.categories.join(",")}` : undefined,
     params.category ? `cat=${params.category}` : undefined,
   ].filter(isDefined);
 }

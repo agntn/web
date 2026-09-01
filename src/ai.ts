@@ -37,10 +37,18 @@ export const searchTool = tool({
         'Only return results from these domains (e.g. ["github.com", "stackoverflow.com"])',
       ),
     excludeDomains: z.array(z.string()).optional().describe("Exclude results from these domains"),
+    sources: z
+      .array(z.string())
+      .optional()
+      .describe('Source types when supported (Firecrawl: "web", "news", "images")'),
+    categories: z
+      .array(z.string())
+      .optional()
+      .describe('Category filters when supported (Firecrawl: "research", "pdf", "developer")'),
     category: z
       .string()
       .optional()
-      .describe('Search category (e.g. "news", "general"). Provider support varies.'),
+      .describe('Single search category (e.g. "news", "general"). Provider support varies.'),
     startPublishedDate: z
       .string()
       .optional()
@@ -57,6 +65,8 @@ export const searchTool = tool({
     highlights,
     includeDomains,
     excludeDomains,
+    sources,
+    categories,
     category,
     startPublishedDate,
     endPublishedDate,
@@ -66,6 +76,8 @@ export const searchTool = tool({
       highlights,
       includeDomains,
       excludeDomains,
+      sources,
+      categories,
       category,
       startPublishedDate,
       endPublishedDate,

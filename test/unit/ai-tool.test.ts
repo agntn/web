@@ -340,6 +340,27 @@ describe("searchTool", () => {
     expect(body.excludeDomains).toEqual(["reddit.com"]);
   });
 
+  it("passes Firecrawl sources and categories separately", async () => {
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl-key";
+    mockPostJSON.mockResolvedValue({ success: true, data: { web: [] } });
+
+    await searchTool.execute!(
+      {
+        query: "test",
+        provider: "firecrawl",
+        sources: ["web", "news"],
+        categories: ["developer"],
+      },
+      { toolCallId: "call-firecrawl-filters", messages: [] },
+    );
+
+    const [, body] = mockPostJSON.mock.calls[0];
+    expect(body).toMatchObject({
+      sources: ["web", "news"],
+      categories: ["developer"],
+    });
+  });
+
   it("passes date filters to provider", async () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
