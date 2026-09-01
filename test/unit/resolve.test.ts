@@ -162,7 +162,7 @@ describe("resolve", () => {
         },
         firecrawl: {
           filters: ["includeDomains", "excludeDomains", "category"],
-          categories: ["news", "research"],
+          categories: ["news", "research", "developer"],
         },
         jina: {
           filters: ["includeDomains", "category"],

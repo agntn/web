@@ -227,6 +227,14 @@ describe("firecrawl provider", () => {
       expect(body.categories).toEqual(["research"]);
     });
 
+    it("sets categories to developer when category is developer", async () => {
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      await provider.search("test query", { category: "developer" });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.categories).toEqual(["developer"]);
+    });
+
     it("preserves highlighted web descriptions and news snippets", async () => {
       mockPostJSON.mockResolvedValueOnce({
         success: true,

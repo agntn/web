@@ -414,7 +414,7 @@ interface SearchOptions {
 | Brave       | none             | none                                         | none        |
 | Context.dev | include, exclude | none                                         | none        |
 | Exa         | include, exclude | forwarded as given                           | start, end  |
-| Firecrawl   | include, exclude | `news`                                       | none        |
+| Firecrawl   | include, exclude | `news`, `research`, `developer`              | none        |
 | Jina        | include          | `web`, `images`, `news`                      | none        |
 | Mojeek      | include, exclude | none                                         | start, end  |
 | SearXNG     | none             | forwarded as given                           | none        |

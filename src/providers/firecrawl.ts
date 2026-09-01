@@ -56,7 +56,7 @@ interface FirecrawlScrapeResponse {
 }
 
 const FIRECRAWL_MAX_RESULTS = 100;
-const FIRECRAWL_SEARCH_CATEGORIES = ["news", "research"] as const;
+const FIRECRAWL_SEARCH_CATEGORIES = ["news", "research", "developer"] as const;
 
 function clampMaxResults(max?: number): number {
   return Math.min(Math.max(max ?? 10, 1), FIRECRAWL_MAX_RESULTS);
@@ -133,7 +133,7 @@ function searchBody(query: string, options?: SearchRequestOptions): Record<strin
 
 function categoryFilter(category?: string): Record<string, unknown> {
   if (category === "news") return { sources: [category] };
-  if (category === "research") return { categories: [category] };
+  if (category === "research" || category === "developer") return { categories: [category] };
   return {};
 }
 
