@@ -176,8 +176,16 @@ function scrapeBody(url: string, options?: Readonly<ReadOptions>): Record<string
     url,
     formats: [normalizeFormat(options?.format)],
     onlyMainContent: true,
+    ...selectorFilters(options),
     ...(options?.timeout ? { timeout: options.timeout * 1000 } : {}),
     ...(options?.noCache ? { maxAge: 0 } : {}),
+  };
+}
+
+function selectorFilters(options?: Readonly<ReadOptions>): Record<string, unknown> {
+  return {
+    ...(options?.targetSelector ? { includeTags: [options.targetSelector] } : {}),
+    ...(options?.removeSelector ? { excludeTags: [options.removeSelector] } : {}),
   };
 }
 
