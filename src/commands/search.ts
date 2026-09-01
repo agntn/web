@@ -30,8 +30,8 @@ export default defineCommand({
     },
     highlights: {
       type: "boolean",
-      description: "Return query-relevant passages when supported",
-      negativeDescription: "Disable query-relevant passages when supported",
+      description: "Return passages relevant to the query when supported",
+      negativeDescription: "Disable passages relevant to the query when supported",
       default: true,
     },
     json: {

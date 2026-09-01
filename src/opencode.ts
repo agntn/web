@@ -33,7 +33,7 @@ const WebPlugin: Plugin = async () => ({
         highlights: z
           .boolean()
           .optional()
-          .describe("Return query-relevant passages when supported. Defaults to true."),
+          .describe("Return passages relevant to the query when supported. Defaults to true."),
       },
       async execute(args) {
         const { query, provider: providerName, maxResults, highlights } = args;

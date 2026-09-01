@@ -258,7 +258,7 @@ The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`
 | --------------------------------- | --------------------------------------------------------------------------------------- |
 | `--provider <name>`               | Provider to use (text: first configured; image: SerpAPI; read: auto starting with Jina) |
 | `--max-results <n>`               | Maximum text or image search results to return (default: `10`)                          |
-| `--no-highlights`                 | Disable query-relevant passages when supported                                          |
+| `--no-highlights`                 | Disable passages selected for the query when supported                                  |
 | `--format <markdown\|text\|html>` | Preferred read format                                                                   |
 | `--max-tokens <n>`                | Maximum read tokens when supported                                                      |
 | `--json`                          | Output as JSON                                                                          |
@@ -297,7 +297,7 @@ All search providers always return `{ url, title, snippet }`. Optional fields de
 | SerpBase    | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}`               |
 | SearXNG     | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}`                                                                               |
 
-Pick the provider that fits the shape you want. Firecrawl returns query-relevant page passages in `snippet` by default, including Markdown when the source passage contains it. Exa exposes separate summaries, `highlights[]`, and full text. TinyFish carries useful news and research metadata. Jina and Tavily are strong when page content matters. Brave, Mojeek, SerpAPI, SerpBase, and SearXNG return classic SERP metadata.
+Pick the provider that fits the shape you want. Firecrawl returns page passages relevant to the query in `snippet` by default, including Markdown when the source passage contains it. Exa exposes separate summaries, `highlights[]`, and full text. TinyFish carries useful news and research metadata. Jina and Tavily are strong when page content matters. Brave, Mojeek, SerpAPI, SerpBase, and SearXNG return classic SERP metadata.
 
 SerpBase uses Google SERP endpoints. `category: "images"`, `"news"`, or `"videos"` selects the matching SerpBase endpoint; `maxResults` is applied client-side to the returned page. TinyFish also applies `maxResults` client-side to one result page.
 
@@ -354,7 +354,7 @@ interface SearchResult {
 }
 ```
 
-Optional fields depend on what the provider returns. Firecrawl uses query-relevant page passages for `snippet` by default. Exa provides `score`, `text`, and `highlights`. TinyFish provides publisher and research metadata. Jina provides result `text` and metadata when available. Mojeek provides ranking, date, image, and crawl metadata. Brave provides `favicon`. Not all providers populate all fields.
+Optional fields depend on what the provider returns. Firecrawl uses page passages relevant to the query for `snippet` by default. Exa provides `score`, `text`, and `highlights`. TinyFish provides publisher and research metadata. Jina provides result `text` and metadata when available. Mojeek provides ranking, date, image, and crawl metadata. Brave provides `favicon`. Not all providers populate all fields.
 
 Reverse image results keep page and image identity separate:
 
@@ -407,7 +407,7 @@ interface SearchOptions {
 }
 ```
 
-`maxResults` works with every search provider. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. The remaining filters are provider-specific:
+`maxResults` works with every search provider. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. The remaining filters are specific to each provider:
 
 | Provider    | Domain filters   | Category values                              | Date bounds |
 | ----------- | ---------------- | -------------------------------------------- | ----------- |

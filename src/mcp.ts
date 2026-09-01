@@ -71,7 +71,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         ),
         highlights: Type.Optional(
           Type.Boolean({
-            description: "Return query-relevant passages when supported. Defaults to true.",
+            description: "Return passages relevant to the query when supported. Defaults to true.",
           }),
         ),
         includeDomains: Type.Optional(

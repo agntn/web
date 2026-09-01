@@ -29,7 +29,7 @@ export const searchTool = tool({
     highlights: z
       .boolean()
       .optional()
-      .describe("Return query-relevant passages when supported. Defaults to true."),
+      .describe("Return passages relevant to the query when supported. Defaults to true."),
     includeDomains: z
       .array(z.string())
       .optional()
