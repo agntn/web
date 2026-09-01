@@ -401,6 +401,8 @@ interface SearchOptions {
   highlights?: boolean;
   includeDomains?: string[];
   excludeDomains?: string[];
+  sources?: string[];
+  categories?: string[];
   startPublishedDate?: string;
   endPublishedDate?: string;
   category?: string;
@@ -409,19 +411,21 @@ interface SearchOptions {
 
 `maxResults` works with every search provider. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. The remaining filters are specific to each provider:
 
-| Provider    | Domain filters   | Category values                              | Date bounds |
-| ----------- | ---------------- | -------------------------------------------- | ----------- |
-| Brave       | none             | none                                         | none        |
-| Context.dev | include, exclude | none                                         | none        |
-| Exa         | include, exclude | forwarded as given                           | start, end  |
-| Firecrawl   | include, exclude | `news`, `research`, `developer`              | none        |
-| Jina        | include          | `web`, `images`, `news`                      | none        |
-| Mojeek      | include, exclude | none                                         | start, end  |
-| SearXNG     | none             | forwarded as given                           | none        |
-| SerpAPI     | none             | none                                         | none        |
-| SerpBase    | none             | `image`, `images`, `news`, `video`, `videos` | none        |
-| Tavily      | include, exclude | none                                         | none        |
-| TinyFish    | include, exclude | `news`, `research_paper`                     | start, end  |
+| Provider    | Domain filters   | Source values           | Category values                              | Date bounds |
+| ----------- | ---------------- | ----------------------- | -------------------------------------------- | ----------- |
+| Brave       | none             | none                    | none                                         | none        |
+| Context.dev | include, exclude | none                    | none                                         | none        |
+| Exa         | include, exclude | none                    | forwarded as given                           | start, end  |
+| Firecrawl   | include, exclude | `web`, `news`, `images` | `research`, `pdf`, `developer`               | none        |
+| Jina        | include          | none                    | `web`, `images`, `news`                      | none        |
+| Mojeek      | include, exclude | none                    | none                                         | start, end  |
+| SearXNG     | none             | none                    | forwarded as given                           | none        |
+| SerpAPI     | none             | none                    | none                                         | none        |
+| SerpBase    | none             | none                    | `image`, `images`, `news`, `video`, `videos` | none        |
+| Tavily      | include, exclude | none                    | none                                         | none        |
+| TinyFish    | include, exclude | none                    | `news`, `research_paper`                     | start, end  |
+
+Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
 `searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters` and `undeclaredFilters`. `searchAllDetailed()` keeps the same diagnostics in `filterReports`. Custom providers without capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the matrix as `searchFilters` and optional `searchCategories`.
 

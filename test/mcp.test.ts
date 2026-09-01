@@ -423,6 +423,26 @@ describe("web MCP executors", () => {
     expect(requestUrl).toContain("site=github.com");
   });
 
+  it("passes Firecrawl source and category arrays through the executor", async () => {
+    vi.stubEnv("FIRECRAWL_API_KEY", "test-key");
+    mockPostJSON.mockResolvedValue({ success: true, data: { web: [] } });
+
+    await executeSearch({
+      query: "test",
+      provider: "firecrawl",
+      sources: ["web", "news"],
+      categories: ["developer"],
+    });
+
+    expect(mockPostJSON.mock.calls[0]?.[1]).toMatchObject({
+      sources: ["web", "news"],
+      categories: ["developer"],
+    });
+    await expect(
+      executeSearch({ query: "test", provider: "firecrawl", sources: "news" }),
+    ).rejects.toBeInstanceOf(TypeError);
+  });
+
   it("rejects fractional maxTokens and a non-boolean noCache at the boundary", async () => {
     await expect(
       executeRead({ url: "https://example.com", maxTokens: 10.5 }),
