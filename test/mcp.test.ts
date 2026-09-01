@@ -69,6 +69,12 @@ describe("web MCP server", () => {
       "web_read",
       "web_providers",
     ]);
+    expect(response.tools.map((tool) => tool.title)).toEqual([
+      "⌕ Web Search",
+      "▧ Search by Image",
+      "↗ Web Read",
+      "◫ Web Providers",
+    ]);
     for (const tool of response.tools) {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     }

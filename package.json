@@ -26,7 +26,9 @@
   },
   "files": [
     "dist",
-    "packages/pi/extensions"
+    "packages/omp/extensions",
+    "packages/pi/extensions",
+    "src/tui.ts"
   ],
   "type": "module",
   "sideEffects": [
@@ -72,6 +74,7 @@
     "citty": "latest",
     "consola": "latest",
     "ofetch": "^1.5.1",
+    "string-width": "^8.2.2",
     "typebox": "^1.1.38",
     "zod": "^4.3.6"
   },
@@ -79,6 +82,8 @@
     "@agntn/ox": "^0.1.0",
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
+    "@oh-my-pi/omptype": "^18.0.11",
+    "@oh-my-pi/pi-coding-agent": "^18.0.11",
     "@opencode-ai/plugin": "^1.2.23",
     "@types/node": "latest",
     "ai": "^6.0.116",
@@ -93,6 +98,7 @@
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
+    "@oh-my-pi/pi-coding-agent": ">=18.0.0 <19",
     "@opencode-ai/plugin": ">=1.0.0",
     "ai": "^6.0.116",
     "typebox": "^1.1.33",
@@ -103,6 +109,9 @@
       "optional": true
     },
     "@earendil-works/pi-tui": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-coding-agent": {
       "optional": true
     },
     "@opencode-ai/plugin": {
@@ -122,6 +131,11 @@
     "node": ">=22"
   },
   "packageManager": "pnpm@11.3.0",
+  "omp": {
+    "extensions": [
+      "./packages/omp/extensions/web.ts"
+    ]
+  },
   "pi": {
     "extensions": [
       "./packages/pi/extensions/*.ts"

@@ -1,12 +1,15 @@
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import stringWidth from "string-width";
 import { describe, expect, it, vi } from "vitest";
 import webExtension, { resolveWebModuleUrl } from "../../packages/pi/extensions/web.ts";
 import { builtinProviders } from "../../src/index.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { providerApiKeyEnvVar } from "../../src/core/providers.ts";
 
-type CapturedTool = Readonly<Pick<ToolDefinition, "name" | "parameters" | "execute">>;
+type CapturedTool = Readonly<
+  Pick<ToolDefinition, "name" | "label" | "parameters" | "execute" | "renderCall" | "renderResult">
+>;
 type CapturedCommand = Parameters<ExtensionAPI["registerCommand"]>[1];
 
 describe("Pi extension", () => {
@@ -18,6 +21,64 @@ describe("Pi extension", () => {
 
   it("registers reverse image search as a separate tool", () => {
     expect(captureTools().has("web_search_image")).toBe(true);
+  });
+
+  it("gives every tool a compact call and result renderer", () => {
+    const tools = captureTools();
+
+    for (const tool of tools.values()) {
+      expect(tool.renderCall).toBeTypeOf("function");
+      expect(tool.renderResult).toBeTypeOf("function");
+    }
+
+    const search = tools.get("web_search");
+    if (!search?.renderCall || !search.renderResult) throw new Error("Missing search renderers");
+    const theme = {};
+    const call: unknown = Reflect.apply(search.renderCall, search, [
+      {
+        query: "terminal-safe search",
+        provider: "exa",
+        maxResults: 5,
+        startPublishedDate: "2026-01-01",
+      },
+      theme,
+      { executionStarted: true, isPartial: true },
+    ]);
+    const result: unknown = Reflect.apply(search.renderResult, search, [
+      {
+        content: [{ type: "text", text: "[provider=exa] 2 results" }],
+        details: { mode: "single", provider: "exa", count: 2, results: [] },
+      },
+      { expanded: false, isPartial: false },
+      theme,
+      { isError: false },
+    ]);
+
+    expect(renderedText(call)).toBe("◌ ⌕ Web Search terminal-safe search exa · top 5 · 1 filter");
+    expect(renderedText(result)).toBe("✓ found 2 results · exa");
+  });
+
+  it("renders Pi failures from the render context and strips terminal controls", () => {
+    const read = captureTools().get("web_read");
+    if (!read?.renderCall || !read.renderResult) throw new Error("Missing read renderers");
+    const theme = {};
+    const call: unknown = Reflect.apply(read.renderCall, read, [
+      { url: `https://example.com/${"a".repeat(160)}\u001B]0;bad\u0007page`, provider: "auto" },
+      theme,
+      { executionStarted: false, isPartial: true },
+    ]);
+    const result: unknown = Reflect.apply(read.renderResult, read, [
+      { content: [{ type: "text", text: "Provider failed\nforged line" }] },
+      { expanded: false, isPartial: false },
+      theme,
+      { isError: true },
+    ]);
+
+    expect(renderedText(call)).not.toMatch(/\p{Cc}/u);
+    expect(renderedText(call)).not.toContain("bad");
+    expect(renderedText(call, 80).split("\n")).toHaveLength(1);
+    expect(stringWidth(renderedText(call, 80))).toBeLessThanOrEqual(80);
+    expect(renderedText(result)).toBe("✗ Provider failed");
   });
 
   it("advertises every built-in text search provider", () => {
@@ -457,4 +518,10 @@ function captureExtension(): {
 
 function captureTools(): Map<string, CapturedTool> {
   return captureExtension().tools;
+}
+
+function renderedText(component: unknown, width = 240): string {
+  return (component as { render(viewportWidth: number): readonly string[] })
+    .render(width)
+    .join("\n");
 }

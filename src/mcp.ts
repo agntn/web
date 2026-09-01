@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Type, type TSchema } from "typebox";
 import { Value } from "typebox/value";
+import { webToolTitle } from "./tui.ts";
 import { builtinProviders } from "./core/providers.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
 import {
@@ -39,7 +40,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
   [
     {
       name: "web_search",
-      title: "Web Search",
+      title: webToolTitle("web_search"),
       description:
         'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored.',
       inputSchema: Type.Object({
@@ -110,7 +111,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         ),
       }),
       annotations: {
-        title: "Web Search",
+        title: webToolTitle("web_search"),
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
@@ -120,7 +121,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
     },
     {
       name: "web_search_image",
-      title: "Web Image Search",
+      title: webToolTitle("web_search_image"),
       description:
         "Find public pages containing or resembling an image available by URL. Returns matched page and image URLs with dimensions and rank metadata.",
       inputSchema: Type.Object({
@@ -145,7 +146,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         ),
       }),
       annotations: {
-        title: "Web Image Search",
+        title: webToolTitle("web_search_image"),
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
@@ -155,7 +156,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
     },
     {
       name: "web_read",
-      title: "Web Read",
+      title: webToolTitle("web_read"),
       description:
         "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, or TinyFish. Automatic reads report the effective provider after fallback.",
       inputSchema: Type.Object({
@@ -203,7 +204,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         ),
       }),
       annotations: {
-        title: "Web Read",
+        title: webToolTitle("web_read"),
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,
@@ -213,12 +214,12 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
     },
     {
       name: "web_providers",
-      title: "Web Providers",
+      title: webToolTitle("web_providers"),
       description:
         "List available web search providers, their configuration and filter support, and the running build.",
       inputSchema: Type.Object({}),
       annotations: {
-        title: "Web Providers",
+        title: webToolTitle("web_providers"),
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,

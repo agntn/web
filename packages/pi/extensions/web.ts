@@ -1,9 +1,17 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import type { AgentToolResult, ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type Static } from "typebox";
+import {
+  createViewportText,
+  type RenderedToolResult,
+  type RenderOptions,
+  renderWebToolCall,
+  renderWebToolResult,
+  type StatusTheme,
+  type WebToolName,
+} from "../../../src/tui.ts";
 import type {
   ImageSearchProviderName,
   ImageSearchResult,
@@ -131,7 +139,7 @@ const searchParameters = Type.Object({
   ),
   provider: Type.Optional(Type.String({ description: PROVIDER_HINT })),
   maxResults: Type.Optional(
-    Type.Number({
+    Type.Integer({
       description: `Maximum results to return. Defaults to ${DEFAULT_MAX_RESULTS}.`,
       minimum: 1,
       maximum: MAX_RESULTS_HARD_CAP,
@@ -204,7 +212,7 @@ const readParameters = Type.Object({
     Type.String({ description: 'Preferred content format: "markdown", "text", or "html".' }),
   ),
   maxTokens: Type.Optional(
-    Type.Number({ description: "Maximum tokens to return when supported.", minimum: 1 }),
+    Type.Integer({ description: "Maximum tokens to return when supported.", minimum: 1 }),
   ),
   targetSelector: Type.Optional(
     Type.String({ description: "CSS selector to target when supported." }),
@@ -213,24 +221,41 @@ const readParameters = Type.Object({
     Type.String({ description: "CSS selector to remove when supported." }),
   ),
   timeout: Type.Optional(
-    Type.Number({ description: "Provider timeout in seconds when supported.", minimum: 1 }),
+    Type.Integer({ description: "Provider timeout in seconds when supported.", minimum: 1 }),
   ),
   noCache: Type.Optional(Type.Boolean({ description: "Bypass provider cache when supported." })),
 });
 
 const emptyParameters = Type.Object({});
 
-type SearchParams = Static<typeof searchParameters>;
-type ReadParams = Static<typeof readParameters>;
-type SearchRenderParams = SearchOptionValues & {
-  readonly query: string | readonly string[];
-  readonly provider?: string;
-};
-type ReadRenderParams = Readonly<Omit<ReadParams, "url">> & {
-  readonly url: string | readonly string[];
-};
 type EmptyParams = Static<typeof emptyParameters>;
 type ReadProviderInput = ReadProviderName;
+
+function statusRenderers(name: WebToolName) {
+  return {
+    renderCall(args: unknown, theme: Readonly<StatusTheme>, context: Readonly<RenderOptions>) {
+      return createViewportText((width) =>
+        renderWebToolCall(name, args, { ...context, viewportWidth: width }, theme),
+      );
+    },
+    renderResult(
+      result: Readonly<RenderedToolResult>,
+      options: Readonly<RenderOptions>,
+      theme: Readonly<StatusTheme>,
+      context?: Readonly<{ isError?: boolean }>,
+    ) {
+      return createViewportText((width) =>
+        renderWebToolResult(
+          name,
+          result,
+          context?.isError === true,
+          { ...options, viewportWidth: width },
+          theme,
+        ),
+      );
+    },
+  };
+}
 
 export default function webExtension(pi: ExtensionAPI) {
   pi.registerTool({
@@ -248,9 +273,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Forward domain, source, category, and date filters when the user gives concrete values.",
     ],
     parameters: searchParameters,
-    renderCall(args, theme) {
-      return new Text(renderSearchCall(args, theme), 0, 0);
-    },
+    ...statusRenderers("web_search"),
     async execute(_toolCallId, params): Promise<AgentToolResult<SearchDetails>> {
       const web = await loadWeb();
       const providerName = normalizeSearchProviderInput(params.provider, web.builtinProviders);
@@ -378,7 +401,7 @@ export default function webExtension(pi: ExtensionAPI) {
 
   pi.registerTool({
     name: "web_search_image",
-    label: "Web Image Search",
+    label: "Search by Image",
     description:
       "Read-only/open-world reverse image search: find public pages containing or resembling an image available by URL. Returns matched page and image URLs with dimensions and rank metadata.",
     promptSnippet: "Find pages containing or resembling a public image URL with web_search_image.",
@@ -386,13 +409,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Use web_search_image for reverse image lookup. Use web_search for text queries and web_read for page content.",
     ],
     parameters: imageSearchParameters,
-    renderCall(args, theme) {
-      return new Text(
-        `${theme.fg("toolTitle", theme.bold("web_search_image"))} ${theme.fg("muted", truncateSingleLine(args.url, 120))}`,
-        0,
-        0,
-      );
-    },
+    ...statusRenderers("web_search_image"),
     async execute(_toolCallId, params): Promise<AgentToolResult<ImageSearchDetails>> {
       const web = await loadWeb();
       const provider = normalizeImageSearchProviderInput(
@@ -425,9 +442,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Use web_search for query-to-URL search; use web_read for URL-to-content reading.",
     ],
     parameters: readParameters,
-    renderCall(args, theme) {
-      return new Text(renderReadCall(args, theme), 0, 0);
-    },
+    ...statusRenderers("web_read"),
     async execute(_toolCallId, params): Promise<AgentToolResult<ReadDetails>> {
       const web = await loadWeb();
       const readProvider = normalizeReadProviderInput(params.provider, web.readProviderNames);
@@ -493,9 +508,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Use web_providers before web_search if provider availability or filter support is unclear.",
     ],
     parameters: emptyParameters,
-    renderCall(_args, theme) {
-      return new Text(theme.fg("toolTitle", theme.bold("web_providers")), 0, 0);
-    },
+    ...statusRenderers("web_providers"),
     async execute(
       _toolCallId: string,
       _params: EmptyParams,
@@ -878,69 +891,6 @@ function formatReadResult(
   if (result.description) lines.push(`   ${truncateSingleLine(result.description, 160)}`);
   if (result.content) lines.push("", result.content);
   return lines;
-}
-
-function renderSearchCall(
-  params: SearchRenderParams,
-  theme: Readonly<Pick<Theme, "bold" | "fg">>,
-): string {
-  const queryLabel =
-    typeof params.query !== "string"
-      ? `${params.query.length} queries`
-      : `"${truncateSingleLine(params.query, 120)}"`;
-  return [
-    theme.fg("toolTitle", theme.bold("web_search")),
-    theme.fg("dim", queryLabel),
-    ...searchCallOptions(params).map((option) => theme.fg("muted", option)),
-  ].join(" ");
-}
-
-function searchCallOptions(
-  params: SearchOptionValues & Readonly<Pick<SearchParams, "provider">>,
-): readonly string[] {
-  return [...searchCallBasics(params), ...searchCallFilters(params)];
-}
-
-function searchCallBasics(
-  params: SearchOptionValues & Readonly<Pick<SearchParams, "provider">>,
-): readonly string[] {
-  return [
-    params.provider ? `provider=${params.provider}` : undefined,
-    params.maxResults === undefined ? undefined : `max=${params.maxResults}`,
-    params.highlights === false ? "highlights=false" : undefined,
-    params.sources?.length ? `sources=${params.sources.join(",")}` : undefined,
-    params.categories?.length ? `categories=${params.categories.join(",")}` : undefined,
-    params.category ? `cat=${params.category}` : undefined,
-  ].filter(isDefined);
-}
-
-function searchCallFilters(params: SearchOptionValues): readonly string[] {
-  return [
-    params.includeDomains?.length ? `include=${params.includeDomains.join(",")}` : undefined,
-    params.excludeDomains?.length ? `exclude=${params.excludeDomains.join(",")}` : undefined,
-    params.startPublishedDate ? `from=${params.startPublishedDate}` : undefined,
-    params.endPublishedDate ? `to=${params.endPublishedDate}` : undefined,
-  ].filter(isDefined);
-}
-
-function isDefined(value: string | undefined): value is string {
-  return value !== undefined;
-}
-
-function renderReadCall(
-  params: ReadRenderParams,
-  theme: Readonly<Pick<Theme, "bold" | "fg">>,
-): string {
-  const urlLabel =
-    typeof params.url !== "string"
-      ? `${params.url.length} URLs`
-      : truncateSingleLine(params.url, 120);
-  const parts = [theme.fg("toolTitle", theme.bold("web_read")), theme.fg("dim", urlLabel)];
-  if (params.provider) parts.push(theme.fg("muted", `provider=${params.provider}`));
-  if (params.format) parts.push(theme.fg("muted", `format=${params.format}`));
-  if (params.maxTokens !== undefined)
-    parts.push(theme.fg("muted", `maxTokens=${params.maxTokens}`));
-  return parts.join(" ");
 }
 
 function truncateSingleLine(text: string, maxLength: number): string {

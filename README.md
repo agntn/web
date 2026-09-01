@@ -11,9 +11,9 @@ If you're building an AI agent or a CLI tool that needs web search, you don't wa
 
 `@agntn/web` normalizes all of that behind a single interface. It also ships [AI SDK](https://ai-sdk.dev/) tools and a CLI. Text search is query-to-results, reverse image search is image URL-to-matches, and read is URL-to-content.
 
-## Pi extension
+## Pi and OMP extensions
 
-`@agntn/web` ships with a [pi](https://pi.dev) extension that registers four tools and two commands. Install the package straight from GitHub:
+`@agntn/web` ships the same four tools for [pi](https://pi.dev) and OMP. Pi also gets two slash commands. Install the package straight from GitHub:
 
 ```bash
 pi install git:github.com/agntn/web
@@ -31,7 +31,7 @@ Provided slash commands:
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` - show provider configuration and reachability status
 
-The extension reuses the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Pi bundles `@earendil-works/pi-coding-agent`, `@earendil-works/pi-tui`, and `typebox`, so no extra installs are needed.
+Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
 
 ## Install
 
@@ -239,7 +239,7 @@ Read commands use automatic selection unless `--provider` is set. Scalar JSON is
 
 ### MCP server
 
-`web mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio exposing the same capabilities as the agent tools:
+`web mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio exposing the same capabilities as the agent tools. MCP clients keep control of their own TUI; the server supplies the same tool symbols and titles as the native extensions without writing decorations into the JSON-RPC stream:
 
 - `web_search` - search one query or a batch, or use `provider="all"` for provider fan-out
 - `web_search_image` - find matching pages and images from a public image URL

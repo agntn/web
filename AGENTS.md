@@ -22,8 +22,10 @@ src/
 ├── opencode.ts           # OpenCode plugin tools
 ├── mcp.ts                # MCP server surface (createMcpServer, executors)
 └── cli.ts                # CLI entry point
-packages/pi/extensions/
-└── web.ts                # Pi tool/command surface
+packages/
+├── omp/extensions/web.ts # OMP tool surface
+└── pi/extensions/web.ts  # Pi tool/command surface
+src/tui.ts                # Shared terminal-safe presentation for Pi, OMP, and MCP
 test/unit/                # Public behavior and provider contract tests
 .github/workflows/
 ├── test.yml              # CI: typecheck -> build -> test
@@ -32,20 +34,21 @@ test/unit/                # Public behavior and provider contract tests
 
 ## WHERE TO LOOK
 
-| Task                 | Location                                                                      | Notes                                                                                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Add public exports   | `src/index.ts`                                                                | Keep the public surface small and explicit                                                                                                                     |
-| Add/extend providers | `src/providers/`                                                              | Keep provider-shaped responses inside the adapter                                                                                                              |
-| Add search behavior  | `src/core/all.ts` + provider adapter                                          | Preserve query → results semantics                                                                                                                             |
-| Add image search     | `src/core/image.ts` + provider adapter + `src/commands/search-image.ts`       | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                            |
-| Add read behavior    | `src/core/read.ts` + provider adapter + `src/commands/read.ts`                | Preserve URL → content semantics                                                                                                                               |
-| Extend CLI           | `src/commands/` + `src/cli.ts`                                                | Add subcommands with `citty`; keep text and JSON output stable                                                                                                 |
-| Extend agent tools   | `src/ai.ts`, `src/opencode.ts`, `packages/pi/extensions/web.ts`, `src/mcp.ts` | Keep names capability-specific; MCP and extensions mirror provider enums from their core capability modules, never a frozen copy                               |
-| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                                          | Low-level SDK `Server` with TypeBox schemas; every error branch goes through `errorResult`; executor guards re-check boundaries for hosts that skip validation |
-| Add tests            | `test/`                                                                       | Mirror public behavior, not implementation details                                                                                                             |
-| Change build outputs | `build.config.ts` + `package.json`                                            | Keep `entries` and `exports` aligned                                                                                                                           |
-| Change CI flow       | `.github/workflows/test.yml`                                                  | Order stays `typecheck -> build -> test`                                                                                                                       |
-| Change release flow  | `.github/workflows/publish.yml`                                               | Publish through npm OIDC only from `v*` tags                                                                                                                   |
+| Task                 | Location                                                                            | Notes                                                                                                                                                          |
+| -------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add public exports   | `src/index.ts`                                                                      | Keep the public surface small and explicit                                                                                                                     |
+| Add/extend providers | `src/providers/`                                                                    | Keep provider-shaped responses inside the adapter                                                                                                              |
+| Add search behavior  | `src/core/all.ts` + provider adapter                                                | Preserve query → results semantics                                                                                                                             |
+| Add image search     | `src/core/image.ts` + provider adapter + `src/commands/search-image.ts`             | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                            |
+| Add read behavior    | `src/core/read.ts` + provider adapter + `src/commands/read.ts`                      | Preserve URL → content semantics                                                                                                                               |
+| Extend CLI           | `src/commands/` + `src/cli.ts`                                                      | Add subcommands with `citty`; keep text and JSON output stable                                                                                                 |
+| Extend agent tools   | `src/ai.ts`, `src/opencode.ts`, `packages/{pi,omp}/extensions/web.ts`, `src/mcp.ts` | Keep names capability-specific; MCP and extensions mirror provider enums from their core capability modules, never a frozen copy                               |
+| Change TUI rendering | `src/tui.ts` + both extension adapters                                              | Keep collapsed rows compact, expanded previews bounded, and every interpolated value terminal-safe                                                             |
+| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                                                | Low-level SDK `Server` with TypeBox schemas; every error branch goes through `errorResult`; executor guards re-check boundaries for hosts that skip validation |
+| Add tests            | `test/`                                                                             | Mirror public behavior, not implementation details                                                                                                             |
+| Change build outputs | `build.config.ts` + `package.json`                                                  | Keep `entries` and `exports` aligned                                                                                                                           |
+| Change CI flow       | `.github/workflows/test.yml`                                                        | Order stays `typecheck -> build -> test`                                                                                                                       |
+| Change release flow  | `.github/workflows/publish.yml`                                                     | Publish through npm OIDC only from `v*` tags                                                                                                                   |
 
 ## CONVENTIONS
 
@@ -69,7 +72,7 @@ Seven files must be updated. Missing any causes a bug (test failure, missing fro
 3. `src/core/providers.ts` — add to `builtinProviders` array
 4. `src/core/resolve.ts` — add env var to `envKeys` map (unless self-hosted like searxng)
 5. `src/core/read.ts` — add to `readProviderNames` if provider supports read/scrape
-6. `packages/pi/extensions/web.ts` - update the `PROVIDERS` description tuple and tool descriptions; search execution validates against live `builtinProviders`
+6. `packages/pi/extensions/web.ts` and `packages/omp/extensions/web.ts` - update provider descriptions and tool schemas; execution validates against live registries
 7. `test/unit/<name>.ts` + `test/index.test.ts` — add provider tests + update hardcoded expected list
 
 After: `pnpm typecheck && pnpm test:run && pnpm build`
