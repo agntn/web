@@ -374,6 +374,18 @@ describe("firecrawl provider", () => {
       expect(body.timeout).toBe(30000);
     });
 
+    it("passes content selectors to Firecrawl", async () => {
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      await provider.read("https://example.com", {
+        targetSelector: "main article",
+        removeSelector: "nav, footer",
+      });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.includeTags).toEqual(["main article"]);
+      expect(body.excludeTags).toEqual(["nav, footer"]);
+    });
+
     it("sets maxAge to zero when cache is bypassed", async () => {
       const provider = createFirecrawlProvider({ apiKey: "test-key" });
       await provider.read("https://example.com", { noCache: true });
