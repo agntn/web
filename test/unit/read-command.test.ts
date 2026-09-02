@@ -232,13 +232,23 @@ describe("read command", () => {
     expect(mockReadBatchDetailed).not.toHaveBeenCalled();
   });
 
-  it("strips terminal control sequences from human output", async () => {
+  it("removes terminal controls from human output without flattening page content", async () => {
+    const escape = String.fromCodePoint(0x1b);
+    const bell = String.fromCodePoint(0x07);
+    const controlSequence = String.fromCodePoint(0x9b);
+    const lineSeparator = String.fromCodePoint(0x2028);
+    const rightToLeftOverride = String.fromCodePoint(0x202e);
+    const malformedSurrogate = String.fromCodePoint(0xd800);
+    const zeroWidthNonJoiner = String.fromCodePoint(0x200c);
+    const zeroWidthJoiner = String.fromCodePoint(0x200d);
+    const joinedEmoji = `👩${zeroWidthJoiner}💻`;
+    const persian = `می${zeroWidthNonJoiner}روم`;
     mockReadUrlDetailed.mockResolvedValueOnce({
       result: {
-        url: "https://example.com",
-        title: "Example \x1B[31mTitle\x1B[0m",
-        description: "Description \x1B]0;bad\x07ok",
-        content: "Zażółć \x1B[31mred\x1B[0m \x01world",
+        url: `https://example.com/${lineSeparator}page`,
+        title: `Example \x1B[31mTitle\x1B[0m${rightToLeftOverride}`,
+        description: `Description${controlSequence}31m${rightToLeftOverride}safe`,
+        content: `Zażółć \x1B[31mred\x1B[0m \x01world\r    ${joinedEmoji} ${persian}\t${escape}]8;;https://evil.example${bell}link${escape}]8;;${bell}${malformedSurrogate}gap\nnext${lineSeparator}line ${controlSequence}31m${rightToLeftOverride}safe`,
       },
       requestedProvider: "auto",
       provider: "jina",
@@ -247,10 +257,14 @@ describe("read command", () => {
 
     await runRead();
 
-    const contentLine = String(mockLog.mock.calls.at(-1)?.[0]);
-    expect(contentLine).not.toContain("\x1B");
-    expect(contentLine).not.toContain("\x01");
-    expect(contentLine).toBe("Zażółć red world");
+    expect(mockLog.mock.calls.map(([message]) => String(message))).toEqual([
+      "[provider=jina requested=auto] read https://example.com/ page",
+      "\x1B[1m\x1B[36mExample Title\x1B[0m",
+      "  https://example.com/ page",
+      "  \x1B[90mDescription safe\x1B[0m",
+      "",
+      `Zażółć red world\n    ${joinedEmoji} ${persian}\tlink gap\nnext line safe`,
+    ]);
   });
 
   it("exits with a helpful message for empty URL", async () => {
