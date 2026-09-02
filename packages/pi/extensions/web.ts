@@ -134,6 +134,9 @@ const READ_PROVIDER_HINT =
 const MAX_RESULTS_HARD_CAP = 20;
 const MAX_BATCH_ITEMS_HARD_CAP = 10;
 const DEFAULT_MAX_RESULTS = 10;
+const MODEL_RESULT_MAX_CHARACTERS = 4_000;
+const MODEL_FIELD_MAX_CHARACTERS = 300;
+const MODEL_TEXT_MAX_CHARACTERS = 900;
 
 const searchParameters = Type.Object({
   query: Type.Union(
@@ -596,7 +599,7 @@ async function runWebCommand(args: string, ui: CommandUi): Promise<void> {
 
   const found = await searchForCommand(query, ui);
   if (!found || found.results.length === 0) return;
-  const labels = found.results.map(formatResult);
+  const labels = found.results.map(formatCompactResult);
   const selected = await ui.select(`web (${found.provider}) - ${query}`, labels);
   if (!selected) return;
   const picked = found.results[labels.indexOf(selected)];
@@ -799,7 +802,10 @@ function providerStatusSymbol(status: Readonly<ProviderStatus>): string {
   return status.reachable === false ? "⚠" : "✓";
 }
 
-type SearchResultView = Readonly<Pick<SearchResult, "url" | "title" | "snippet">>;
+type SearchResultView = Readonly<Omit<SearchResult, "highlights" | "metadata">> & {
+  readonly highlights?: readonly string[];
+  readonly metadata?: Readonly<Record<string, unknown>>;
+};
 type SearchAllResultView = SearchResultView & Readonly<Pick<SearchAllResult, "provider">>;
 type SearchBatchItemView =
   | { readonly query: string; readonly error: string }
@@ -821,15 +827,77 @@ type ReadBatchItemView =
     };
 type ProviderErrorView = { readonly provider: string; readonly error: Readonly<Error> };
 
-function formatResult(result: SearchResultView, index?: number): string {
+function formatCompactResult(result: SearchResultView, index?: number): string {
   const head = index === undefined ? "" : `${index + 1}. `;
-  const title = result.title || "(no title)";
+  const title = truncateSingleLine(result.title || "(no title)", 300);
+  const url = truncateSingleLine(result.url, 500);
   const snippet = result.snippet ? ` - ${truncateSingleLine(result.snippet, 120)}` : "";
-  return `${head}${title}\n   ${result.url}${snippet}`;
+  return `${head}${title}\n   ${url}${snippet}`;
+}
+
+function formatModelResult(result: SearchResultView, index: number, provider?: string): string {
+  const title = truncateModelValue(result.title || "(no title)", 160);
+  const url = truncateModelValue(result.url, 300);
+  const lines = [
+    `${index + 1}. ${title}`,
+    `   ${url}`,
+    formatModelField("Snippet", result.snippet),
+    formatModelField("Provider", provider, 80),
+    formatModelField("Score", result.score, 40),
+    formatModelField("Published", result.publishedDate, 100),
+    formatModelField("Author", result.author, 160),
+    formatModelField("Image", result.image),
+    formatModelField("Favicon", result.favicon),
+    formatModelField("Summary", result.summary),
+    formatModelField("Highlights", result.highlights?.join(" | "), 400),
+    result.metadata === undefined
+      ? ""
+      : formatModelField("Metadata", formatMetadataValue(result.metadata), 400),
+    formatModelField("Text", result.text, MODEL_TEXT_MAX_CHARACTERS),
+  ].filter(Boolean);
+  return truncateModelResult(lines.join("\n"));
+}
+
+function formatModelField(
+  label: string,
+  value: string | number | undefined,
+  maxCharacters = MODEL_FIELD_MAX_CHARACTERS,
+): string {
+  if (value === undefined || value === "") return "";
+  return `   ${label}: ${truncateModelValue(String(value), maxCharacters)}`;
+}
+
+function truncateModelValue(value: string, maxCharacters: number): string {
+  const safe = truncateSingleLine(value, MODEL_RESULT_MAX_CHARACTERS);
+  return truncateCharacters(safe, maxCharacters);
+}
+
+function truncateModelResult(text: string): string {
+  return truncateCharacters(text, MODEL_RESULT_MAX_CHARACTERS);
+}
+
+function truncateCharacters(text: string, maxCharacters: number): string {
+  const characters = Array.from(text);
+  if (characters.length <= maxCharacters) return text;
+  return `${characters.slice(0, maxCharacters - 1).join("")}…`;
 }
 
 function formatResults(results: readonly SearchResultView[]): readonly string[] {
-  return results.map((r, i) => formatResult(r, i));
+  return results.map((result, index) => formatModelResult(result, index));
+}
+
+function formatBatchResults(
+  results: readonly SearchResultView[],
+  provider: string,
+): readonly string[] {
+  if (provider !== "all") return formatResults(results);
+  return results.map((result, index) =>
+    formatModelResult(result, index, hasResultProvider(result) ? result.provider : undefined),
+  );
+}
+
+function hasResultProvider(result: SearchResultView): result is SearchAllResultView {
+  return "provider" in result && typeof result.provider === "string";
 }
 
 function formatSingleResults(
@@ -867,7 +935,7 @@ function formatAllResults(
   const lines =
     results.length === 0
       ? ["No results."]
-      : results.map((r, i) => `${formatResult(r, i)}\n   [${r.provider}]`);
+      : results.map((result, index) => formatModelResult(result, index, result.provider));
   lines.push(...formatFilterReports(filterReports), ...formatProviderMetadata(providerMetadata));
   if (errors.length > 0) {
     lines.push("", "Provider errors:");
@@ -884,7 +952,9 @@ function formatSearchBatch(outcomes: readonly SearchBatchItemView[]): string {
       const header = `[${index + 1}] ${outcome.query}`;
       if ("error" in outcome) return `${header}\nError: ${outcome.error}`;
       const lines = [
-        ...(outcome.results.length === 0 ? ["No results."] : formatResults(outcome.results)),
+        ...(outcome.results.length === 0
+          ? ["No results."]
+          : formatBatchResults(outcome.results, outcome.provider)),
         ...formatFilterReports(outcome.filterReports),
         ...formatProviderMetadata(outcome.providerMetadata ?? []),
       ];
