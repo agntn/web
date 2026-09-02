@@ -201,7 +201,7 @@ const { text } = await generateText({
 });
 ```
 
-`searchTool` accepts one query or an array of queries. Explicit and automatic scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters }`; `provider="all"` returns `{ results, errors, filterReports }`. `searchImageTool` accepts one public image URL. `readTool` accepts one URL or an array of URLs, and batch calls use the outcome shapes above:
+`searchTool` accepts one query or an array of queries. Explicit and automatic scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters }`; `provider="all"` returns `{ results, errors, filterReports }`. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts }`; successful batch items keep the same reader provenance beside `url`, while failures stay `{ url, error }`:
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
@@ -211,7 +211,7 @@ tools: { web_search: searchTool, web_search_image: searchImageTool, web_read: re
 // readTool input: { url: string | string[], provider?: "jina" | "context" | "firecrawl" | "tinyfish", format?: "markdown" | "text" | "html" }
 ```
 
-Without an explicit provider, `searchTool` starts with the first reachable provider from the environment and tries the remaining configured providers after HTTP 402. `readTool` defaults to Jina Reader.
+Without an explicit provider, `searchTool` starts with the first reachable provider from the environment and tries the remaining configured providers after HTTP 402. `readTool` starts with Jina Reader and tries other configured readers after HTTP 402 or 409.
 
 ## CLI
 

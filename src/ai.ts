@@ -3,8 +3,8 @@ import { z } from "zod";
 import { builtinProviders } from "./core/providers.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
 import { imageSearchProviderNames, searchByImage } from "./core/image.ts";
-import { readProviderNames, readUrl } from "./core/read.ts";
-import { MAX_BATCH_ITEMS, readBatch, searchBatch } from "./core/batch.ts";
+import { readProviderNames, readUrlDetailed } from "./core/read.ts";
+import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
 import { listProviders } from "./core/resolve.ts";
 import { runtimeInfo } from "./version.ts";
@@ -126,7 +126,7 @@ export const searchImageTool = tool({
 
 export const readTool = tool({
   description:
-    "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, or TinyFish. Each batch item returns its own result or error. Defaults to Jina Reader (r.jina.ai).",
+    "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, or TinyFish. Automatic reads report the effective provider and every reader tried after fallback. Each batch item returns its own result or error.",
   inputSchema: z.object({
     url: z
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
@@ -134,7 +134,9 @@ export const readTool = tool({
     provider: z
       .enum(readProviderNames)
       .optional()
-      .describe("Read provider to use. Defaults to Jina."),
+      .describe(
+        "Read provider to use. Automatic selection starts with Jina and falls back after HTTP 402 or 409.",
+      ),
     format: z.enum(["markdown", "text", "html"]).optional().describe("Preferred content format."),
     maxTokens: z
       .number()
@@ -178,13 +180,13 @@ export const readTool = tool({
       noCache,
     };
     if (Array.isArray(url)) {
-      return readBatch(url, readOptions);
+      return readBatchDetailed(url, readOptions);
     }
     if (!url.trim()) {
       throw new EmptyUrlError();
     }
 
-    return readUrl(url, readOptions);
+    return readUrlDetailed(url, readOptions);
   },
 });
 

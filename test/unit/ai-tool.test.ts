@@ -596,6 +596,7 @@ describe("providersTool", () => {
 
 describe("readTool", () => {
   beforeEach(() => {
+    mockPostJSON.mockReset();
     mockGetJSON.mockReset();
     for (const key of envKeys) {
       savedEnv[key] = process.env[key];
@@ -642,18 +643,53 @@ describe("readTool", () => {
       },
     });
 
-    const result = await readTool.execute!(
+    const response = await readTool.execute!(
       { url: "https://example.com", format: "markdown" },
       { toolCallId: "read-call-1", messages: [] },
     );
 
-    expect(result.content).toBe("Read content");
+    expect(response).toMatchObject({
+      result: {
+        title: "Read Result",
+        url: "https://example.com/",
+        content: "Read content",
+      },
+      requestedProvider: "auto",
+      provider: "jina",
+      attempts: ["jina"],
+    });
     const [url, headers] = mockGetJSON.mock.calls[0];
     expect(url).toBe("https://r.jina.ai/https%3A%2F%2Fexample.com");
     expect(headers).toEqual({ Accept: "application/json", "X-Return-Format": "markdown" });
   });
 
-  it("returns one ordered outcome per URL in a batch", async () => {
+  it("keeps requested and effective readers after automatic fallback", async () => {
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl-key";
+    mockGetJSON.mockRejectedValueOnce(
+      new HTTPError(402, "https://r.jina.ai/https%3A%2F%2Fexample.com", "Payment required"),
+    );
+    mockPostJSON.mockResolvedValueOnce({
+      success: true,
+      data: {
+        markdown: "Fallback content",
+        metadata: { sourceURL: "https://example.com/" },
+      },
+    });
+
+    const response = await readTool.execute!(
+      { url: "https://example.com" },
+      { toolCallId: "read-fallback", messages: [] },
+    );
+
+    expect(response).toMatchObject({
+      result: { url: "https://example.com", content: "Fallback content" },
+      requestedProvider: "auto",
+      provider: "firecrawl",
+      attempts: ["jina", "firecrawl"],
+    });
+  });
+
+  it("returns provenance for every successful URL in a batch", async () => {
     mockGetJSON
       .mockResolvedValueOnce({
         code: 200,
@@ -670,10 +706,13 @@ describe("readTool", () => {
       { toolCallId: "read-batch", messages: [] },
     );
 
-    expect(outcomes).toEqual([
+    expect(outcomes).toMatchObject([
       {
         url: "https://example.com/one",
         result: { url: "https://example.com/one", content: "First page" },
+        requestedProvider: "auto",
+        provider: "jina",
+        attempts: ["jina"],
       },
       { url: "https://example.com/two", error: "second read failed" },
     ]);
