@@ -1,3 +1,7 @@
+import { stripVTControlCharacters } from "node:util";
+
+const ERROR_MESSAGE_UNSAFE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
+
 /** Base error for all web operations. */
 export class WebError extends Error {
   constructor(message: string, options?: Readonly<ErrorOptions>) {
@@ -13,7 +17,7 @@ export class HTTPError extends WebError {
   readonly body: string;
 
   constructor(statusCode: number, url: string, body: string) {
-    super(`HTTP ${statusCode}: ${url}`);
+    super(formatHTTPErrorMessage(statusCode, url, body));
     this.name = "HTTPError";
     this.statusCode = statusCode;
     this.url = url;
@@ -31,6 +35,15 @@ export class HTTPError extends WebError {
   isServerError(): boolean {
     return this.statusCode >= 500;
   }
+}
+
+function formatHTTPErrorMessage(statusCode: number, url: string, body: string): string {
+  const header = `HTTP ${statusCode}: ${url}`;
+  const safeBody = stripVTControlCharacters(body)
+    .replaceAll(ERROR_MESSAGE_UNSAFE, " ")
+    .replaceAll(/\s+/g, " ")
+    .trim();
+  return safeBody.length > 0 ? `${header}: ${safeBody}` : header;
 }
 
 /** Thrown when a provider rejects the API key (HTTP 401). */

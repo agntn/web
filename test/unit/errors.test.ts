@@ -32,12 +32,25 @@ describe("HTTPError", () => {
     expect(error.statusCode).toBe(404);
     expect(error.url).toBe("https://example.com");
     expect(error.body).toBe("Not found");
+    expect(error.message).toBe("HTTP 404: https://example.com: Not found");
     expect(error).toBeInstanceOf(WebError);
   });
 
   it("should identify 404 as not found", () => {
     const error = new HTTPError(404, "https://example.com", "");
     expect(error.isNotFound()).toBe(true);
+    expect(error.message).toBe("HTTP 404: https://example.com");
+  });
+
+  it("should keep response controls out of the message without changing the body", () => {
+    const escape = String.fromCodePoint(0x1b);
+    const bell = String.fromCodePoint(0x07);
+    const rightToLeftOverride = String.fromCodePoint(0x202e);
+    const body = `DNS${escape}]0;bad${bell}\n${rightToLeftOverride}failed`;
+    const error = new HTTPError(422, "https://example.com", body);
+
+    expect(error.body).toBe(body);
+    expect(error.message).toBe("HTTP 422: https://example.com: DNS failed");
   });
 
   it("should identify 429 as rate limit", () => {
