@@ -117,7 +117,7 @@ if (isDetailedSearchProvider(firecrawl)) {
 }
 ```
 
-`web search --provider firecrawl --json "query"` prints the same `{ results, metadata }` envelope. The core detailed helpers preserve that response-level metadata too: scalar `searchProviderDetailed()` and `searchWithFallback()` expose `metadata`, while `searchAllDetailed()` exposes `providerMetadata` entries that keep each metadata object paired with its provider.
+`web search --provider firecrawl --json "query"` prints the detailed provider envelope with results, filter diagnostics, and this metadata. The core detailed helpers preserve response metadata too: scalar `searchProviderDetailed()` and `searchWithFallback()` expose `metadata`, while `searchAllDetailed()` exposes `providerMetadata` entries that keep each metadata object paired with its provider.
 
 ### Reverse image search
 
@@ -219,7 +219,9 @@ Without an explicit provider, `searchTool` starts with the first reachable provi
 web "your query"
 web --provider brave "your query" --max-results 5
 web search "your query" --json
-web search "your query" --provider firecrawl --no-highlights
+web search "first query" "second query" --provider all --json
+web search "your query" --provider firecrawl --sources web,news --categories research
+web search "your query" --include-domains github.com,stackoverflow.com --start-published-date 2026-01-01
 web search-image https://example.com/image.jpg --max-results 5 --json
 web read https://example.com --format markdown --json
 web read https://example.com/one https://example.com/two --json
@@ -229,13 +231,13 @@ web providers
 | Command                  | Description                                   |
 | ------------------------ | --------------------------------------------- |
 | `web <query>`            | Search the web using the default provider     |
-| `web search <query>`     | Search the web using a provider               |
+| `web search <query...>`  | Search one or more queries                    |
 | `web search-image <url>` | Find matching pages from a public image URL   |
 | `web read <url...>`      | Read one or more URLs into normalized content |
 | `web providers`          | List built-in providers                       |
 | `web mcp`                | Run the MCP server over stdio                 |
 
-Read commands use automatic selection unless `--provider` is set. Scalar JSON is `{ result, requestedProvider, provider, attempts }`; batch successes add `url` to that shape. Any failed batch item makes the command exit 1 without discarding successes.
+Search commands accept domain, source, and category lists separated by commas. Search JSON uses the same detailed envelopes as the library and agent tools, including provider errors during `--provider all`; each batch item keeps its own result or error. Read commands use automatic selection unless `--provider` is set. Scalar read JSON is `{ result, requestedProvider, provider, attempts }`; batch successes add `url` to that shape. Any failed read batch item makes the command exit 1 without discarding successes.
 
 ### MCP server
 
@@ -256,14 +258,21 @@ claude mcp add web --scope user -- web mcp
 
 The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`createMcpServer()`) when your host provides its own transport.
 
-| Flag                              | Description                                                                             |
-| --------------------------------- | --------------------------------------------------------------------------------------- |
-| `--provider <name>`               | Provider to use (text: first configured; image: SerpAPI; read: auto starting with Jina) |
-| `--max-results <n>`               | Maximum text or image search results to return (default: `10`)                          |
-| `--no-highlights`                 | Disable passages selected for the query when supported                                  |
-| `--format <markdown\|text\|html>` | Preferred read format                                                                   |
-| `--max-tokens <n>`                | Maximum read tokens when supported                                                      |
-| `--json`                          | Output as JSON                                                                          |
+| Flag                                | Description                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `--provider <name>`                 | Provider to use (text: first configured or `all`; image: SerpAPI; read: auto starting with Jina) |
+| `--max-results <n>`                 | Maximum text or image search results to return (default: `10`)                                   |
+| `--no-highlights`                   | Disable passages selected for the query when supported                                           |
+| `--include-domains <a,b>`           | Include only these domains in text search                                                        |
+| `--exclude-domains <a,b>`           | Exclude these domains from text search                                                           |
+| `--sources <a,b>`                   | Source types for providers that support them                                                     |
+| `--categories <a,b>`                | Categories for providers that support them                                                       |
+| `--category <name>`                 | One provider category                                                                            |
+| `--start-published-date <ISO date>` | Earliest publication date                                                                        |
+| `--end-published-date <ISO date>`   | Latest publication date                                                                          |
+| `--format <markdown\|text\|html>`   | Preferred read format                                                                            |
+| `--max-tokens <n>`                  | Maximum read tokens when supported                                                               |
+| `--json`                            | Output as JSON                                                                                   |
 
 ## Providers
 

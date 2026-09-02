@@ -8,21 +8,24 @@ import {
   SearchNotSupportedError,
   UnknownProviderError,
 } from "../core/errors.ts";
+import type { SearchAllResult, SearchProviderMetadata, SearchProviderResult } from "../core/all.ts";
+import type { SearchFilterReport } from "../core/search-filters.ts";
+import type { ReadonlySearchResult, SearchRequestOptions, SearchResult } from "../core/types.ts";
 
 export default defineCommand({
   meta: {
     name: "search",
-    description: "Search the web using a provider",
+    description: "Search the web using one or more providers",
   },
   args: {
     query: {
       type: "positional",
-      description: "Search query",
+      description: "Search query; pass more than one quoted query for a batch",
       required: true,
     },
     provider: {
       type: "string",
-      description: "Search provider to use",
+      description: 'Search provider to use, or "all" for parallel search',
     },
     "max-results": {
       type: "string",
@@ -34,6 +37,34 @@ export default defineCommand({
       description: "Return passages relevant to the query when supported",
       negativeDescription: "Disable passages relevant to the query when supported",
       default: true,
+    },
+    "include-domains": {
+      type: "string",
+      description: "Domains to include, separated by commas",
+    },
+    "exclude-domains": {
+      type: "string",
+      description: "Domains to exclude, separated by commas",
+    },
+    sources: {
+      type: "string",
+      description: "Source types separated by commas when supported",
+    },
+    categories: {
+      type: "string",
+      description: "Categories separated by commas when supported",
+    },
+    category: {
+      type: "string",
+      description: "Single provider category when supported",
+    },
+    "start-published-date": {
+      type: "string",
+      description: "Only return results published after this ISO date",
+    },
+    "end-published-date": {
+      type: "string",
+      description: "Only return results published before this ISO date",
     },
     json: {
       type: "boolean",
@@ -47,19 +78,8 @@ export default defineCommand({
     const providerName = parsed.provider;
     try {
       await import("../providers/index.ts");
-      if (providerName) {
-        const providerTypes = await import("../core/provider.ts");
-        const provider = registry.createSearchProvider(providerName, {});
-        await writeSearchResult(provider, providerTypes, parsed);
-        return;
-      }
-
-      const { searchWithFallback } = await import("../core/all.ts");
-      const response = await searchWithFallback(parsed.query, {
-        maxResults: parsed.maxResults,
-        highlights: parsed.highlights,
-      });
-      writeSearchResults(response.results, parsed.json);
+      const output = await runSearch(parsed);
+      writeSearchOutput(output, parsed.json);
     } catch (error) {
       await handleSearchError(error, providerName, registry);
     }
@@ -67,71 +87,175 @@ export default defineCommand({
 });
 
 type SearchCommandArgs = {
+  readonly _: readonly string[];
   readonly query: string;
   readonly provider?: string;
   readonly "max-results": string;
   readonly highlights: boolean;
+  readonly "include-domains"?: string;
+  readonly "exclude-domains"?: string;
+  readonly sources?: string;
+  readonly categories?: string;
+  readonly category?: string;
+  readonly "start-published-date"?: string;
+  readonly "end-published-date"?: string;
   readonly json: boolean;
 };
 
 type ParsedSearchArguments = {
-  readonly query: string;
+  readonly query: string | readonly string[];
   readonly provider?: string;
-  readonly maxResults: number;
-  readonly highlights: boolean;
+  readonly options: SearchRequestOptions;
   readonly json: boolean;
 };
 
+type ReadonlySearchProviderResult = Readonly<Omit<SearchProviderResult, "results">> & {
+  readonly results: readonly ReadonlySearchResult[];
+};
+
+type ReadonlySearchAllResult = ReadonlySearchResult & {
+  readonly provider: SearchAllResult["provider"];
+};
+
+type ReadonlySearchAllResponse = {
+  readonly results: readonly ReadonlySearchAllResult[];
+  readonly successfulProviders: readonly string[];
+  readonly errors: readonly {
+    readonly provider: string;
+    readonly error: Readonly<Error>;
+  }[];
+  readonly filterReports: readonly Readonly<SearchFilterReport>[];
+  readonly providerMetadata?: readonly Readonly<SearchProviderMetadata>[];
+};
+
+type SerializableSearchAllResponse = Omit<ReadonlySearchAllResponse, "errors"> & {
+  readonly errors: readonly { readonly provider: string; readonly error: string }[];
+};
+
+type ReadonlySearchBatchItem =
+  | {
+      readonly query: string;
+      readonly provider: string;
+      readonly results: readonly ReadonlySearchResult[];
+      readonly filterReports: readonly Readonly<SearchFilterReport>[];
+      readonly providerMetadata?: readonly Readonly<SearchProviderMetadata>[];
+    }
+  | { readonly query: string; readonly error: string };
+
+type SearchCommandOutput =
+  | ReadonlySearchProviderResult
+  | SerializableSearchAllResponse
+  | readonly ReadonlySearchBatchItem[];
+
 function parseSearchArguments(args: SearchCommandArgs): ParsedSearchArguments {
-  if (!args.query.trim()) return exitWithError("Search query cannot be empty.");
+  const queries = args._.length > 1 ? args._ : [args.query];
+  if (queries.some((query) => !query.trim())) {
+    return exitWithError("Search query cannot be empty.");
+  }
   const maxResults = parseMaxResults(args["max-results"]);
   if (!maxResults.ok) return exitWithError(maxResults.message);
+
   return {
-    query: args.query,
-    provider: args.provider,
-    maxResults: maxResults.value,
-    highlights: args.highlights,
+    query: queries.length === 1 ? queries[0] : queries,
+    provider: args.provider || undefined,
+    options: parseSearchOptions(args, maxResults.value),
     json: args.json,
   };
 }
 
-async function writeSearchResult(
-  provider: { readonly search: import("../core/provider.ts").SearchProvider["search"] },
-  providerTypes: Readonly<Pick<typeof import("../core/provider.ts"), "isDetailedSearchProvider">>,
-  args: Readonly<ParsedSearchArguments>,
-): Promise<void> {
-  if (args.json && providerTypes.isDetailedSearchProvider(provider)) {
-    const response = await provider.searchDetailed(args.query, {
-      maxResults: args.maxResults,
-      highlights: args.highlights,
-    });
-    process.stdout.write(`${JSON.stringify(response, null, 2)}\n`);
-    return;
-  }
-  const results = await provider.search(args.query, {
-    maxResults: args.maxResults,
+function parseSearchOptions(args: SearchCommandArgs, maxResults: number): SearchRequestOptions {
+  const includeDomains = parseList(args["include-domains"]);
+  const excludeDomains = parseList(args["exclude-domains"]);
+  const sources = parseList(args.sources);
+  const categories = parseList(args.categories);
+  return {
+    maxResults,
     highlights: args.highlights,
-  });
-  writeSearchResults(results, args.json);
+    ...(includeDomains === undefined ? {} : { includeDomains }),
+    ...(excludeDomains === undefined ? {} : { excludeDomains }),
+    ...(sources === undefined ? {} : { sources }),
+    ...(categories === undefined ? {} : { categories }),
+    ...(args.category === undefined ? {} : { category: args.category }),
+    ...(args["start-published-date"] === undefined
+      ? {}
+      : { startPublishedDate: args["start-published-date"] }),
+    ...(args["end-published-date"] === undefined
+      ? {}
+      : { endPublishedDate: args["end-published-date"] }),
+  };
 }
 
-function writeSearchResults(
-  results: readonly Readonly<
-    Pick<import("../core/types.ts").SearchResult, "title" | "url" | "snippet">
-  >[],
-  json: boolean,
-): void {
+async function runSearch(args: Readonly<ParsedSearchArguments>): Promise<SearchCommandOutput> {
+  const { query, provider, options } = args;
+  if (typeof query !== "string") {
+    const { searchBatch } = await import("../core/batch.ts");
+    return searchBatch(query, { provider, ...options });
+  }
+
+  const { searchAllDetailed, searchProviderDetailed, searchWithFallback } =
+    await import("../core/all.ts");
+  if (provider === "all") {
+    return serializeSearchAllResponse(await searchAllDetailed(query, options));
+  }
+  if (provider !== undefined) {
+    return searchProviderDetailed(provider, query, options);
+  }
+  return searchWithFallback(query, options);
+}
+
+function serializeSearchAllResponse(
+  response: ReadonlySearchAllResponse,
+): SerializableSearchAllResponse {
+  return {
+    ...response,
+    errors: response.errors.map(({ provider, error }) => ({ provider, error: error.message })),
+  };
+}
+
+function writeSearchOutput(output: SearchCommandOutput, json: boolean): void {
   if (json) {
-    process.stdout.write(`${JSON.stringify(results, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
     return;
   }
-  writeHumanSearchResults(results);
+
+  if (isSearchBatchOutput(output)) {
+    writeHumanSearchBatch(output);
+    return;
+  }
+  writeHumanSearchResults(output.results);
+  if ("errors" in output) reportProviderErrors(output.errors);
+  if ("ignoredFilters" in output) {
+    reportFilterWarning(output.provider, output.ignoredFilters, output.undeclaredFilters);
+  } else {
+    for (const report of output.filterReports) {
+      reportFilterWarning(report.provider, report.ignoredFilters, report.undeclaredFilters);
+    }
+  }
+}
+
+function isSearchBatchOutput(
+  output: SearchCommandOutput,
+): output is readonly ReadonlySearchBatchItem[] {
+  return Array.isArray(output);
+}
+
+function writeHumanSearchBatch(outcomes: readonly ReadonlySearchBatchItem[]): void {
+  for (const outcome of outcomes) {
+    const query = sanitizeTerminalText(outcome.query, 2048);
+    consola.log(`\x1B[1m${query}\x1B[0m`);
+    if ("error" in outcome) {
+      consola.error(sanitizeTerminalText(outcome.error, 2048));
+      continue;
+    }
+    writeHumanSearchResults(outcome.results);
+    for (const report of outcome.filterReports) {
+      reportFilterWarning(report.provider, report.ignoredFilters, report.undeclaredFilters);
+    }
+  }
 }
 
 function writeHumanSearchResults(
-  results: readonly Readonly<
-    Pick<import("../core/types.ts").SearchResult, "title" | "url" | "snippet">
-  >[],
+  results: readonly Readonly<Pick<SearchResult, "title" | "url" | "snippet">>[],
 ): void {
   if (results.length === 0) {
     consola.info("No results found.");
@@ -149,6 +273,30 @@ function writeHumanSearchResults(
       consola.log(`  \x1B[90m${snippet}\x1B[0m`);
     }
     consola.log("");
+  }
+}
+
+function reportProviderErrors(
+  errors: readonly { readonly provider: string; readonly error: string }[],
+): void {
+  for (const error of errors) {
+    const provider = sanitizeTerminalText(error.provider, 200);
+    const message = sanitizeTerminalText(error.error, 2048);
+    consola.error(`${provider}: ${message}`);
+  }
+}
+
+function reportFilterWarning(
+  providerName: string,
+  ignoredFilters: readonly string[],
+  undeclaredFilters: readonly string[],
+): void {
+  const provider = sanitizeTerminalText(providerName, 200);
+  if (ignoredFilters.length > 0) {
+    consola.info(`${provider} ignored filters: ${ignoredFilters.join(", ")}`);
+  }
+  if (undeclaredFilters.length > 0) {
+    consola.info(`${provider} has undeclared filters: ${undeclaredFilters.join(", ")}`);
   }
 }
 
@@ -216,4 +364,12 @@ function parseMaxResults(input: string): ParsedMaxResults {
   }
 
   return { ok: true, value };
+}
+
+function parseList(input: string | undefined): readonly string[] | undefined {
+  if (input === undefined) return undefined;
+  return input
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
 }

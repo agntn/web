@@ -7,7 +7,6 @@ import {
   type SearchProviderResult,
 } from "./all.ts";
 import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
-import type { WebSearchProviderName } from "./providers.ts";
 import { hasSearchFilterWarning, type SearchFilterReport } from "./search-filters.ts";
 import type {
   ReadonlySearchResult,
@@ -21,7 +20,7 @@ export const MAX_BATCH_ITEMS = 10;
 
 /** Shared search options applied to every query in a batch. */
 export type SearchBatchOptions = SearchRequestOptions & {
-  readonly provider?: WebSearchProviderName | "all";
+  readonly provider?: string;
 };
 
 /** One successful or failed query outcome. */
