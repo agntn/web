@@ -246,6 +246,8 @@ Read commands use automatic selection unless `--provider` is set. Scalar JSON is
 - `web_read` - read one URL or a batch and return effective provider provenance
 - `web_providers` - show the running build and process start, then list configuration and search filter support
 
+Each tool advertises an output schema and returns its result under `structuredContent.result`. Compact JSON stays in `content` for clients that only render text.
+
 Register it with any MCP client:
 
 ```bash

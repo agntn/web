@@ -1,5 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { type TSchema } from "typebox";
+import { Value } from "typebox/value";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockGetJSON = vi.fn();
@@ -44,6 +46,7 @@ async function connectTestClient(): Promise<Client> {
   const client = new Client({ name: "web-test", version: "1.0.0" });
   openConnections.push(client, server);
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  await client.listTools();
   return client;
 }
 
@@ -81,6 +84,69 @@ describe("web MCP server", () => {
     expect(response.tools[3]?.annotations).toMatchObject({ openWorldHint: false });
   });
 
+  it("advertises output schemas that reject malformed tool results", async () => {
+    const client = await connectTestClient();
+    const { tools } = await client.listTools();
+    const invalidResults: Readonly<Record<string, unknown>> = {
+      web_search: {
+        result: { provider: 42, results: [], ignoredFilters: [], undeclaredFilters: [] },
+      },
+      web_search_image: { result: [{ pageUrl: 42 }] },
+      web_read: {
+        result: {
+          result: { url: "https://example.com", content: "page" },
+          requestedProvider: "auto",
+          provider: "jina",
+          attempts: "jina",
+        },
+      },
+      web_providers: { result: { runtime: {}, providers: [{ configured: "yes" }] } },
+    };
+
+    for (const tool of tools) {
+      expect(tool.outputSchema).toMatchObject({
+        type: "object",
+        required: ["result"],
+        additionalProperties: false,
+      });
+      expect(Value.Check(tool.outputSchema as TSchema, invalidResults[tool.name]), tool.name).toBe(
+        false,
+      );
+    }
+
+    const searchTool = tools.find((tool) => tool.name === "web_search");
+    if (!searchTool?.outputSchema) throw new TypeError("Missing web_search output schema");
+    expect(
+      Value.Check(searchTool.outputSchema as TSchema, {
+        result: [
+          {
+            query: "fanout query",
+            provider: "all",
+            results: [{ url: "https://example.com", title: "Example", snippet: "Result" }],
+            filterReports: [],
+          },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(searchTool.outputSchema as TSchema, {
+        result: {
+          provider: "jina",
+          results: [
+            {
+              url: "https://example.com",
+              title: "Example",
+              snippet: "Result",
+              undocumentedField: true,
+            },
+          ],
+          ignoredFilters: [],
+          undeclaredFilters: [],
+        },
+      }),
+    ).toBe(false);
+  });
+
   it("returns provider results as JSON text for web_search", async () => {
     vi.stubEnv("JINA_API_KEY", "test-key");
     mockGetJSON.mockReset();
@@ -115,6 +181,10 @@ describe("web MCP server", () => {
         { title: "Test Result", url: "https://example.com", snippet: "A test description" },
       ],
     });
+    expect(response.structuredContent).toEqual({ result: payload });
+    expect((response.content as Array<{ type: string; text: string }>)[0]?.text).toBe(
+      JSON.stringify(payload),
+    );
   });
 
   it("returns detailed search metadata as JSON text", async () => {
@@ -141,6 +211,58 @@ describe("web MCP server", () => {
     expect(payload).toMatchObject({
       provider: "firecrawl",
       metadata: { id: "mcp-request", warning: "Partial coverage", creditsUsed: 2 },
+    });
+  });
+
+  it("returns structured fanout search results", async () => {
+    vi.stubEnv("EXA_API_KEY", "test-key");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
+    mockPostJSON.mockReset();
+    mockPostJSON.mockResolvedValue({
+      requestId: "fanout-request",
+      results: [{ title: "Fanout Result", url: "https://example.com", text: "page" }],
+    });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search",
+      arguments: { query: "test query", provider: "all" },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(response.structuredContent).toMatchObject({
+      result: {
+        results: [expect.objectContaining({ provider: "exa", url: "https://example.com" })],
+        successfulProviders: ["exa"],
+        errors: [],
+      },
+    });
+  });
+
+  it("returns provider provenance in structured fanout batches", async () => {
+    vi.stubEnv("EXA_API_KEY", "test-key");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
+    mockPostJSON.mockReset();
+    mockPostJSON.mockResolvedValue({
+      requestId: "fanout-batch-request",
+      results: [{ title: "Fanout Result", url: "https://example.com", text: "page" }],
+    });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search",
+      arguments: { query: ["test query"], provider: "all" },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(response.structuredContent).toMatchObject({
+      result: [
+        {
+          query: "test query",
+          provider: "all",
+          results: [expect.objectContaining({ provider: "exa", url: "https://example.com" })],
+        },
+      ],
     });
   });
 
@@ -176,6 +298,7 @@ describe("web MCP server", () => {
         provider: "serpapi",
       }),
     ]);
+    expect(response.structuredContent).toEqual({ result: payload });
   });
 
   it("keeps separate ordered results for batched searches", async () => {
@@ -208,6 +331,32 @@ describe("web MCP server", () => {
       },
       { query: "second query", error: "second query failed" },
     ]);
+    expect(response.structuredContent).toEqual({ result: payload });
+  });
+
+  it("returns structured scalar read results", async () => {
+    mockGetJSON.mockReset();
+    mockGetJSON.mockResolvedValue({
+      code: 200,
+      status: 20000,
+      data: { url: "https://example.com", content: "page" },
+    });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_read",
+      arguments: { url: "https://example.com", provider: "auto" },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(response.structuredContent).toEqual({
+      result: {
+        result: { url: "https://example.com", content: "page" },
+        requestedProvider: "auto",
+        provider: "jina",
+        attempts: ["jina"],
+      },
+    });
   });
 
   it("keeps separate ordered results for batched reads", async () => {
@@ -243,6 +392,7 @@ describe("web MCP server", () => {
       },
       { url: "https://example.com/two", error: "second read failed" },
     ]);
+    expect(response.structuredContent).toEqual({ result: payload });
   });
 
   it("reports an unreachable local SearXNG instance", async () => {
@@ -274,6 +424,7 @@ describe("web MCP server", () => {
       reachable: false,
       searchFilters: ["category"],
     });
+    expect(response.structuredContent).toEqual({ result: payload });
   });
 
   it("rejects arguments that miss the schema", async () => {
@@ -285,6 +436,7 @@ describe("web MCP server", () => {
     });
 
     expect(response.isError).toBe(true);
+    expect(response.structuredContent).toBeUndefined();
     expect((response.content as Array<{ type: string; text: string }>)[0]).toMatchObject({
       type: "text",
     });
