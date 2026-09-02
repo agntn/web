@@ -190,6 +190,72 @@ describe("searchTool", () => {
     ]);
   });
 
+  it("keeps detailed provider metadata in batch outcomes", async () => {
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl-key";
+    mockPostJSON.mockResolvedValue({
+      success: true,
+      id: "batch-request",
+      creditsUsed: 3,
+      data: { web: [] },
+    });
+
+    const outcomes = await searchTool.execute!(
+      { query: ["first query", "second query"], provider: "firecrawl" },
+      { toolCallId: "call-batch-metadata", messages: [] },
+    );
+
+    expect(outcomes).toEqual([
+      {
+        query: "first query",
+        provider: "firecrawl",
+        results: [],
+        filterReports: [],
+        providerMetadata: [
+          { provider: "firecrawl", metadata: { id: "batch-request", creditsUsed: 3 } },
+        ],
+      },
+      {
+        query: "second query",
+        provider: "firecrawl",
+        results: [],
+        filterReports: [],
+        providerMetadata: [
+          { provider: "firecrawl", metadata: { id: "batch-request", creditsUsed: 3 } },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps provider provenance for metadata in fanout batch outcomes", async () => {
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl-key";
+    mockPostJSON.mockResolvedValue({
+      success: true,
+      id: "fanout-batch-request",
+      creditsUsed: 4,
+      data: { web: [] },
+    });
+
+    const outcomes = await searchTool.execute!(
+      { query: ["fanout query"], provider: "all" },
+      { toolCallId: "call-fanout-batch-metadata", messages: [] },
+    );
+
+    expect(outcomes).toEqual([
+      {
+        query: "fanout query",
+        provider: "all",
+        results: [],
+        filterReports: [],
+        providerMetadata: [
+          {
+            provider: "firecrawl",
+            metadata: { id: "fanout-batch-request", creditsUsed: 4 },
+          },
+        ],
+      },
+    ]);
+  });
+
   it("uses payment fallback independently for automatic batch items", async () => {
     process.env.EXA_API_KEY = "test-exa-key";
     process.env.BRAVE_API_KEY = "test-brave-key";

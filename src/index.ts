@@ -81,6 +81,7 @@ export type {
   SearchAllOptions,
   SearchAllResult,
   SearchAllResponse,
+  SearchProviderMetadata,
   SearchProviderResult,
   SearchWithFallbackResult,
   ProviderError,

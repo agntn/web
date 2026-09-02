@@ -117,6 +117,33 @@ describe("web MCP server", () => {
     });
   });
 
+  it("returns detailed search metadata as JSON text", async () => {
+    vi.stubEnv("FIRECRAWL_API_KEY", "test-key");
+    mockPostJSON.mockReset();
+    mockPostJSON.mockResolvedValue({
+      success: true,
+      id: "mcp-request",
+      warning: "Partial coverage",
+      creditsUsed: 2,
+      data: { web: [] },
+    });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search",
+      arguments: { query: "test query", provider: "firecrawl" },
+    });
+
+    expect(response.isError).toBeUndefined();
+    const payload = JSON.parse(
+      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
+    ) as Readonly<Record<string, unknown>>;
+    expect(payload).toMatchObject({
+      provider: "firecrawl",
+      metadata: { id: "mcp-request", warning: "Partial coverage", creditsUsed: 2 },
+    });
+  });
+
   it("returns reverse image matches as JSON text", async () => {
     vi.stubEnv("SERPAPI_API_KEY", "test-key");
     mockGetJSON.mockReset();

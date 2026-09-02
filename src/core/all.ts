@@ -2,6 +2,7 @@ import type {
   ReadonlySearchResult,
   SearchFilterName,
   SearchRequestOptions,
+  SearchResponse,
   SearchResult,
 } from "./types.ts";
 import type { WebSearchProviderName } from "./providers.ts";
@@ -19,6 +20,7 @@ import {
   validateDateFilters,
 } from "./errors.ts";
 import { createSearchProvider, has } from "./registry.ts";
+import { isDetailedSearchProvider } from "./provider.ts";
 import { detectAvailableProviders, detectAvailableProvidersAsync } from "./resolve.ts";
 
 const DEFAULT_MAX_RESULTS = 10;
@@ -36,11 +38,17 @@ export interface ProviderError {
   error: Error;
 }
 
+export interface SearchProviderMetadata {
+  readonly provider: string;
+  readonly metadata: Readonly<Record<string, unknown>>;
+}
+
 export interface SearchAllResponse {
   results: SearchAllResult[];
   successfulProviders: string[];
   errors: ProviderError[];
   filterReports: SearchFilterReport[];
+  providerMetadata?: SearchProviderMetadata[];
 }
 
 /** Results from one named provider with effective filter diagnostics. */
@@ -49,6 +57,7 @@ export interface SearchProviderResult {
   readonly results: readonly SearchResult[];
   readonly ignoredFilters: readonly SearchFilterName[];
   readonly undeclaredFilters: readonly SearchFilterName[];
+  readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
 /** Result from automatic search after any payment fallback. */
@@ -199,9 +208,17 @@ async function searchProvider<TProvider extends string>(
   query: string,
   options?: Readonly<SearchRequestOptions>,
 ): Promise<SearchProviderResult & { readonly provider: TProvider }> {
-  const results = await createSearchProvider(providerName).search(query, options);
+  const provider = createSearchProvider(providerName);
+  const response: SearchResponse = isDetailedSearchProvider(provider)
+    ? await provider.searchDetailed(query, options)
+    : { results: await provider.search(query, options) };
   const report = searchFilterReport(providerName, options);
-  return { ...report, provider: providerName, results };
+  return {
+    ...report,
+    provider: providerName,
+    results: response.results,
+    ...(response.metadata === undefined ? {} : { metadata: { ...response.metadata } }),
+  };
 }
 
 function isPaymentRequired(error: unknown): error is HTTPError {
@@ -233,6 +250,7 @@ function collectProviderResults(
   const successfulProviders = new Set<string>();
   const errors: ProviderError[] = [];
   const filterReports: SearchFilterReport[] = [];
+  const providerMetadata: SearchProviderMetadata[] = [];
   for (const [index, outcome] of settled.entries()) {
     if (outcome.status === "fulfilled") {
       successfulProviders.add(outcome.value.provider);
@@ -244,6 +262,12 @@ function collectProviderResults(
       if (hasSearchFilterWarning(outcome.value)) {
         const { provider, ignoredFilters, undeclaredFilters } = outcome.value;
         filterReports.push({ provider, ignoredFilters, undeclaredFilters });
+      }
+      if (outcome.value.metadata !== undefined) {
+        providerMetadata.push({
+          provider: outcome.value.provider,
+          metadata: { ...outcome.value.metadata },
+        });
       }
     } else {
       errors.push({
@@ -259,6 +283,7 @@ function collectProviderResults(
     successfulProviders: [...successfulProviders],
     errors,
     filterReports,
+    ...(providerMetadata.length === 0 ? {} : { providerMetadata }),
   };
 }
 
