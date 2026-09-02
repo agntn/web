@@ -67,6 +67,28 @@ const braveResponse = {
   },
 };
 
+const firecrawlResponse = {
+  success: true,
+  id: "firecrawl-request",
+  warning: "Partial coverage",
+  creditsUsed: 2,
+  data: {
+    web: [
+      {
+        url: "https://firecrawl.example.com",
+        title: "Firecrawl Result",
+        description: "Firecrawl description",
+      },
+    ],
+  },
+};
+
+const firecrawlMetadata = {
+  id: "firecrawl-request",
+  warning: "Partial coverage",
+  creditsUsed: 2,
+};
+
 describe("searchAll", () => {
   beforeEach(() => {
     mockPostJSON.mockReset();
@@ -488,6 +510,29 @@ describe("searchAllDetailed", () => {
     expect(response.filterReports).toEqual([]);
   });
 
+  it("keeps response metadata with provider provenance in fanout", async () => {
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl";
+    mockPostJSON.mockResolvedValue(firecrawlResponse);
+
+    const response = await searchAllDetailed("test", { providers: ["firecrawl"] });
+
+    expect(response.providerMetadata).toEqual([
+      { provider: "firecrawl", metadata: firecrawlMetadata },
+    ]);
+  });
+
+  it("keeps response metadata beside explicit provider diagnostics", async () => {
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl";
+    mockPostJSON.mockResolvedValue(firecrawlResponse);
+
+    await expect(searchProviderDetailed("firecrawl", "test")).resolves.toMatchObject({
+      provider: "firecrawl",
+      metadata: firecrawlMetadata,
+      ignoredFilters: [],
+      undeclaredFilters: [],
+    });
+  });
+
   it("defaults the global result cap to ten", async () => {
     process.env.EXA_API_KEY = "test-exa";
     mockPostJSON.mockResolvedValue({
@@ -708,6 +753,23 @@ describe("searchWithFallback", () => {
       results: [expect.objectContaining({ url: "https://b.com" })],
       ignoredFilters: ["startPublishedDate"],
       undeclaredFilters: [],
+    });
+  });
+
+  it("keeps response metadata from the provider selected after fallback", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl";
+    mockPostJSON.mockImplementation(async (url) => {
+      if (url.includes("api.exa.ai")) {
+        throw new HTTPError(402, url, "Payment required");
+      }
+      return firecrawlResponse;
+    });
+
+    await expect(searchWithFallback("test")).resolves.toMatchObject({
+      provider: "firecrawl",
+      metadata: firecrawlMetadata,
+      results: [expect.objectContaining({ url: "https://firecrawl.example.com" })],
     });
   });
 

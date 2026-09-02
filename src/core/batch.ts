@@ -3,6 +3,7 @@ import {
   prepareSearchWithFallback,
   searchAllDetailed,
   searchProviderDetailed,
+  type SearchProviderMetadata,
   type SearchProviderResult,
 } from "./all.ts";
 import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
@@ -30,6 +31,7 @@ export type SearchBatchItem =
       readonly provider: string;
       readonly results: readonly SearchResult[];
       readonly filterReports: readonly SearchFilterReport[];
+      readonly providerMetadata?: readonly SearchProviderMetadata[];
     }
   | { readonly query: string; readonly error: string };
 
@@ -135,6 +137,7 @@ interface BatchSearchResult {
   readonly provider: string;
   readonly results: readonly ReadonlySearchResult[];
   readonly filterReports: readonly SearchFilterReport[];
+  readonly providerMetadata?: readonly SearchProviderMetadata[];
 }
 
 type ReadonlySearchProviderResult = Readonly<Omit<SearchProviderResult, "results">> & {
@@ -150,7 +153,14 @@ async function searchAllForBatch(
     const errors = response.errors.map(({ provider, error }) => `${provider}: ${error.message}`);
     throw new Error(`Search providers failed: ${errors.join("; ")}`);
   }
-  return { provider: "all", results: response.results, filterReports: response.filterReports };
+  return {
+    provider: "all",
+    results: response.results,
+    filterReports: response.filterReports,
+    ...(response.providerMetadata === undefined
+      ? {}
+      : { providerMetadata: response.providerMetadata }),
+  };
 }
 
 function singleBatchResult(response: ReadonlySearchProviderResult): BatchSearchResult {
@@ -158,7 +168,14 @@ function singleBatchResult(response: ReadonlySearchProviderResult): BatchSearchR
   const filterReports = hasSearchFilterWarning(response)
     ? [{ provider, ignoredFilters, undeclaredFilters }]
     : [];
-  return { provider, results: response.results, filterReports };
+  return {
+    provider,
+    results: response.results,
+    filterReports,
+    ...(response.metadata === undefined
+      ? {}
+      : { providerMetadata: [{ provider, metadata: response.metadata }] }),
+  };
 }
 
 async function settleBatch<TResult>(
@@ -186,6 +203,9 @@ function mapSearchOutcomes(
           provider: outcome.value.provider,
           results: outcome.value.results.map(mutableSearchResult),
           filterReports: outcome.value.filterReports,
+          ...(outcome.value.providerMetadata === undefined
+            ? {}
+            : { providerMetadata: outcome.value.providerMetadata }),
         }
       : { query: outcome.input, error: outcome.error },
   );

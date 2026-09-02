@@ -174,10 +174,19 @@ describe("Pi extension", () => {
             ? init.body
             : "";
       requestBodies.push(JSON.parse(bodyText) as unknown);
-      return new Response(JSON.stringify({ success: true, data: { web: [] } }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          success: true,
+          id: "pi-request",
+          warning: "Partial\u202Ecoverage",
+          creditsUsed: 2,
+          data: { web: [] },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     });
     vi.stubGlobal("fetch", fetchMock);
     resetDefaultClientForTests();
@@ -200,6 +209,19 @@ describe("Pi extension", () => {
       ]);
 
       await expect(execution).resolves.toHaveProperty("details.options.highlights", false);
+      await expect(execution).resolves.toHaveProperty("details.metadata", {
+        id: "pi-request",
+        warning: "Partial\u202Ecoverage",
+        creditsUsed: 2,
+      });
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringContaining('Provider metadata: {"id":"pi-request"'),
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.not.stringContaining("\u202E"),
+      );
       expect(requestBodies).toEqual([
         expect.objectContaining({
           query: "test query",

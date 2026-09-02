@@ -31,7 +31,7 @@ Provided slash commands:
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` - show provider configuration and reachability status
 
-Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
+Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Detailed provider metadata remains in tool details; Pi also prints a bounded metadata preview for the model. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
 
 ## Install
 
@@ -117,7 +117,7 @@ if (isDetailedSearchProvider(firecrawl)) {
 }
 ```
 
-`web search --provider firecrawl --json "query"` prints the same `{ results, metadata }` envelope.
+`web search --provider firecrawl --json "query"` prints the same `{ results, metadata }` envelope. The core detailed helpers preserve that response-level metadata too: scalar `searchProviderDetailed()` and `searchWithFallback()` expose `metadata`, while `searchAllDetailed()` exposes `providerMetadata` entries that keep each metadata object paired with its provider.
 
 ### Reverse image search
 
@@ -180,7 +180,7 @@ const searches = await searchBatch(["TypeScript 7", "Node.js releases"], {
 const pages = await readBatch(["https://example.com/one", "https://example.com/two"]);
 ```
 
-Each successful search outcome is `{ query, provider, results, filterReports }`; failures are `{ query, error }`. Each read outcome is `{ url, result }` or `{ url, error }`.
+Each successful search outcome is `{ query, provider, results, filterReports, providerMetadata? }`; failures are `{ query, error }`. `providerMetadata` is present only when a provider returned response-level metadata. Each read outcome is `{ url, result }` or `{ url, error }`.
 
 ### AI SDK tool
 
@@ -201,7 +201,7 @@ const { text } = await generateText({
 });
 ```
 
-`searchTool` accepts one query or an array of queries. Explicit and automatic scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters }`; `provider="all"` returns `{ results, errors, filterReports }`. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts }`; successful batch items keep the same reader provenance beside `url`, while failures stay `{ url, error }`:
+`searchTool` accepts one query or an array of queries. Explicit and automatic scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, metadata? }`; `provider="all"` returns `{ results, errors, filterReports, providerMetadata? }`. Successful batch search items use the same `providerMetadata` list. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts }`; successful batch items keep the same reader provenance beside `url`, while failures stay `{ url, error }`:
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
@@ -427,7 +427,7 @@ interface SearchOptions {
 
 Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
-`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters` and `undeclaredFilters`. `searchAllDetailed()` keeps the same diagnostics in `filterReports` and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Custom providers without capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the matrix as `searchFilters` and optional `searchCategories`.
+`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional response-level `metadata`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Response-level metadata is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the filter matrix as `searchFilters` and optional `searchCategories`.
 
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 

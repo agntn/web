@@ -195,6 +195,55 @@ describe("OMP extension", () => {
     ).rejects.toThrow("Unknown read format: pdf");
   });
 
+  it("keeps detailed search metadata in OMP results", async () => {
+    const previousKey = process.env.FIRECRAWL_API_KEY;
+    process.env.FIRECRAWL_API_KEY = "test-key";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              success: true,
+              id: "omp-request",
+              creditsUsed: 2,
+              data: { web: [] },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+      ),
+    );
+    resetDefaultClientForTests();
+
+    try {
+      const search = requiredTool(captureOmpExtension().tools, "web_search");
+      const result = await search.execute(
+        "call-metadata",
+        { query: "test query", provider: "firecrawl" },
+        undefined,
+        undefined,
+        {} as never,
+      );
+
+      expect(result.details).toMatchObject({
+        mode: "single",
+        provider: "firecrawl",
+        metadata: { id: "omp-request", creditsUsed: 2 },
+      });
+      expect(result.content[0]).toMatchObject({ type: "text" });
+      expect(
+        result.content[0]?.type === "text" && "text" in result.content[0]
+          ? result.content[0].text
+          : "",
+      ).toContain('"metadata":{"id":"omp-request","creditsUsed":2}');
+    } finally {
+      if (previousKey === undefined) delete process.env.FIRECRAWL_API_KEY;
+      else process.env.FIRECRAWL_API_KEY = previousKey;
+      vi.unstubAllGlobals();
+      resetDefaultClientForTests();
+    }
+  });
+
   it("executes provider discovery through the live package", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("unreachable")));
     const providers = requiredTool(captureOmpExtension().tools, "web_providers");

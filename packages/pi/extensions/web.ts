@@ -9,6 +9,7 @@ import {
   type RenderOptions,
   renderWebToolCall,
   renderWebToolResult,
+  sanitizeTerminalText,
   type StatusTheme,
   type WebToolName,
 } from "../../../src/tui.ts";
@@ -25,6 +26,7 @@ import type {
   SearchBatchItem,
   SearchFilterName,
   SearchFilterReport,
+  SearchProviderMetadata,
   SearchRequestOptions,
   SearchResult,
   WebSearchProviderName,
@@ -39,6 +41,7 @@ type SearchSingleDetails = {
   readonly results: readonly SearchResult[];
   readonly ignoredFilters: readonly SearchFilterName[];
   readonly undeclaredFilters: readonly SearchFilterName[];
+  readonly metadata?: Readonly<Record<string, unknown>>;
 };
 
 type SearchAllDetails = {
@@ -50,6 +53,7 @@ type SearchAllDetails = {
   readonly successfulProviders: readonly string[];
   readonly errors: { provider: string; error: string }[];
   readonly filterReports: readonly SearchFilterReport[];
+  readonly providerMetadata?: readonly SearchProviderMetadata[];
 };
 
 type SearchBatchDetails = {
@@ -327,7 +331,12 @@ export default function webExtension(pi: ExtensionAPI) {
               type: "text",
               text: withHeader(
                 header,
-                formatAllResults(results, response.errors, response.filterReports),
+                formatAllResults(
+                  results,
+                  response.errors,
+                  response.filterReports,
+                  response.providerMetadata ?? [],
+                ),
               ),
             },
           ],
@@ -343,6 +352,9 @@ export default function webExtension(pi: ExtensionAPI) {
               error: e.error.message,
             })),
             filterReports: response.filterReports,
+            ...(response.providerMetadata === undefined
+              ? {}
+              : { providerMetadata: response.providerMetadata }),
           },
         };
         return result;
@@ -360,7 +372,12 @@ export default function webExtension(pi: ExtensionAPI) {
           undeclaredFilters: response.undeclaredFilters,
         });
         return {
-          content: [{ type: "text", text: withHeader(header, formatResults(response.results)) }],
+          content: [
+            {
+              type: "text",
+              text: withHeader(header, formatSingleResults(response.results, response.metadata)),
+            },
+          ],
           details: {
             mode: "single",
             query,
@@ -370,6 +387,7 @@ export default function webExtension(pi: ExtensionAPI) {
             results: response.results,
             ignoredFilters: response.ignoredFilters,
             undeclaredFilters: response.undeclaredFilters,
+            ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
           },
         };
       }
@@ -385,7 +403,12 @@ export default function webExtension(pi: ExtensionAPI) {
         undeclaredFilters: response.undeclaredFilters,
       });
       return {
-        content: [{ type: "text", text: withHeader(header, formatResults(response.results)) }],
+        content: [
+          {
+            type: "text",
+            text: withHeader(header, formatSingleResults(response.results, response.metadata)),
+          },
+        ],
         details: {
           mode: "single",
           query,
@@ -395,6 +418,7 @@ export default function webExtension(pi: ExtensionAPI) {
           results: response.results,
           ignoredFilters: response.ignoredFilters,
           undeclaredFilters: response.undeclaredFilters,
+          ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
         },
       };
     },
@@ -784,6 +808,7 @@ type SearchBatchItemView =
       readonly provider: string;
       readonly results: readonly SearchResultView[];
       readonly filterReports: readonly SearchFilterReport[];
+      readonly providerMetadata?: readonly SearchProviderMetadata[];
     };
 type ReadBatchItemView =
   | { readonly url: string; readonly error: string }
@@ -807,6 +832,17 @@ function formatResults(results: readonly SearchResultView[]): readonly string[] 
   return results.map((r, i) => formatResult(r, i));
 }
 
+function formatSingleResults(
+  results: readonly SearchResultView[],
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): readonly string[] {
+  const lines = results.length === 0 ? ["No results."] : [...formatResults(results)];
+  if (metadata !== undefined) {
+    lines.push("", `Provider metadata: ${formatMetadataValue(metadata)}`);
+  }
+  return lines;
+}
+
 function formatImageSearchResults(
   results: readonly Readonly<ImageSearchResult>[],
 ): readonly string[] {
@@ -826,12 +862,13 @@ function formatAllResults(
   results: readonly SearchAllResultView[],
   errors: readonly ProviderErrorView[],
   filterReports: readonly SearchFilterReport[],
+  providerMetadata: readonly SearchProviderMetadata[],
 ): readonly string[] {
   const lines =
     results.length === 0
       ? ["No results."]
       : results.map((r, i) => `${formatResult(r, i)}\n   [${r.provider}]`);
-  lines.push(...formatFilterReports(filterReports));
+  lines.push(...formatFilterReports(filterReports), ...formatProviderMetadata(providerMetadata));
   if (errors.length > 0) {
     lines.push("", "Provider errors:");
     for (const e of errors) {
@@ -849,6 +886,7 @@ function formatSearchBatch(outcomes: readonly SearchBatchItemView[]): string {
       const lines = [
         ...(outcome.results.length === 0 ? ["No results."] : formatResults(outcome.results)),
         ...formatFilterReports(outcome.filterReports),
+        ...formatProviderMetadata(outcome.providerMetadata ?? []),
       ];
       return withHeader(`${header} [provider=${outcome.provider}]`, lines);
     })
@@ -869,6 +907,26 @@ function formatFilterReports(reports: readonly SearchFilterReport[]): readonly s
     }
   }
   return lines;
+}
+
+function formatProviderMetadata(records: readonly SearchProviderMetadata[]): readonly string[] {
+  if (records.length === 0) return [];
+  return [
+    "",
+    "Provider metadata:",
+    ...records.map(
+      ({ provider, metadata }) =>
+        `  ${truncateSingleLine(provider, 80)}: ${formatMetadataValue(metadata)}`,
+    ),
+  ];
+}
+
+function formatMetadataValue(metadata: Readonly<Record<string, unknown>>): string {
+  try {
+    return truncateSingleLine(JSON.stringify(metadata), 500);
+  } catch {
+    return "[unserializable metadata]";
+  }
 }
 
 function formatReadBatch(outcomes: readonly ReadBatchItemView[]): string {
@@ -895,9 +953,5 @@ function formatReadResult(
 }
 
 function truncateSingleLine(text: string, maxLength: number): string {
-  const singleLine = text
-    .replaceAll(/\p{Cc}/gu, " ")
-    .replaceAll(/\s+/g, " ")
-    .trim();
-  return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 1)}…`;
+  return sanitizeTerminalText(text, maxLength);
 }
