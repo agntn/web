@@ -96,6 +96,49 @@ describe("searchAll", () => {
     expect(results.map((r) => r.provider)).toContain("brave");
   });
 
+  it("caps deduplicated fanout results globally", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockPostJSON.mockResolvedValue({
+      requestId: "test-req",
+      results: [{ id: "1", url: "https://shared.com", title: "Shared result" }],
+    });
+    mockGetJSON.mockResolvedValue({
+      web: {
+        results: [
+          {
+            url: "https://shared.com",
+            title: "Shared duplicate",
+            description: "duplicate",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+          {
+            url: "https://b.com",
+            title: "Brave B",
+            description: "result B",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+          {
+            url: "https://c.com",
+            title: "Brave C",
+            description: "result C",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
+      },
+    });
+
+    const results = await searchAll("test", {
+      providers: ["exa", "brave"],
+      maxResults: 2,
+    });
+
+    expect(results.map(({ url }) => url)).toEqual(["https://shared.com", "https://b.com"]);
+  });
+
   it("deduplicates by URL keeping higher score", async () => {
     process.env.EXA_API_KEY = "test-exa";
     process.env.BRAVE_API_KEY = "test-brave";
@@ -443,6 +486,22 @@ describe("searchAllDetailed", () => {
     expect(response.results).toHaveLength(1);
     expect(response.errors).toHaveLength(0);
     expect(response.filterReports).toEqual([]);
+  });
+
+  it("defaults the global result cap to ten", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    mockPostJSON.mockResolvedValue({
+      requestId: "test-req",
+      results: Array.from({ length: 11 }, (_, index) => ({
+        id: String(index),
+        url: `https://${index}.com`,
+        title: `Result ${index}`,
+      })),
+    });
+
+    const response = await searchAllDetailed("test", { providers: ["exa"] });
+
+    expect(response.results).toHaveLength(10);
   });
 
   it("reports providers that succeed without retained results", async () => {

@@ -94,7 +94,7 @@ for (const result of results) {
 }
 ```
 
-`searchAll` uses `Promise.allSettled` internally, so if one provider fails, the others still return. Results are deduplicated by URL (normalized, UTM params stripped). When duplicates exist, the result with the higher score wins.
+`searchAll` uses `Promise.allSettled` internally, so if one provider fails, the others still return. Results are deduplicated by URL (normalized, UTM params stripped), then `maxResults` caps the final list. It defaults to 10. When duplicates exist, the result with the higher score wins.
 
 You can also specify which providers to query:
 
@@ -409,7 +409,7 @@ interface SearchOptions {
 }
 ```
 
-`maxResults` works with every search provider. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. The remaining filters are specific to each provider:
+`maxResults` defaults to 10 and caps the final result list, including `searchAll` output after URL deduplication. Each provider also receives it as the requested result count. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. The remaining filters are specific to each provider:
 
 | Provider    | Domain filters   | Source values           | Category values                              | Date bounds |
 | ----------- | ---------------- | ----------------------- | -------------------------------------------- | ----------- |
