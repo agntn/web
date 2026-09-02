@@ -5,7 +5,7 @@ import {
   type CallToolResult,
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { Type, type TSchema } from "typebox";
+import { Type, type TProperties, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { webToolTitle } from "./tui.ts";
 import { builtinProviders } from "./core/providers.ts";
@@ -19,19 +19,155 @@ import { readProviderNames, readUrlDetailed, type ReadProviderName } from "./cor
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
-import type { SearchRequestOptions } from "./core/types.ts";
+import { searchFilterNames, type SearchRequestOptions } from "./core/types.ts";
 import "./providers/index.ts";
 import { runtimeInfo, version } from "./version.ts";
 
 const MAX_RESULTS_HARD_CAP = 20;
 
 const providerNames = [...builtinProviders, "all"] as const;
+const strictObject = <T extends TProperties>(properties: T) =>
+  Type.Object(properties, { additionalProperties: false });
+const unknownRecordSchema = Type.Record(Type.String(), Type.Unknown());
+const searchFilterSchema = Type.Union(searchFilterNames.map((name) => Type.Literal(name)));
+const searchResultProperties = {
+  url: Type.String(),
+  title: Type.String(),
+  snippet: Type.String(),
+  score: Type.Optional(Type.Number()),
+  publishedDate: Type.Optional(Type.String()),
+  author: Type.Optional(Type.String()),
+  image: Type.Optional(Type.String()),
+  favicon: Type.Optional(Type.String()),
+  text: Type.Optional(Type.String()),
+  highlights: Type.Optional(Type.Array(Type.String())),
+  summary: Type.Optional(Type.String()),
+  metadata: Type.Optional(unknownRecordSchema),
+};
+const searchResultSchema = strictObject(searchResultProperties);
+const searchAllResultSchema = strictObject({
+  ...searchResultProperties,
+  provider: Type.String(),
+});
+const searchFilterReportSchema = strictObject({
+  provider: Type.String(),
+  ignoredFilters: Type.Array(searchFilterSchema),
+  undeclaredFilters: Type.Array(searchFilterSchema),
+});
+const searchProviderMetadataSchema = strictObject({
+  provider: Type.String(),
+  metadata: unknownRecordSchema,
+});
+const searchProviderResultSchema = strictObject({
+  provider: Type.String(),
+  results: Type.Array(searchResultSchema),
+  ignoredFilters: Type.Array(searchFilterSchema),
+  undeclaredFilters: Type.Array(searchFilterSchema),
+  metadata: Type.Optional(unknownRecordSchema),
+});
+const searchAllResponseSchema = strictObject({
+  results: Type.Array(searchAllResultSchema),
+  successfulProviders: Type.Array(Type.String()),
+  errors: Type.Array(strictObject({ provider: Type.String(), error: Type.String() })),
+  filterReports: Type.Array(searchFilterReportSchema),
+  providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
+});
+const searchBatchItemSchema = Type.Union([
+  strictObject({
+    query: Type.String(),
+    provider: Type.Union(builtinProviders.map((name) => Type.Literal(name))),
+    results: Type.Array(searchResultSchema),
+    filterReports: Type.Array(searchFilterReportSchema),
+    providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
+  }),
+  strictObject({
+    query: Type.String(),
+    provider: Type.Literal("all"),
+    results: Type.Array(searchAllResultSchema),
+    filterReports: Type.Array(searchFilterReportSchema),
+    providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
+  }),
+  strictObject({ query: Type.String(), error: Type.String() }),
+]);
+const searchOutputSchema = strictObject({
+  result: Type.Union([
+    searchProviderResultSchema,
+    searchAllResponseSchema,
+    Type.Array(searchBatchItemSchema),
+  ]),
+});
+const imageSearchResultSchema = strictObject({
+  pageUrl: Type.String(),
+  imageUrl: Type.String(),
+  title: Type.String(),
+  provider: Type.String(),
+  source: Type.Optional(Type.String()),
+  thumbnailUrl: Type.Optional(Type.String()),
+  imageWidth: Type.Optional(Type.Number()),
+  imageHeight: Type.Optional(Type.Number()),
+  thumbnailWidth: Type.Optional(Type.Number()),
+  thumbnailHeight: Type.Optional(Type.Number()),
+  position: Type.Optional(Type.Number()),
+  exactMatch: Type.Optional(Type.Boolean()),
+});
+const imageSearchOutputSchema = strictObject({ result: Type.Array(imageSearchResultSchema) });
+const readResultSchema = strictObject({
+  url: Type.String(),
+  title: Type.Optional(Type.String()),
+  description: Type.Optional(Type.String()),
+  content: Type.String(),
+  text: Type.Optional(Type.String()),
+  html: Type.Optional(Type.String()),
+  publishedDate: Type.Optional(Type.String()),
+  image: Type.Optional(Type.String()),
+  links: Type.Optional(Type.Array(Type.String())),
+  images: Type.Optional(Type.Array(Type.String())),
+  metadata: Type.Optional(unknownRecordSchema),
+});
+const readDetailedResultSchema = strictObject({
+  result: readResultSchema,
+  requestedProvider: Type.String(),
+  provider: Type.String(),
+  attempts: Type.Array(Type.String()),
+});
+const readBatchItemSchema = Type.Union([
+  strictObject({
+    url: Type.String(),
+    result: readResultSchema,
+    requestedProvider: Type.String(),
+    provider: Type.String(),
+    attempts: Type.Array(Type.String()),
+  }),
+  strictObject({ url: Type.String(), error: Type.String() }),
+]);
+const readOutputSchema = strictObject({
+  result: Type.Union([readDetailedResultSchema, Type.Array(readBatchItemSchema)]),
+});
+const providerStatusSchema = strictObject({
+  name: Type.String(),
+  configured: Type.Boolean(),
+  envVar: Type.Union([Type.String(), Type.Null()]),
+  reachable: Type.Optional(Type.Boolean()),
+  searchFilters: Type.Optional(Type.Array(searchFilterSchema)),
+  searchCategories: Type.Optional(Type.Array(Type.String())),
+});
+const providersOutputSchema = strictObject({
+  result: strictObject({
+    runtime: strictObject({
+      version: Type.String(),
+      buildId: Type.String(),
+      processStartedAt: Type.String(),
+    }),
+    providers: Type.Array(providerStatusSchema),
+  }),
+});
 
 interface ToolDefinition {
   readonly name: string;
   readonly title: string;
   readonly description: string;
   readonly inputSchema: TSchema;
+  readonly outputSchema: TSchema;
   readonly annotations: Tool["annotations"];
   execute(args: Readonly<Record<string, unknown>>): unknown;
 }
@@ -110,6 +246,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           Type.String({ description: "Filter results published before this date (ISO 8601)" }),
         ),
       }),
+      outputSchema: searchOutputSchema,
       annotations: {
         title: webToolTitle("web_search"),
         readOnlyHint: true,
@@ -145,6 +282,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           }),
         ),
       }),
+      outputSchema: imageSearchOutputSchema,
       annotations: {
         title: webToolTitle("web_search_image"),
         readOnlyHint: true,
@@ -203,6 +341,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           Type.Boolean({ description: "Bypass provider cache when supported." }),
         ),
       }),
+      outputSchema: readOutputSchema,
       annotations: {
         title: webToolTitle("web_read"),
         readOnlyHint: true,
@@ -218,6 +357,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       description:
         "List available web search providers, their configuration and filter support, and the running build.",
       inputSchema: Type.Object({}),
+      outputSchema: providersOutputSchema,
       annotations: {
         title: webToolTitle("web_providers"),
         readOnlyHint: true,
@@ -449,14 +589,8 @@ function errorResult(text: string): CallToolResult {
 }
 
 /**
- * Creates an unconnected MCP server exposing the web tools.
- *
- * Built on the low-level `Server` even though the SDK marks it `@deprecated`,
- * because `McpServer.registerTool` accepts Standard Schema (Zod) only. TypeBox 1.x
- * does not implement Standard Schema, and this package's Pi extension schemas are
- * TypeBox. The high-level API would force a second definition of every parameter.
- * Results stay in text content because clients prefer structuredContent over the
- * readable response when both are present.
+ * Creates the low level MCP server so Pi and MCP can share TypeBox schemas without a parallel Zod definition.
+ * Successful calls return schema checked data and compact JSON text for older clients.
  * @returns {Server} Unconnected MCP server.
  */
 export function createMcpServer(): Server {
@@ -468,6 +602,7 @@ export function createMcpServer(): Server {
       title: tool.title,
       description: tool.description,
       inputSchema: tool.inputSchema as Tool["inputSchema"],
+      outputSchema: tool.outputSchema as Tool["outputSchema"],
       annotations: tool.annotations,
     })),
   }));
@@ -486,7 +621,14 @@ export function createMcpServer(): Server {
 
     try {
       const result = await tool.execute(args);
-      return { content: [{ type: "text", text: JSON.stringify(result) }] };
+      const structuredContent = { result };
+      if (!Value.Check(tool.outputSchema, structuredContent)) {
+        return errorResult(`${tool.name} returned a result that does not match its output schema`);
+      }
+      return {
+        content: [{ type: "text", text: JSON.stringify(result) }],
+        structuredContent,
+      };
     } catch (error) {
       return errorResult(
         `${tool.name} failed: ${error instanceof Error ? error.message : String(error)}`,
