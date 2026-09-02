@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.5.1
+
+[compare changes](https://github.com/agntn/web/compare/v0.5.0...v0.5.1)
+
+### 🩹 Fixes
+
+- **cli:** Stop terminal control injection ([#92](https://github.com/agntn/web/pull/92))
+- **cli:** Strip controls from image matches ([#93](https://github.com/agntn/web/pull/93))
+- **cli:** Block controls in read output ([#95](https://github.com/agntn/web/pull/95))
+
+### 🏡 Chore
+
+- Normalize v0.5.0 changelog spacing ([ace3788](https://github.com/agntn/web/commit/ace3788))
+- Drop OpenCode from package ([#94](https://github.com/agntn/web/pull/94))
+
+### ❤️ Contributors
+
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aei ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.5.0
 
 [compare changes](https://github.com/agntn/web/compare/v0.4.0...v0.5.0)
