@@ -19,7 +19,6 @@ src/
 ├── commands/             # citty CLI subcommands (`search`, `read`, `providers`, `mcp`)
 ├── index.ts              # Public API barrel
 ├── ai.ts                 # Vercel AI SDK tools
-├── opencode.ts           # OpenCode plugin tools
 ├── mcp.ts                # MCP server surface (createMcpServer, executors)
 └── cli.ts                # CLI entry point
 packages/
@@ -34,21 +33,21 @@ test/unit/                # Public behavior and provider contract tests
 
 ## WHERE TO LOOK
 
-| Task                 | Location                                                                            | Notes                                                                                                                                                          |
-| -------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Add public exports   | `src/index.ts`                                                                      | Keep the public surface small and explicit                                                                                                                     |
-| Add/extend providers | `src/providers/`                                                                    | Keep provider-shaped responses inside the adapter                                                                                                              |
-| Add search behavior  | `src/core/all.ts` + provider adapter                                                | Preserve query → results semantics                                                                                                                             |
-| Add image search     | `src/core/image.ts` + provider adapter + `src/commands/search-image.ts`             | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                            |
-| Add read behavior    | `src/core/read.ts` + provider adapter + `src/commands/read.ts`                      | Preserve URL → content semantics                                                                                                                               |
-| Extend CLI           | `src/commands/` + `src/cli.ts`                                                      | Add subcommands with `citty`; keep text and JSON output stable                                                                                                 |
-| Extend agent tools   | `src/ai.ts`, `src/opencode.ts`, `packages/{pi,omp}/extensions/web.ts`, `src/mcp.ts` | Keep names capability-specific; MCP and extensions mirror provider enums from their core capability modules, never a frozen copy                               |
-| Change TUI rendering | `src/tui.ts` + both extension adapters                                              | Keep collapsed rows compact, expanded previews bounded, and every interpolated value terminal-safe                                                             |
-| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                                                | Low-level SDK `Server` with TypeBox schemas; every error branch goes through `errorResult`; executor guards re-check boundaries for hosts that skip validation |
-| Add tests            | `test/`                                                                             | Mirror public behavior, not implementation details                                                                                                             |
-| Change build outputs | `build.config.ts` + `package.json`                                                  | Keep `entries` and `exports` aligned                                                                                                                           |
-| Change CI flow       | `.github/workflows/test.yml`                                                        | Order stays `typecheck -> build -> test`                                                                                                                       |
-| Change release flow  | `.github/workflows/publish.yml`                                                     | Publish through npm OIDC only from `v*` tags                                                                                                                   |
+| Task                 | Location                                                                | Notes                                                                                                                                                             |
+| -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add public exports   | `src/index.ts`                                                          | Keep the public surface small and explicit                                                                                                                        |
+| Add/extend providers | `src/providers/`                                                        | Keep provider response shapes inside the adapter                                                                                                                  |
+| Add search behavior  | `src/core/all.ts` + provider adapter                                    | Preserve query → results semantics                                                                                                                                |
+| Add image search     | `src/core/image.ts` + provider adapter + `src/commands/search-image.ts` | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                               |
+| Add read behavior    | `src/core/read.ts` + provider adapter + `src/commands/read.ts`          | Preserve URL → content semantics                                                                                                                                  |
+| Extend CLI           | `src/commands/` + `src/cli.ts`                                          | Add subcommands with `citty`; keep text and JSON output stable                                                                                                    |
+| Extend agent tools   | `src/ai.ts`, `packages/{pi,omp}/extensions/web.ts`, `src/mcp.ts`        | Keep names specific to each capability; MCP and extensions mirror provider enums from their core capability modules, never a frozen copy                          |
+| Change TUI rendering | `src/tui.ts` + both extension adapters                                  | Keep collapsed rows compact, expanded previews bounded, and every interpolated value safe for terminals                                                           |
+| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                                    | The low level SDK `Server` uses TypeBox schemas; every error branch goes through `errorResult`; executor guards check boundaries again when hosts skip validation |
+| Add tests            | `test/`                                                                 | Mirror public behavior, not implementation details                                                                                                                |
+| Change build outputs | `build.config.ts` + `package.json`                                      | Keep `entries` and `exports` aligned                                                                                                                              |
+| Change CI flow       | `.github/workflows/test.yml`                                            | Order stays `typecheck -> build -> test`                                                                                                                          |
+| Change release flow  | `.github/workflows/publish.yml`                                         | Publish through npm OIDC only from `v*` tags                                                                                                                      |
 
 ## CONVENTIONS
 
@@ -60,7 +59,7 @@ test/unit/                # Public behavior and provider contract tests
 - Keep capability names explicit: `search*` for query → results, `searchByImage` for image URL → matches, and `read*`/`readUrl` for URL → content
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible
-- Keep capability provider lists single-source: `src/core/read.ts` exports read-capable names; AI/OpenCode/Pi surfaces import that list instead of mirroring `['jina']`
+- Keep capability provider lists in one source of truth: `src/core/read.ts` exports the names of providers that support reads; AI and Pi surfaces import that list instead of mirroring `['jina']`
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
 ## ADDING A NEW PROVIDER

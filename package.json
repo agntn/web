@@ -48,10 +48,6 @@
     "./mcp": {
       "types": "./dist/mcp.d.mts",
       "import": "./dist/mcp.mjs"
-    },
-    "./opencode": {
-      "types": "./dist/opencode.d.mts",
-      "import": "./dist/opencode.mjs"
     }
   },
   "publishConfig": {
@@ -70,7 +66,6 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "@toon-format/toon": "^2.1.0",
     "citty": "latest",
     "consola": "latest",
     "ofetch": "^1.5.1",
@@ -84,7 +79,6 @@
     "@earendil-works/pi-tui": "*",
     "@oh-my-pi/omptype": "^18.0.11",
     "@oh-my-pi/pi-coding-agent": "^18.0.11",
-    "@opencode-ai/plugin": "^1.2.23",
     "@types/node": "latest",
     "ai": "^6.0.116",
     "changelogen": "latest",
@@ -99,7 +93,6 @@
     "@earendil-works/pi-coding-agent": "*",
     "@earendil-works/pi-tui": "*",
     "@oh-my-pi/pi-coding-agent": ">=18.0.0 <19",
-    "@opencode-ai/plugin": ">=1.0.0",
     "ai": "^6.0.116",
     "typebox": "^1.1.33",
     "zod": "^4.3.6"
@@ -112,9 +105,6 @@
       "optional": true
     },
     "@oh-my-pi/pi-coding-agent": {
-      "optional": true
-    },
-    "@opencode-ai/plugin": {
       "optional": true
     },
     "ai": {
