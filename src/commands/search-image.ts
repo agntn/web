@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
+import { sanitizeTerminalText } from "../tui.ts";
 import { imageSearchProviderNames, searchByImage } from "../core/image.ts";
 import { providerApiKeyEnvVar } from "../core/providers.ts";
 import {
@@ -72,9 +73,11 @@ function writeImageSearchResults(
     return;
   }
   for (const result of results) {
-    consola.log(`\x1B[1m\x1B[36m${sanitizeSingleLine(result.title || "(no title)")}\x1B[0m`);
-    consola.log(`  ${sanitizeSingleLine(result.pageUrl)}`);
-    consola.log(`  \x1B[90m${sanitizeSingleLine(result.imageUrl)}\x1B[0m`);
+    consola.log(
+      `\x1B[1m\x1B[36m${sanitizeTerminalText(result.title || "(no title)", 2048)}\x1B[0m`,
+    );
+    consola.log(`  ${sanitizeTerminalText(result.pageUrl, 2048)}`);
+    consola.log(`  \x1B[90m${sanitizeTerminalText(result.imageUrl, 2048)}\x1B[0m`);
     consola.log("");
   }
 }
@@ -94,13 +97,6 @@ function handleImageSearchError(error: unknown): never {
   }
   if (error instanceof ImageSearchNotSupportedError) return exitWithError(error.message);
   throw error;
-}
-
-function sanitizeSingleLine(text: string): string {
-  return text
-    .replaceAll(/\p{Cc}/gu, " ")
-    .replaceAll(/\s+/g, " ")
-    .trim();
 }
 
 function exitWithError(message: string): never {

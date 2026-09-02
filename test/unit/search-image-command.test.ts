@@ -69,12 +69,17 @@ describe("search-image command", () => {
     expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('"pageUrl"'));
   });
 
-  it("keeps provider text on one terminal line", async () => {
+  it("removes terminal controls from human-readable matches", async () => {
+    const escape = String.fromCodePoint(0x1b);
+    const bell = String.fromCodePoint(0x07);
+    const controlSequence = String.fromCodePoint(0x9b);
+    const lineSeparator = String.fromCodePoint(0x2028);
+    const rightToLeftOverride = String.fromCodePoint(0x202e);
     mockSearchByImage.mockResolvedValueOnce([
       {
-        pageUrl: "https://example.com/page\nforged",
-        imageUrl: "https://example.com/image.jpg\rforged",
-        title: "Match\n\u001B[31mforged",
+        pageUrl: `https://example.com/page${lineSeparator}forged`,
+        imageUrl: `https://example.com/image.jpg${controlSequence}31m${rightToLeftOverride}forged`,
+        title: `Match${escape}]8;;https://evil.example${bell} link${escape}]8;;${bell}`,
         provider: "serpapi",
       },
     ]);
@@ -85,9 +90,12 @@ describe("search-image command", () => {
       json: false,
     });
 
-    const output = mockLog.mock.calls.flat().map(String);
-    expect(output.every((line) => !line.includes("\n") && !line.includes("\r"))).toBe(true);
-    expect(output.join("|")).not.toContain("\u001B[31m");
+    expect(mockLog.mock.calls.map(([message]) => String(message))).toEqual([
+      `${escape}[1m${escape}[36mMatch link${escape}[0m`,
+      "  https://example.com/page forged",
+      `  ${escape}[90mhttps://example.com/image.jpg forged${escape}[0m`,
+      "",
+    ]);
   });
 
   it("reports invalid image URLs without a stack trace", async () => {
