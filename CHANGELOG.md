@@ -13,12 +13,12 @@
 
 ### 🩹 Fixes
 
-- **search:** ⚠️  Split Firecrawl search filters ([#88](https://github.com/agntn/web/pull/88))
+- **search:** ⚠️ Split Firecrawl search filters ([#88](https://github.com/agntn/web/pull/88))
 - **search:** Report every successful provider ([#91](https://github.com/agntn/web/pull/91))
 
 #### ⚠️ Breaking Changes
 
-- **search:** ⚠️  Split Firecrawl search filters ([#88](https://github.com/agntn/web/pull/88))
+- **search:** ⚠️ Split Firecrawl search filters ([#88](https://github.com/agntn/web/pull/88))
 
 ### ❤️ Contributors
 
