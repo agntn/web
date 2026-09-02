@@ -50,6 +50,10 @@ const FIELD_SCAN_LIMIT = 2048;
 const PREVIEW_LINES = 10;
 const PREVIEW_WIDTH = 180;
 const TERMINAL_UNSAFE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu;
+const TERMINAL_CONTENT_UNSAFE =
+  /[\p{Cc}\p{Zl}\p{Zp}\u061C\u200E\u200F\u202A-\u202E\u2066-\u206F]/gu;
+const TERMINAL_CONTENT_SEPARATOR = /[\p{Zl}\p{Zp}]/u;
+const TERMINAL_LAYOUT = new Set(["\t", "\n"]);
 const MALFORMED_SURROGATE = /\p{Cs}/gu;
 const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
@@ -80,10 +84,17 @@ function clip(text: string, max: number): string {
   return `${clipped}…`;
 }
 
-function cleanTerminalText(text: string): string {
-  return stripVTControlCharacters(text.replace(MALFORMED_SURROGATE, " "))
-    .replace(TERMINAL_UNSAFE, " ")
-    .replaceAll(/\p{Zs}+/gu, " ");
+function cleanTerminalText(text: string, preserveLayout = false): string {
+  const cleaned = stripVTControlCharacters(text.replace(MALFORMED_SURROGATE, " ")).replace(
+    preserveLayout ? TERMINAL_CONTENT_UNSAFE : TERMINAL_UNSAFE,
+    (character) => (preserveLayout ? replaceContentControl(character) : " "),
+  );
+  return preserveLayout ? cleaned : cleaned.replaceAll(/\p{Zs}+/gu, " ");
+}
+
+function replaceContentControl(character: string): string {
+  if (TERMINAL_LAYOUT.has(character)) return character;
+  return TERMINAL_CONTENT_SEPARATOR.test(character) ? " " : "";
 }
 
 /** Sanitize one untrusted value before it reaches a terminal component.
@@ -95,6 +106,14 @@ export function sanitizeTerminalText(value: unknown, max = FIELD_WIDTH): string 
   const text = String(value);
   const bounded = text.length > FIELD_SCAN_LIMIT ? `${cutAt(text, FIELD_SCAN_LIMIT - 1)}…` : text;
   return clip(cleanTerminalText(bounded).replaceAll(/\s+/g, " ").trim(), max);
+}
+
+/** Sanitize untrusted terminal content while preserving tabs and line breaks.
+ * @param value - Value crossing the terminal boundary.
+ * @returns {string} Text safe for terminal output with its layout intact.
+ */
+export function sanitizeTerminalContent(value: unknown): string {
+  return cleanTerminalText(String(value).replaceAll(/\r\n?/g, "\n"), true);
 }
 
 function paint(theme: Readonly<StatusTheme>, color: StatusColor, text: string): string {

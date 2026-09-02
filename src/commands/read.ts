@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
+import { sanitizeTerminalContent, sanitizeTerminalText } from "../tui.ts";
 import { providerApiKeyEnvVar } from "../core/providers.ts";
 import {
   AuthError,
@@ -131,15 +132,14 @@ function writeReadResult(
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
   }
-  if (result.title) consola.log(`\x1B[1m\x1B[36m${sanitizeTerminalText(result.title)}\x1B[0m`);
-  consola.log(`  ${sanitizeTerminalText(result.url)}`);
+  if (result.title)
+    consola.log(`\x1B[1m\x1B[36m${sanitizeTerminalText(result.title, 2048)}\x1B[0m`);
+  consola.log(`  ${sanitizeTerminalText(result.url, 2048)}`);
   if (result.description) {
-    consola.log(
-      `  \x1B[90m${truncateSingleLine(sanitizeTerminalText(result.description), 160)}\x1B[0m`,
-    );
+    consola.log(`  \x1B[90m${sanitizeTerminalText(result.description, 160)}\x1B[0m`);
   }
   consola.log("");
-  consola.log(sanitizeTerminalText(result.content));
+  consola.log(sanitizeTerminalContent(result.content));
 }
 
 type ReadBatchItemView =
@@ -229,61 +229,6 @@ function parseFormat(input: string | undefined): ParsedFormat {
   return { ok: false, message: "Invalid --format value. Expected markdown, text, or html." };
 }
 
-function truncateSingleLine(text: string, maxLength: number): string {
-  const singleLine = text.replaceAll(/\s+/g, " ").trim();
-  return singleLine.length <= maxLength ? singleLine : `${singleLine.slice(0, maxLength - 1)}…`;
-}
-
 function sanitizeHeaderText(text: string): string {
-  return truncateSingleLine(sanitizeTerminalText(text), 160);
-}
-
-function sanitizeTerminalText(text: string): string {
-  let sanitized = "";
-  for (let index = 0; index < text.length; index += 1) {
-    const code = text.codePointAt(index) ?? -1;
-    if (code === 27) {
-      index = escapeSequenceEnd(text, index);
-    } else if (isTerminalTextCode(code)) {
-      sanitized += text[index];
-    }
-  }
-  return sanitized;
-}
-
-function isTerminalTextCode(code: number): boolean {
-  return (code > 8 && code < 11) || (code > 12 && code < 14) || (code > 31 && code !== 127);
-}
-
-function escapeSequenceEnd(text: string, escapeIndex: number): number {
-  const marker = text.codePointAt(escapeIndex + 1) ?? -1;
-  if (marker === 93) return operatingSystemCommandEnd(text, escapeIndex + 2);
-  if (marker === 91) return controlSequenceEnd(text, escapeIndex + 2);
-
-  let index = escapeIndex + 1;
-  while (
-    index < text.length &&
-    (text.codePointAt(index) ?? -1) >= 32 &&
-    (text.codePointAt(index) ?? -1) <= 47
-  ) {
-    index += 1;
-  }
-  return index;
-}
-
-function operatingSystemCommandEnd(text: string, start: number): number {
-  for (let index = start; index < text.length; index += 1) {
-    if ((text.codePointAt(index) ?? -1) === 7) return index;
-    if ((text.codePointAt(index) ?? -1) === 27 && (text.codePointAt(index + 1) ?? -1) === 92)
-      return index + 1;
-  }
-  return text.length - 1;
-}
-
-function controlSequenceEnd(text: string, start: number): number {
-  for (let index = start; index < text.length; index += 1) {
-    const code = text.codePointAt(index) ?? -1;
-    if (code >= 64 && code <= 126) return index;
-  }
-  return text.length - 1;
+  return sanitizeTerminalText(text, 160);
 }
