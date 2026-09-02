@@ -31,7 +31,7 @@ Provided slash commands:
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` - show provider configuration and reachability status
 
-Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Detailed provider metadata remains in tool details; Pi also prints a bounded metadata preview for the model. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
+Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Pi sends rich search fields with a cap for each result and includes provider metadata without expanding the TUI. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
 
 ## Install
 

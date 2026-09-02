@@ -3,7 +3,13 @@ import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-age
 import stringWidth from "string-width";
 import { describe, expect, it, vi } from "vitest";
 import webExtension, { resolveWebModuleUrl } from "../../packages/pi/extensions/web.ts";
-import { builtinProviders } from "../../src/index.ts";
+import {
+  builtinProviders,
+  Provider,
+  register,
+  type ProviderConfig,
+  type SearchResult,
+} from "../../src/index.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { providerApiKeyEnvVar } from "../../src/core/providers.ts";
 
@@ -238,6 +244,127 @@ describe("Pi extension", () => {
     }
   });
 
+  it("keeps rich search fields visible to the model without bloating the command selector", async () => {
+    const previousKey = process.env.EXA_API_KEY;
+    process.env.EXA_API_KEY = "test-key";
+    const providerName = `richfixture${Math.random().toString(36).slice(2)}`;
+    const longText = `Full page text ${"x".repeat(6_000)}`;
+    const richResult = {
+      url: "https://example.com/rich",
+      title: "Rich\u001B]0;bad\u0007 result",
+      snippet: `Long snippet ${"s".repeat(6_000)}`,
+      score: 0.93,
+      publishedDate: "2026-09-02T12:00:00Z",
+      author: `Ada Example ${"a".repeat(6_000)}`,
+      image: `https://example.com/image.png?${"i".repeat(6_000)}`,
+      favicon: `https://example.com/favicon.ico?${"f".repeat(6_000)}`,
+      text: longText,
+      highlights: ["First highlight", `Second highlight ${"h".repeat(6_000)}`],
+      summary: `Short provider summary ${"y".repeat(6_000)}`,
+      metadata: { relevance: "high", payload: "m".repeat(6_000) },
+    } satisfies SearchResult;
+    class RichFixtureProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://fixture.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, RichFixtureProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [richResult];
+      }
+    }
+    register(RichFixtureProvider);
+    Reflect.apply(Array.prototype.push, builtinProviders, [providerName]);
+
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url !== "https://api.exa.ai/search") throw new Error(`Unexpected request: ${url}`);
+      return new Response(
+        JSON.stringify({
+          requestId: "rich-search",
+          results: [{ id: "rich-result", ...richResult }],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    resetDefaultClientForTests();
+
+    try {
+      const extension = captureExtension();
+      const searchTool = extension.tools.get("web_search");
+      const command = extension.commands.get("web");
+      if (!searchTool || !command) throw new Error("Missing Pi search entrypoints");
+
+      const execution: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
+        "test-call",
+        { query: "rich query", provider: providerName },
+        undefined,
+        undefined,
+        undefined,
+      ]);
+
+      for (const field of [
+        "Score: 0.93",
+        "Published: 2026-09-02T12:00:00Z",
+        "Author: Ada Example",
+        "Image: https://example.com/image.png?",
+        "Favicon: https://example.com/favicon.ico?",
+        "Summary: Short provider summary",
+        "Highlights: First highlight | Second highlight",
+        'Metadata: {"relevance":"high","payload":"mmm',
+        "Text: Full page text",
+      ]) {
+        await expect(execution).resolves.toHaveProperty(
+          "content.0.text",
+          expect.stringContaining(field),
+        );
+      }
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringMatching(
+          new RegExp(`^\\[provider=${providerName}\\][^\\n]*\\n\\n[\\s\\S]{1,4000}$`),
+        ),
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.not.stringContaining("bad"),
+      );
+      await expect(execution).resolves.toHaveProperty("details.results.0.text", longText);
+
+      const select = vi.fn(async () => undefined);
+      await Reflect.apply(command.handler, undefined, [
+        "rich query",
+        {
+          hasUI: true,
+          ui: {
+            input: vi.fn(),
+            notify: vi.fn(),
+            pasteToEditor: vi.fn(),
+            select,
+          },
+        },
+      ]);
+      expect(select).toHaveBeenCalledWith("web (exa) - rich query", [
+        expect.stringContaining("1. Rich result\n   https://example.com/rich - First highlight"),
+      ]);
+      expect(select).toHaveBeenCalledWith("web (exa) - rich query", [
+        expect.not.stringContaining("Short provider summary"),
+      ]);
+      expect(select).toHaveBeenCalledWith("web (exa) - rich query", [
+        expect.not.stringContaining("bad"),
+      ]);
+    } finally {
+      Reflect.apply(Array.prototype.pop, builtinProviders, []);
+      if (previousKey === undefined) delete process.env.EXA_API_KEY;
+      else process.env.EXA_API_KEY = previousKey;
+      vi.unstubAllGlobals();
+      resetDefaultClientForTests();
+    }
+  });
+
   it("accepts a search provider added by the live web module", async () => {
     const providerName = `liveprovider${Math.random().toString(36).slice(2)}`;
     Reflect.apply(Array.prototype.push, builtinProviders, [providerName]);
@@ -326,6 +453,28 @@ describe("Pi extension", () => {
       await expect(execution).resolves.toHaveProperty(
         "content.0.text",
         expect.stringContaining("via 2 provider(s) [exa, brave]"),
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringContaining("Provider: exa"),
+      );
+
+      const batchExecution: unknown = Reflect.apply(
+        searchTool.execute.bind(searchTool),
+        undefined,
+        [
+          "test-batch-call",
+          { query: ["first query", "second query"], provider: "all" },
+          undefined,
+          undefined,
+          undefined,
+        ],
+      );
+      await expect(batchExecution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringMatching(
+          /\[1\] first query \[provider=all\]\n\n1\. Exa result[\s\S]*Provider: exa[\s\S]*\[2\] second query \[provider=all\]\n\n1\. Exa result[\s\S]*Provider: exa/,
+        ),
       );
     } finally {
       if (previousExaKey === undefined) delete process.env.EXA_API_KEY;
