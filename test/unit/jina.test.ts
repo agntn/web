@@ -296,10 +296,13 @@ describe("jina provider", () => {
 
       const provider = createJinaProvider({});
 
-      await expect(provider.read("ftp://example.com")).rejects.toMatchObject({
+      const request = provider.read("ftp://example.com");
+
+      await expect(request).rejects.toMatchObject({
         statusCode: 422,
         body: "unsupported url",
       } satisfies Partial<HTTPError>);
+      await expect(request).rejects.toThrow("unsupported url");
     });
   });
 });
