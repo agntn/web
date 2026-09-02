@@ -21,6 +21,8 @@ import {
 import { createSearchProvider, has } from "./registry.ts";
 import { detectAvailableProviders, detectAvailableProvidersAsync } from "./resolve.ts";
 
+const DEFAULT_MAX_RESULTS = 10;
+
 export type SearchAllOptions = SearchRequestOptions & {
   readonly providers?: readonly string[];
 };
@@ -89,8 +91,10 @@ export async function searchAllDetailed(
   const { providers: requestedProviders, ...searchOptions } = options ?? {};
   validateProviderNames(requestedProviders);
   const providerNames = await resolveProviderNames(requestedProviders);
-  const settled = await searchProviders(providerNames, query, searchOptions);
-  return collectProviderResults(providerNames, settled);
+  const maxResults = searchOptions.maxResults ?? DEFAULT_MAX_RESULTS;
+  const effectiveSearchOptions = { ...searchOptions, maxResults };
+  const settled = await searchProviders(providerNames, query, effectiveSearchOptions);
+  return collectProviderResults(providerNames, settled, maxResults);
 }
 
 /**
@@ -223,6 +227,7 @@ function searchProviders(
 function collectProviderResults(
   providerNames: readonly string[],
   settled: readonly ProviderSearchOutcome[],
+  maxResults?: number,
 ): SearchAllResponse {
   const results: SearchAllResult[] = [];
   const successfulProviders = new Set<string>();
@@ -247,8 +252,10 @@ function collectProviderResults(
       });
     }
   }
+  const deduplicatedResults = deduplicateByUrl(results);
   return {
-    results: deduplicateByUrl(results),
+    results:
+      maxResults === undefined ? deduplicatedResults : deduplicatedResults.slice(0, maxResults),
     successfulProviders: [...successfulProviders],
     errors,
     filterReports,
