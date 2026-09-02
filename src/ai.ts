@@ -25,7 +25,7 @@ export const searchTool = tool({
       .describe(
         'Provider to use. Automatic selection tries other configured providers after HTTP 402. Use "all" for parallel search.',
       ),
-    maxResults: z.number().min(1).max(20).optional().describe("Max results (default: 10)"),
+    maxResults: z.number().int().min(1).max(20).optional().describe("Max results (default: 10)"),
     highlights: z
       .boolean()
       .optional()
@@ -138,6 +138,7 @@ export const readTool = tool({
     format: z.enum(["markdown", "text", "html"]).optional().describe("Preferred content format."),
     maxTokens: z
       .number()
+      .int()
       .min(1)
       .optional()
       .describe("Maximum tokens to return when supported by the provider."),
@@ -149,7 +150,12 @@ export const readTool = tool({
       .string()
       .optional()
       .describe("CSS selector to remove when supported by the provider."),
-    timeout: z.number().min(1).optional().describe("Provider timeout in seconds when supported."),
+    timeout: z
+      .number()
+      .int()
+      .min(1)
+      .optional()
+      .describe("Provider timeout in seconds when supported."),
     noCache: z.boolean().optional().describe("Bypass provider cache when supported."),
   }),
   execute: async ({

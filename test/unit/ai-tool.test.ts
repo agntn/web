@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { asSchema } from "ai";
 
 const mockPostJSON =
   vi.fn<
@@ -122,6 +123,18 @@ describe("searchTool", () => {
 
   it("has execute function", () => {
     expect(searchTool.execute).toBeTypeOf("function");
+  });
+
+  it("rejects fractional result limits at the schema boundary", async () => {
+    const validate = asSchema(searchTool.inputSchema).validate;
+    if (!validate) throw new TypeError("Search schema has no validator");
+
+    await expect(validate({ query: "test", maxResults: 5 })).resolves.toMatchObject({
+      success: true,
+    });
+    await expect(validate({ query: "test", maxResults: 5.5 })).resolves.toMatchObject({
+      success: false,
+    });
   });
 
   it("execute with explicit provider", async () => {
@@ -598,6 +611,24 @@ describe("readTool", () => {
         delete process.env[key];
       }
     }
+  });
+
+  it("rejects fractional read budgets at the schema boundary", async () => {
+    const validate = asSchema(readTool.inputSchema).validate;
+    if (!validate) throw new TypeError("Read schema has no validator");
+
+    await expect(validate({ url: "https://example.com", maxTokens: 500 })).resolves.toMatchObject({
+      success: true,
+    });
+    await expect(validate({ url: "https://example.com", maxTokens: 500.5 })).resolves.toMatchObject(
+      { success: false },
+    );
+    await expect(validate({ url: "https://example.com", timeout: 30 })).resolves.toMatchObject({
+      success: true,
+    });
+    await expect(validate({ url: "https://example.com", timeout: 30.5 })).resolves.toMatchObject({
+      success: false,
+    });
   });
 
   it("reads a URL with Jina by default", async () => {
