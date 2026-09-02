@@ -113,7 +113,18 @@ describe("search command", () => {
     await runSearch({ provider: undefined, json: true });
 
     expect(mockCreate.mock.calls.map(([name]) => name)).toEqual(["exa", "brave"]);
-    expect(stdoutSpy).toHaveBeenCalledWith(`${JSON.stringify(results, null, 2)}\n`);
+    expect(stdoutSpy).toHaveBeenCalledWith(
+      `${JSON.stringify(
+        {
+          provider: "brave",
+          ignoredFilters: [],
+          undeclaredFilters: [],
+          results,
+        },
+        null,
+        2,
+      )}\n`,
+    );
   });
 
   it("keeps HTTP 402 visible for an explicit provider", async () => {
@@ -162,6 +173,9 @@ describe("search command", () => {
     expect(stdoutSpy).toHaveBeenCalledWith(
       `${JSON.stringify(
         {
+          provider: "firecrawl",
+          ignoredFilters: [],
+          undeclaredFilters: [],
           results: [],
           metadata: { id: "job-1", creditsUsed: 1 },
         },
@@ -171,7 +185,7 @@ describe("search command", () => {
     );
   });
 
-  it("keeps list JSON for providers without detailed search", async () => {
+  it("prints the shared detailed envelope for providers without response metadata", async () => {
     const results = [{ url: "https://example.com", title: "Example", snippet: "Result" }];
     mockSearch.mockResolvedValueOnce(results);
     stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
@@ -183,13 +197,108 @@ describe("search command", () => {
       highlights: true,
     });
     expect(mockSearchDetailed).not.toHaveBeenCalled();
-    expect(stdoutSpy).toHaveBeenCalledWith(`${JSON.stringify(results, null, 2)}\n`);
+    expect(stdoutSpy).toHaveBeenCalledWith(
+      `${JSON.stringify(
+        {
+          provider: "exa",
+          ignoredFilters: [],
+          undeclaredFilters: [],
+          results,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
+  it("fans out through every configured provider and keeps partial errors", async () => {
+    const results = [{ url: "https://example.com", title: "Example", snippet: "Result" }];
+    mockSearch.mockResolvedValueOnce(results).mockRejectedValueOnce(new Error("Brave unavailable"));
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runSearch({ provider: "all", json: true });
+
+    expect(mockCreate.mock.calls.map(([name]) => name)).toEqual(["exa", "brave"]);
+    expect(stdoutSpy).toHaveBeenCalledWith(
+      `${JSON.stringify(
+        {
+          results: [{ ...results[0], provider: "exa" }],
+          successfulProviders: ["exa"],
+          errors: [{ provider: "brave", error: "Brave unavailable" }],
+          filterReports: [],
+        },
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
+  it("runs extra positional queries as one ordered batch", async () => {
+    mockSearch
+      .mockResolvedValueOnce([{ url: "https://one.example", title: "One", snippet: "First" }])
+      .mockResolvedValueOnce([{ url: "https://two.example", title: "Two", snippet: "Second" }]);
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runSearch({ _: ["first query", "second query"], provider: "exa", json: true });
+
+    expect(mockSearch.mock.calls.map(([query]) => String(query))).toEqual([
+      "first query",
+      "second query",
+    ]);
+    expect(stdoutSpy).toHaveBeenCalledWith(
+      `${JSON.stringify(
+        [
+          {
+            query: "first query",
+            provider: "exa",
+            results: [{ url: "https://one.example", title: "One", snippet: "First" }],
+            filterReports: [],
+          },
+          {
+            query: "second query",
+            provider: "exa",
+            results: [{ url: "https://two.example", title: "Two", snippet: "Second" }],
+            filterReports: [],
+          },
+        ],
+        null,
+        2,
+      )}\n`,
+    );
+  });
+
+  it("parses search filters into the shared option shape", async () => {
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runSearch({
+      provider: "firecrawl",
+      json: true,
+      "include-domains": "github.com, example.com",
+      "exclude-domains": "spam.example",
+      sources: "web,news",
+      categories: "research,developer",
+      category: "news",
+      "start-published-date": "2024-01-01",
+      "end-published-date": "2024-12-31",
+    });
+
+    expect(mockSearchDetailed).toHaveBeenCalledWith("test query", {
+      maxResults: 10,
+      highlights: true,
+      includeDomains: ["github.com", "example.com"],
+      excludeDomains: ["spam.example"],
+      sources: ["web", "news"],
+      categories: ["research", "developer"],
+      category: "news",
+      startPublishedDate: "2024-01-01",
+      endPublishedDate: "2024-12-31",
+    });
   });
 
   it("passes disabled highlights to the provider", async () => {
     await runSearch({ provider: "firecrawl", highlights: false });
 
-    expect(mockSearch).toHaveBeenCalledWith("test query", {
+    expect(mockSearchDetailed).toHaveBeenCalledWith("test query", {
       maxResults: 10,
       highlights: false,
     });
