@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.5.2
+
+[compare changes](https://github.com/agntn/web/compare/v0.5.1...v0.5.2)
+
+### 🚀 Enhancements
+
+- **mcp:** Expose structured tool responses ([#117](https://github.com/agntn/web/pull/117))
+
+### 🩹 Fixes
+
+- **ai:** Reject fractional tool limits ([#112](https://github.com/agntn/web/pull/112))
+- **errors:** Surface HTTP response bodies ([#113](https://github.com/agntn/web/pull/113))
+- **search:** Cap fanout with maxResults ([#114](https://github.com/agntn/web/pull/114))
+- **ai:** Report reader provenance ([#115](https://github.com/agntn/web/pull/115))
+- Keep provider metadata in agent searches ([#116](https://github.com/agntn/web/pull/116))
+
+### ❤️ Contributors
+
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+- Ori ([@oritwoen](https://github.com/oritwoen))
+
 ## v0.5.1
 
 [compare changes](https://github.com/agntn/web/compare/v0.5.0...v0.5.1)
