@@ -125,6 +125,30 @@ describe("search command", () => {
     expect(mockCreate.mock.calls.map(([name]) => name)).toEqual(["exa"]);
   });
 
+  it("removes terminal controls from human-readable results", async () => {
+    const escape = String.fromCodePoint(0x1b);
+    const bell = String.fromCodePoint(0x07);
+    const controlSequence = String.fromCodePoint(0x9b);
+    const lineSeparator = String.fromCodePoint(0x2028);
+    const rightToLeftOverride = String.fromCodePoint(0x202e);
+    mockSearch.mockResolvedValueOnce([
+      {
+        title: `Result${escape}]8;;https://evil.example${bell} link${escape}]8;;${bell}`,
+        url: `https://example.com/${lineSeparator}spoofed`,
+        snippet: `safe${controlSequence}31m${rightToLeftOverride}text`,
+      },
+    ]);
+
+    await runSearch({ provider: "exa" });
+
+    expect(mockLog.mock.calls.map(([message]) => message)).toEqual([
+      `${escape}[1m${escape}[36mResult link${escape}[0m`,
+      "  https://example.com/ spoofed",
+      `  ${escape}[90msafe text${escape}[0m`,
+      "",
+    ]);
+  });
+
   it("prints detailed provider metadata in JSON output", async () => {
     stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 

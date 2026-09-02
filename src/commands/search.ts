@@ -1,5 +1,6 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
+import { sanitizeTerminalText } from "../tui.ts";
 import { providerApiKeyEnvVar } from "../core/providers.ts";
 import {
   AuthError,
@@ -137,11 +138,14 @@ function writeHumanSearchResults(
     return;
   }
   for (const result of results) {
-    consola.log(`\x1B[1m\x1B[36m${result.title}\x1B[0m`);
-    consola.log(`  ${result.url}`);
+    const title = sanitizeTerminalText(result.title, 2048);
+    const url = sanitizeTerminalText(result.url, 2048);
+    consola.log(`\x1B[1m\x1B[36m${title}\x1B[0m`);
+    consola.log(`  ${url}`);
     if (result.snippet) {
+      const sanitizedSnippet = sanitizeTerminalText(result.snippet, 2048);
       const snippet =
-        result.snippet.length > 120 ? `${result.snippet.slice(0, 120)}...` : result.snippet;
+        sanitizedSnippet.length > 120 ? `${sanitizedSnippet.slice(0, 120)}...` : sanitizedSnippet;
       consola.log(`  \x1B[90m${snippet}\x1B[0m`);
     }
     consola.log("");
