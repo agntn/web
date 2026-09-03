@@ -33,6 +33,8 @@ function loadWeb(): Promise<WebModule> {
 
 const MAX_RESULTS = 20;
 const MAX_BATCH_ITEMS = 10;
+const DEFAULT_READ_MAX_CHARS = 20_000;
+const MAX_READ_MAX_CHARS = 200_000;
 
 function toolResult<T>(details: T): AgentToolResult<T> {
   return {
@@ -162,6 +164,16 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     maxTokens: Type.Optional(
       Type.Integer({ description: "Maximum tokens to return when supported.", minimum: 1 }),
     ),
+    maxChars: Type.Optional(
+      Type.Integer({
+        description: `Maximum page content characters to return. Defaults to ${DEFAULT_READ_MAX_CHARS}.`,
+        minimum: 1,
+        maximum: MAX_READ_MAX_CHARS,
+      }),
+    ),
+    continuation: Type.Optional(
+      Type.String({ description: "Opaque token returned by a truncated read.", maxLength: 1024 }),
+    ),
     targetSelector: Type.Optional(
       Type.String({ description: "CSS selector to target when supported." }),
     ),
@@ -273,14 +285,19 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         provider,
         format: normalizeReadFormat(params.format),
         maxTokens: params.maxTokens,
+        maxChars: params.maxChars ?? DEFAULT_READ_MAX_CHARS,
+        continuation: params.continuation,
         targetSelector: params.targetSelector,
         removeSelector: params.removeSelector,
         timeout: params.timeout,
         noCache: params.noCache,
       };
+      if (Array.isArray(params.url) && params.continuation !== undefined) {
+        throw new TypeError("continuation is only supported for a single URL");
+      }
       if (Array.isArray(params.url)) {
         const outcomes = await web.readBatchDetailed(params.url, options);
-        return toolResult({ mode: "batch" as const, provider: providerLabel, outcomes });
+        return toolResult({ mode: "batch" as const, provider: providerLabel, options, outcomes });
       }
       const url = params.url.trim();
       if (!url) throw new TypeError("URL cannot be empty");
@@ -292,6 +309,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         effectiveProvider: response.provider,
         attempts: response.attempts,
         failures: response.failures,
+        options,
         result: response.result,
       });
     },
@@ -307,7 +325,11 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     ...renderers("web_providers"),
     async execute() {
       const web = await loadWeb();
-      return toolResult({ runtime: web.runtimeInfo, providers: await web.listProvidersAsync() });
+      return toolResult({
+        runtime: web.runtimeInfo,
+        packageCapabilities: web.packageCapabilities,
+        providers: await web.listProvidersAsync(),
+      });
     },
   });
 }

@@ -100,6 +100,8 @@ export interface ReadResult {
   links?: string[];
   images?: string[];
   metadata?: Record<string, unknown>;
+  truncated?: boolean;
+  continuation?: string;
 }
 
 export interface ReadOptions {

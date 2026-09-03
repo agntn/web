@@ -36,8 +36,19 @@ describe("Pi extension", () => {
     ).not.toMatch(/(?:from|import\()\s*["']@agntn\/web["']/u);
   });
 
-  it("registers reverse image search as a separate tool", () => {
-    expect(captureTools().has("web_search_image")).toBe(true);
+  it("registers reverse image search and portable read controls", () => {
+    const tools = captureTools();
+    expect(tools.has("web_search_image")).toBe(true);
+    const read = tools.get("web_read");
+    const schema = read?.parameters as {
+      readonly properties?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+    };
+    expect(schema.properties?.maxChars).toMatchObject({
+      type: "integer",
+      minimum: 1,
+      maximum: 200_000,
+    });
+    expect(schema.properties?.continuation).toMatchObject({ type: "string", maxLength: 1024 });
   });
 
   it("gives every tool a compact call and result renderer", () => {
@@ -433,6 +444,13 @@ describe("Pi extension", () => {
       undefined,
       undefined,
     ]);
+    const boundedReadResult: unknown = Reflect.apply(readTool.execute.bind(readTool), undefined, [
+      "bounded-read-call",
+      { url: "https://example.com", provider: providerName, maxChars: 3 },
+      undefined,
+      undefined,
+      undefined,
+    ]);
 
     await expect(searchResult).resolves.toMatchObject({
       details: {
@@ -446,8 +464,29 @@ describe("Pi extension", () => {
       details: { provider: providerName, results: [{ title: "Custom image" }] },
     });
     await expect(readResult).resolves.toMatchObject({
-      details: { provider: providerName, result: { content: "Custom page" } },
+      details: {
+        provider: providerName,
+        options: { maxChars: 20_000 },
+        result: { content: "Custom page", truncated: false },
+      },
     });
+    const bounded = (await boundedReadResult) as {
+      readonly content: readonly { readonly text: string }[];
+      readonly details: {
+        readonly options: { readonly maxChars: number };
+        readonly result: {
+          readonly content: string;
+          readonly truncated: boolean;
+          readonly continuation?: string;
+        };
+      };
+    };
+    expect(bounded.content[0]?.text).toMatch(/Cus[\s\S]*continuation=/u);
+    expect(bounded.details).toMatchObject({
+      options: { maxChars: 3 },
+      result: { content: "Cus", truncated: true },
+    });
+    expect(bounded.details.result.continuation).toBeTypeOf("string");
   });
 
   it("counts providers whose results were deduplicated from an all search", async () => {
@@ -668,6 +707,7 @@ describe("Pi extension", () => {
         readonly content: readonly { readonly text: string }[];
         readonly details: {
           readonly runtime: { readonly buildId: string; readonly processStartedAt: string };
+          readonly packageCapabilities: Readonly<Record<string, unknown>>;
           readonly providers: readonly ProviderStatus[];
         };
       };
@@ -677,8 +717,17 @@ describe("Pi extension", () => {
       );
       expect(result.content[0]?.text).toMatch(/^web \S+ build [a-f0-9]{12}, started /);
       expect(result.content[0]?.text).toContain(
+        "portable read content: maxChars defaults to 20000, max 200000; continuation=continuation",
+      );
+      expect(result.content[0]?.text).toContain(
         "jina (JINA_API_KEY) operations=search,read filters=includeDomains,category",
       );
+      expect(result.details.packageCapabilities).toMatchObject({
+        read: {
+          outputLimit: { option: "maxChars", agentDefault: 20_000, agentMaximum: 200_000 },
+          continuation: { option: "continuation", opaque: true },
+        },
+      });
 
       const jina = result.details.providers.find((provider) => provider.name === "jina");
       expect(jina).toMatchObject({

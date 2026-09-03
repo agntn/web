@@ -87,6 +87,15 @@ describe("web MCP server", () => {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     }
     expect(response.tools[3]?.annotations).toMatchObject({ openWorldHint: false });
+    const readInput = response.tools[2]?.inputSchema as {
+      readonly properties: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+    };
+    expect(readInput.properties.maxChars).toMatchObject({
+      type: "integer",
+      minimum: 1,
+      maximum: 200_000,
+    });
+    expect(readInput.properties.continuation).toMatchObject({ type: "string", maxLength: 1024 });
   });
 
   it("advertises output schemas that reject malformed tool results", async () => {
@@ -429,7 +438,7 @@ describe("web MCP server", () => {
     expect(response.isError).toBeUndefined();
     expect(response.structuredContent).toEqual({
       result: {
-        result: { url: "https://example.com", content: "page" },
+        result: { url: "https://example.com", content: "page", truncated: false },
         requestedProvider: "auto",
         provider: "jina",
         attempts: ["jina"],
@@ -464,7 +473,7 @@ describe("web MCP server", () => {
     expect(payload).toEqual([
       {
         url: "https://example.com/one",
-        result: { url: "https://example.com/one", content: "one" },
+        result: { url: "https://example.com/one", content: "one", truncated: false },
         requestedProvider: "auto",
         provider: "jina",
         attempts: ["jina"],
@@ -490,6 +499,7 @@ describe("web MCP server", () => {
         readonly buildId: string;
         readonly processStartedAt: string;
       };
+      readonly packageCapabilities: Readonly<Record<string, unknown>>;
       readonly providers: readonly unknown[];
     };
     expect(payload.runtime).toMatchObject({
@@ -497,6 +507,12 @@ describe("web MCP server", () => {
       processStartedAt: new Date(performance.timeOrigin).toISOString(),
     });
     expect(payload.runtime.buildId).toMatch(/^[a-f0-9]{12}$/);
+    expect(payload.packageCapabilities).toMatchObject({
+      read: {
+        outputLimit: { option: "maxChars", agentDefault: 20_000, agentMaximum: 200_000 },
+        continuation: { option: "continuation", opaque: true },
+      },
+    });
     expect(payload.providers).toContainEqual({
       name: "searxng",
       configured: true,
@@ -671,7 +687,7 @@ describe("web MCP executors", () => {
     });
 
     await expect(executeRead({ url: "https://example.com" })).resolves.toEqual({
-      result: { url: "https://example.com", content: "page" },
+      result: { url: "https://example.com", content: "page", truncated: false },
       requestedProvider: "auto",
       provider: "jina",
       attempts: ["jina"],
@@ -735,6 +751,9 @@ describe("web MCP executors", () => {
   it("rejects fractional maxTokens and a non-boolean noCache at the boundary", async () => {
     await expect(
       executeRead({ url: "https://example.com", maxTokens: 10.5 }),
+    ).rejects.toBeInstanceOf(TypeError);
+    await expect(
+      executeRead({ url: "https://example.com", maxChars: 200_001 }),
     ).rejects.toBeInstanceOf(TypeError);
     await expect(
       executeRead({ url: "https://example.com", noCache: "yes" }),

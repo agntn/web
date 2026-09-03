@@ -322,7 +322,8 @@ describe("OMP extension", () => {
     });
     expect(readResult.details).toMatchObject({
       provider: providerName,
-      result: { content: "Custom page" },
+      options: { maxChars: 20_000 },
+      result: { content: "Custom page", truncated: false },
     });
   });
 
@@ -333,10 +334,17 @@ describe("OMP extension", () => {
     const result = await providers.execute("call-1", {}, undefined, undefined, {} as never);
     const details = result.details as {
       runtime: { buildId: string };
+      packageCapabilities: Readonly<Record<string, unknown>>;
       providers: ProviderStatus[];
     };
 
     expect(details.runtime.buildId).toMatch(/^[a-f0-9]{12}$/u);
+    expect(details.packageCapabilities).toMatchObject({
+      read: {
+        outputLimit: { option: "maxChars", agentDefault: 20_000, agentMaximum: 200_000 },
+        continuation: { option: "continuation", opaque: true },
+      },
+    });
     const jina = details.providers.find((provider) => provider.name === "jina");
     expect(jina?.capabilities.search.supported).toBe(true);
     expect(jina?.capabilities.searchImage).toEqual({ supported: false });

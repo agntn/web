@@ -473,8 +473,13 @@ function scalarReadMeta(details: Readonly<Record<string, unknown>>): string[] {
   const attempts = listLength(details, "attempts") ?? 0;
   const meta = provider ? [sanitizeTerminalText(provider, META_WIDTH)] : [];
   if (content) meta.push(`${content.length.toLocaleString("en")} chars`);
+  meta.push(...readTruncationMeta(result));
   if (attempts > 1) meta.push(`${attempts} attempts`);
   return meta;
+}
+
+function readTruncationMeta(result: Readonly<Record<string, unknown>> | undefined): string[] {
+  return result?.truncated === true ? ["truncated"] : [];
 }
 
 function readMeta(details: unknown): string[] {

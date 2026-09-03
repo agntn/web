@@ -21,6 +21,7 @@ import type {
   ReadBatchDetailedItem,
   ReadOptions,
   ReadResult,
+  ReadUrlOptions,
   RuntimeInfo,
   SearchAllResult,
   SearchBatchItem,
@@ -82,14 +83,14 @@ type ReadDetails =
       readonly effectiveProvider: string;
       readonly attempts: readonly string[];
       readonly failures: readonly ProviderFailure[];
-      readonly options: ReadOptions;
+      readonly options: ReadUrlOptions;
       readonly result: ReadResult;
     }
   | {
       readonly mode: "batch";
       readonly urls: readonly string[];
       readonly provider: string;
-      readonly options: ReadOptions;
+      readonly options: ReadUrlOptions;
       readonly outcomes: readonly ReadBatchDetailedItem[];
     };
 
@@ -136,6 +137,8 @@ const READ_PROVIDER_HINT =
 const MAX_RESULTS_HARD_CAP = 20;
 const MAX_BATCH_ITEMS_HARD_CAP = 10;
 const DEFAULT_MAX_RESULTS = 10;
+const DEFAULT_READ_MAX_CHARS = 20_000;
+const MAX_READ_MAX_CHARS = 200_000;
 const MODEL_RESULT_MAX_CHARACTERS = 4_000;
 const MODEL_FIELD_MAX_CHARACTERS = 300;
 const MODEL_TEXT_MAX_CHARACTERS = 900;
@@ -233,6 +236,16 @@ const readParameters = Type.Object({
   ),
   maxTokens: Type.Optional(
     Type.Integer({ description: "Maximum tokens to return when supported.", minimum: 1 }),
+  ),
+  maxChars: Type.Optional(
+    Type.Integer({
+      description: `Maximum page content characters to return. Defaults to ${DEFAULT_READ_MAX_CHARS}.`,
+      minimum: 1,
+      maximum: MAX_READ_MAX_CHARS,
+    }),
+  ),
+  continuation: Type.Optional(
+    Type.String({ description: "Opaque token returned by a truncated read.", maxLength: 1024 }),
   ),
   targetSelector: Type.Optional(
     Type.String({ description: "CSS selector to target when supported." }),
@@ -492,15 +505,20 @@ export default function webExtension(pi: ExtensionAPI) {
       const readProvider = normalizeReadProviderInput(params.provider, web.readProviders());
       const readProviderLabel = readProvider ?? "auto";
       const format = normalizeReadFormat(params.format);
-      const readOptions: ReadOptions = stripUndefinedRead({
+      const readOptions: ReadUrlOptions = stripUndefinedRead({
         format,
         maxTokens: params.maxTokens,
+        maxChars: params.maxChars ?? DEFAULT_READ_MAX_CHARS,
+        continuation: params.continuation,
         targetSelector: params.targetSelector,
         removeSelector: params.removeSelector,
         timeout: params.timeout,
         noCache: params.noCache,
       });
 
+      if (Array.isArray(params.url) && params.continuation !== undefined) {
+        throw new TypeError("continuation is only supported for a single URL");
+      }
       if (Array.isArray(params.url)) {
         const outcomes = await web.readBatchDetailed(params.url, {
           provider: readProvider,
@@ -560,6 +578,7 @@ export default function webExtension(pi: ExtensionAPI) {
     ): Promise<
       AgentToolResult<{
         readonly runtime: RuntimeInfo;
+        readonly packageCapabilities: typeof import("../../../src/index.ts").packageCapabilities;
         readonly providers: readonly ProviderStatus[];
       }>
     > {
@@ -567,16 +586,24 @@ export default function webExtension(pi: ExtensionAPI) {
       const statuses = await web.listProvidersAsync();
       const lines = statuses.map((s) => formatProviderStatus(s));
       const runtimeLine = `web ${web.runtimeInfo.version} build ${web.runtimeInfo.buildId}, started ${web.runtimeInfo.processStartedAt}`;
+      const readLimit = web.packageCapabilities.read.outputLimit;
+      const packageLine = `portable read content: ${readLimit.option} defaults to ${readLimit.agentDefault}, max ${readLimit.agentMaximum}; continuation=${web.packageCapabilities.read.continuation.option}`;
       return {
         content: [
           {
             type: "text",
-            text: [runtimeLine, ...(lines.length > 0 ? lines : ["No providers registered."])].join(
-              "\n",
-            ),
+            text: [
+              runtimeLine,
+              packageLine,
+              ...(lines.length > 0 ? lines : ["No providers registered."]),
+            ].join("\n"),
           },
         ],
-        details: { runtime: web.runtimeInfo, providers: statuses },
+        details: {
+          runtime: web.runtimeInfo,
+          packageCapabilities: web.packageCapabilities,
+          providers: statuses,
+        },
       };
     },
   });
@@ -740,10 +767,12 @@ function searchArrayOptions(input: SearchOptionValues): SearchRequestOptions {
   };
 }
 
-function stripUndefinedRead(input: Readonly<ReadOptions>): ReadOptions {
+function stripUndefinedRead(input: Readonly<ReadUrlOptions>): ReadUrlOptions {
   return {
     ...(input.format === undefined ? {} : { format: input.format }),
     ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
+    ...(input.maxChars === undefined ? {} : { maxChars: input.maxChars }),
+    ...(input.continuation === undefined ? {} : { continuation: input.continuation }),
     ...(input.targetSelector === undefined ? {} : { targetSelector: input.targetSelector }),
     ...(input.removeSelector === undefined ? {} : { removeSelector: input.removeSelector }),
     ...(input.timeout === undefined ? {} : { timeout: input.timeout }),
@@ -836,7 +865,9 @@ type ReadBatchItemView =
       readonly requestedProvider: string;
       readonly provider: string;
       readonly attempts: readonly string[];
-      readonly result: Readonly<Pick<ReadResult, "title" | "url" | "description" | "content">>;
+      readonly result: Readonly<
+        Pick<ReadResult, "title" | "url" | "description" | "content" | "truncated" | "continuation">
+      >;
     };
 type ProviderErrorView = { readonly provider: string; readonly error: Readonly<Error> };
 
@@ -1065,11 +1096,19 @@ function formatReadBatch(outcomes: readonly ReadBatchItemView[]): string {
 }
 
 function formatReadResult(
-  result: Readonly<Pick<ReadResult, "title" | "url" | "description" | "content">>,
+  result: Readonly<
+    Pick<ReadResult, "title" | "url" | "description" | "content" | "truncated" | "continuation">
+  >,
 ): readonly string[] {
   const lines = [result.title || "(no title)", `   ${result.url}`];
   if (result.description) lines.push(`   ${truncateSingleLine(result.description, 160)}`);
   if (result.content) lines.push("", result.content);
+  if (result.truncated) {
+    const continuation = result.continuation
+      ? `; continuation=${sanitizeTerminalText(result.continuation, 1024)}`
+      : "";
+    lines.push("", `[truncated${continuation}]`);
+  }
   return lines;
 }
 
