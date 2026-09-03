@@ -10,7 +10,7 @@ import { listProviders } from "./core/resolve.ts";
 import { runtimeInfo } from "./version.ts";
 import "./providers/index.ts";
 
-const providerNames = [...builtinProviders, "all"] as const;
+const advertisedSearchProviderNames = [...builtinProviders, "all"].join(", ");
 
 export const searchTool = tool({
   description:
@@ -20,10 +20,10 @@ export const searchTool = tool({
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
       .describe("Search query, or a batch of search queries"),
     provider: z
-      .enum(providerNames)
+      .string()
       .optional()
       .describe(
-        'Provider to use. Automatic selection tries other configured providers after payment, rate-limit, timeout, or server failures. Use "all" for parallel search.',
+        `Provider to use. Built in providers: ${advertisedSearchProviderNames}. Automatic selection tries other configured providers after payment, rate limit, timeout, or server failures. Use "all" for parallel search. Registered custom providers are validated at execution time.`,
       ),
     maxResults: z.number().int().min(1).max(20).optional().describe("Max results (default: 10)"),
     highlights: z
@@ -71,6 +71,7 @@ export const searchTool = tool({
     startPublishedDate,
     endPublishedDate,
   }) => {
+    const normalizedProvider = providerName === "auto" ? undefined : providerName;
     const searchOptions = {
       maxResults,
       highlights,
@@ -84,12 +85,12 @@ export const searchTool = tool({
     };
 
     if (Array.isArray(query)) {
-      return searchBatch(query, { provider: providerName, ...searchOptions });
+      return searchBatch(query, { provider: normalizedProvider, ...searchOptions });
     }
     if (!query.trim()) {
       throw new EmptyQueryError();
     }
-    if (providerName === "all") {
+    if (normalizedProvider === "all") {
       const response = await searchAllDetailed(query, searchOptions);
       return {
         ...response,
@@ -97,8 +98,8 @@ export const searchTool = tool({
       };
     }
 
-    if (providerName !== undefined) {
-      return searchProviderDetailed(providerName, query, searchOptions);
+    if (normalizedProvider !== undefined) {
+      return searchProviderDetailed(normalizedProvider, query, searchOptions);
     }
     return searchWithFallback(query, searchOptions);
   },
@@ -110,9 +111,11 @@ export const searchImageTool = tool({
   inputSchema: z.object({
     url: z.url().describe("Public HTTP or HTTPS image URL"),
     provider: z
-      .enum(imageSearchProviderNames)
+      .string()
       .optional()
-      .describe("Reverse image search provider. Defaults to SerpAPI Google Lens."),
+      .describe(
+        `Reverse image search provider. Built in providers: ${imageSearchProviderNames.join(", ")}. Defaults to SerpAPI Google Lens. Registered custom providers are validated at execution time.`,
+      ),
     maxResults: z
       .number()
       .int()
@@ -132,10 +135,10 @@ export const readTool = tool({
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
       .describe("URL to read, or a batch of URLs"),
     provider: z
-      .enum(readProviderNames)
+      .string()
       .optional()
       .describe(
-        "Read provider to use. Automatic selection starts with Jina and falls back after eligible payment, conflict, rate-limit, timeout, or server failures.",
+        `Read provider to use. Built in providers: ${readProviderNames.join(", ")}. Automatic selection starts with Jina and falls back after eligible payment, conflict, rate limit, timeout, or server failures. Registered custom providers are validated at execution time.`,
       ),
     format: z.enum(["markdown", "text", "html"]).optional().describe("Preferred content format."),
     maxTokens: z
@@ -170,8 +173,9 @@ export const readTool = tool({
     timeout,
     noCache,
   }) => {
+    const normalizedProvider = provider === "auto" ? undefined : provider;
     const readOptions = {
-      provider,
+      provider: normalizedProvider,
       format,
       maxTokens,
       targetSelector,

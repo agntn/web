@@ -4,8 +4,11 @@ import {
   listProvidersAsync,
   resolveDefaultProviderAsync,
 } from "../../src/core/resolve.ts";
-import { searchAllDetailed } from "../../src/core/all.ts";
+import { searchAllDetailed, searchWithFallback } from "../../src/core/all.ts";
 import { NoProviderAvailableError } from "../../src/core/errors.ts";
+import { Provider } from "../../src/core/provider.ts";
+import { register } from "../../src/core/registry.ts";
+import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 import "../../src/providers/index.ts";
 
 const envKeys = [
@@ -22,6 +25,7 @@ const envKeys = [
 ] as const;
 
 describe("resolve async", () => {
+  const customProviderCleanups: Array<() => void> = [];
   const savedEnv: Record<string, string | undefined> = {};
 
   beforeEach(() => {
@@ -32,6 +36,7 @@ describe("resolve async", () => {
   });
 
   afterEach(() => {
+    for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
     for (const key of envKeys) {
       if (savedEnv[key] !== undefined) process.env[key] = savedEnv[key];
       else delete process.env[key];
@@ -143,6 +148,32 @@ describe("resolve async", () => {
         throw new Error("ECONNREFUSED");
       });
       await expect(searchAllDetailed("test")).rejects.toThrow(NoProviderAvailableError);
+    });
+
+    it("includes a registered custom search provider in automatic selection", async () => {
+      const providerName = `customsearch${Math.random().toString(36).slice(2)}`;
+      class CustomSearchProvider extends Provider {
+        static readonly providerName = providerName;
+        static readonly defaultBaseURL = "https://custom.example.com";
+        static readonly apiKeyEnvVar = null;
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, CustomSearchProvider);
+        }
+
+        async search(): Promise<SearchResult[]> {
+          return [{ url: "https://example.com", title: "Custom", snippet: "Result" }];
+        }
+      }
+      customProviderCleanups.push(register(CustomSearchProvider));
+      stubFetch(() => {
+        throw new Error("ECONNREFUSED");
+      });
+
+      await expect(searchWithFallback("test")).resolves.toMatchObject({
+        provider: providerName,
+        results: [{ title: "Custom" }],
+      });
     });
   });
 });

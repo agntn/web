@@ -14,13 +14,11 @@ import {
   type WebToolName,
 } from "../../../src/tui.ts";
 import type {
-  ImageSearchProviderName,
   ImageSearchResult,
   ProviderFailure,
   ProviderStatus,
   ReadBatchDetailedItem,
   ReadOptions,
-  ReadProviderName,
   ReadResult,
   RuntimeInfo,
   SearchAllResult,
@@ -30,13 +28,12 @@ import type {
   SearchProviderMetadata,
   SearchRequestOptions,
   SearchResult,
-  WebSearchProviderName,
-} from "@agntn/web";
+} from "../../../src/index.ts";
 
 type SearchSingleDetails = {
   readonly mode: "single";
   readonly query: string;
-  readonly provider: WebSearchProviderName;
+  readonly provider: string;
   readonly options: SearchRequestOptions;
   readonly count: number;
   readonly results: readonly SearchResult[];
@@ -62,7 +59,7 @@ type SearchAllDetails = {
 type SearchBatchDetails = {
   readonly mode: "batch";
   readonly queries: readonly string[];
-  readonly provider?: "all" | WebSearchProviderName;
+  readonly provider?: string;
   readonly options: SearchRequestOptions;
   readonly outcomes: readonly SearchBatchItem[];
 };
@@ -71,7 +68,7 @@ type SearchDetails = SearchSingleDetails | SearchAllDetails | SearchBatchDetails
 
 type ImageSearchDetails = {
   readonly url: string;
-  readonly provider: ImageSearchProviderName;
+  readonly provider: string;
   readonly maxResults?: number;
   readonly results: readonly ImageSearchResult[];
 };
@@ -80,7 +77,7 @@ type ReadDetails =
   | {
       readonly mode: "read";
       readonly url: string;
-      readonly provider: "auto" | ReadProviderName;
+      readonly provider: string;
       readonly effectiveProvider: string;
       readonly attempts: readonly string[];
       readonly failures: readonly ProviderFailure[];
@@ -90,12 +87,12 @@ type ReadDetails =
   | {
       readonly mode: "batch";
       readonly urls: readonly string[];
-      readonly provider: "auto" | ReadProviderName;
+      readonly provider: string;
       readonly options: ReadOptions;
       readonly outcomes: readonly ReadBatchDetailedItem[];
     };
 
-type WebModule = typeof import("@agntn/web");
+type WebModule = typeof import("../../../src/index.ts");
 
 const sourceModuleUrl = new URL("../../../src/index.ts", import.meta.url);
 const distributionModuleUrl = new URL("../../../dist/index.mjs", import.meta.url);
@@ -129,11 +126,11 @@ const PROVIDERS = [
   "tavily",
   "tinyfish",
 ] as const;
-const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) tries configured providers in order after payment, rate-limit, timeout, or server failures. Use "all" to query every configured provider in parallel.`;
+const PROVIDER_HINT = `Provider to use. Built in providers: ${PROVIDERS.join(", ")}. "auto" (or omit) tries configured providers in order after payment, rate limit, timeout, or server failures. Use "all" to query every configured provider in parallel. Registered custom providers are validated at execution time.`;
 const IMAGE_SEARCH_PROVIDER_HINT =
-  "Reverse image search provider. Defaults to SerpAPI Google Lens and is validated against web.imageSearchProviderNames at execution time.";
+  "Reverse image search provider. Defaults to SerpAPI Google Lens. Registered providers are validated against web.searchImageProviders() at execution time.";
 const READ_PROVIDER_HINT =
-  'Read provider to use. "auto" (or omit) starts with Jina and falls back after eligible payment, conflict, rate-limit, timeout, or server failures. Validated against web.readProviderNames at execution time.';
+  'Read provider to use. "auto" (or omit) starts with Jina and falls back after eligible payment, conflict, rate limit, timeout, or server failures. Registered providers are validated against web.readProviders() at execution time.';
 
 const MAX_RESULTS_HARD_CAP = 20;
 const MAX_BATCH_ITEMS_HARD_CAP = 10;
@@ -241,7 +238,6 @@ const readParameters = Type.Object({
 const emptyParameters = Type.Object({});
 
 type EmptyParams = Static<typeof emptyParameters>;
-type ReadProviderInput = ReadProviderName;
 
 function statusRenderers(name: WebToolName) {
   return {
@@ -288,7 +284,7 @@ export default function webExtension(pi: ExtensionAPI) {
     ...statusRenderers("web_search"),
     async execute(_toolCallId, params): Promise<AgentToolResult<SearchDetails>> {
       const web = await loadWeb();
-      const providerName = normalizeSearchProviderInput(params.provider, web.builtinProviders);
+      const providerName = normalizeSearchProviderInput(params.provider, web.searchProviders());
       const searchOptions: SearchRequestOptions = stripUndefined({
         maxResults: params.maxResults,
         highlights: params.highlights,
@@ -448,7 +444,7 @@ export default function webExtension(pi: ExtensionAPI) {
       const web = await loadWeb();
       const provider = normalizeImageSearchProviderInput(
         params.provider,
-        web.imageSearchProviderNames,
+        web.searchImageProviders(),
       );
       const url = params.url.trim();
       if (!url) throw new web.EmptyImageUrlError();
@@ -479,7 +475,7 @@ export default function webExtension(pi: ExtensionAPI) {
     ...statusRenderers("web_read"),
     async execute(_toolCallId, params): Promise<AgentToolResult<ReadDetails>> {
       const web = await loadWeb();
-      const readProvider = normalizeReadProviderInput(params.provider, web.readProviderNames);
+      const readProvider = normalizeReadProviderInput(params.provider, web.readProviders());
       const readProviderLabel = readProvider ?? "auto";
       const format = normalizeReadFormat(params.format);
       const readOptions: ReadOptions = stripUndefinedRead({
@@ -537,7 +533,7 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_providers",
     label: "Web Providers",
     description:
-      "Read-only/idempotent local/env status: show the running web build and list built-in providers with configuration and search filter support.",
+      "Read only local and environment status: show the running web build and list registered providers with configuration and search filter support.",
     promptSnippet: "List configured web providers.",
     promptGuidelines: [
       "Use web_providers before web_search if provider availability or filter support is unclear.",
@@ -595,7 +591,7 @@ type CommandUi = Readonly<
 >;
 
 type CommandSearchResult = {
-  readonly provider: WebSearchProviderName;
+  readonly provider: string;
   readonly results: readonly SearchResult[];
 };
 
@@ -639,28 +635,18 @@ async function searchForCommand(
   }
 }
 
-function isKnownSearchProvider(
-  name: string,
-  providerNames: readonly WebSearchProviderName[],
-): name is WebSearchProviderName {
+function isKnownProvider(name: string, providerNames: readonly string[]): boolean {
   return providerNames.some((provider) => provider === name);
-}
-
-function isKnownReadProvider(
-  name: string,
-  readProviderNames: readonly string[],
-): name is ReadProviderInput {
-  return readProviderNames.some((provider) => provider === name);
 }
 
 function normalizeSearchProviderInput(
   provider: string | undefined,
-  providerNames: readonly WebSearchProviderName[],
-): "all" | WebSearchProviderName | undefined {
+  providerNames: readonly string[],
+): string | undefined {
   const rawProvider = (provider ?? "").trim() || undefined;
   if (rawProvider === undefined || rawProvider === "auto") return undefined;
   if (rawProvider === "all") return "all";
-  if (!isKnownSearchProvider(rawProvider, providerNames)) {
+  if (!isKnownProvider(rawProvider, providerNames)) {
     throw new Error(
       `Unknown provider "${rawProvider}". Available: auto, all, ${providerNames.join(", ")}.`,
     );
@@ -670,8 +656,8 @@ function normalizeSearchProviderInput(
 
 function normalizeImageSearchProviderInput(
   provider: string | undefined,
-  providerNames: readonly ImageSearchProviderName[],
-): ImageSearchProviderName {
+  providerNames: readonly string[],
+): string {
   const rawProvider = provider?.trim() || providerNames[0];
   const matched = providerNames.find((name) => name === rawProvider);
   if (!matched) {
@@ -684,11 +670,11 @@ function normalizeImageSearchProviderInput(
 
 function normalizeReadProviderInput(
   provider: string | undefined,
-  readProviderNames: readonly ReadProviderName[],
-): ReadProviderName | undefined {
+  readProviderNames: readonly string[],
+): string | undefined {
   const rawProvider = provider?.trim() || undefined;
   if (rawProvider === undefined || rawProvider === "auto") return undefined;
-  if (!isKnownReadProvider(rawProvider, readProviderNames)) {
+  if (!isKnownProvider(rawProvider, readProviderNames)) {
     throw new Error(
       `Unknown read provider "${rawProvider}". Available: auto, ${readProviderNames.join(", ")}.`,
     );

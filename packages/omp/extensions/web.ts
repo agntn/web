@@ -2,13 +2,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { AgentToolResult, ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import type {
-  ImageSearchProviderName,
-  ReadOptions,
-  ReadProviderName,
-  SearchRequestOptions,
-  WebSearchProviderName,
-} from "@agntn/web";
+import type { ReadOptions, SearchRequestOptions } from "../../../src/index.ts";
 
 import {
   createViewportText,
@@ -82,7 +76,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     provider: Type.Optional(
       Type.String({
         description:
-          'Provider to use. "auto" (or omit) tries configured providers in order after payment, rate-limit, timeout, or server failures. Use "all" to query every configured provider in parallel.',
+          'Provider to use. "auto" (or omit) tries configured providers in order after payment, rate limit, timeout, or server failures. Use "all" to query every configured provider in parallel. Registered custom providers are validated at execution time.',
       }),
     ),
     maxResults: Type.Optional(
@@ -129,7 +123,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     provider: Type.Optional(
       Type.String({
         description:
-          "Reverse image search provider. Defaults to SerpAPI Google Lens and is validated against web.imageSearchProviderNames at execution time.",
+          "Reverse image search provider. Defaults to SerpAPI Google Lens. Registered providers are validated against web.searchImageProviders() at execution time.",
       }),
     ),
     maxResults: Type.Optional(
@@ -149,7 +143,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     provider: Type.Optional(
       Type.String({
         description:
-          'Read provider to use. "auto" (or omit) starts with Jina and falls back after eligible payment, conflict, rate-limit, timeout, or server failures. Validated against web.readProviderNames at execution time.',
+          'Read provider to use. "auto" (or omit) starts with Jina and falls back after eligible payment, conflict, rate limit, timeout, or server failures. Registered providers are validated against web.readProviders() at execution time.',
       }),
     ),
     format: Type.Optional(
@@ -180,7 +174,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     ...renderers("web_search"),
     async execute(_toolCallId, params) {
       const web = await loadWeb();
-      const provider = normalizeSearchProvider(params.provider, web.builtinProviders);
+      const provider = normalizeSearchProvider(params.provider, web.searchProviders());
       const options: SearchRequestOptions = {
         maxResults: params.maxResults,
         highlights: params.highlights,
@@ -240,7 +234,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     ...renderers("web_search_image"),
     async execute(_toolCallId, params) {
       const web = await loadWeb();
-      const provider = normalizeImageProvider(params.provider, web.imageSearchProviderNames);
+      const provider = normalizeImageProvider(params.provider, web.searchImageProviders());
       const url = params.url.trim();
       if (!url) throw new web.EmptyImageUrlError();
       const results = await web.searchByImage(url, {
@@ -261,7 +255,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     ...renderers("web_read"),
     async execute(_toolCallId, params) {
       const web = await loadWeb();
-      const provider = normalizeReadProvider(params.provider, web.readProviderNames);
+      const provider = normalizeReadProvider(params.provider, web.readProviders());
       const providerLabel = provider ?? "auto";
       const options = {
         provider,
@@ -308,8 +302,8 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
 
 function normalizeSearchProvider(
   value: string | undefined,
-  providers: readonly WebSearchProviderName[],
-): "all" | WebSearchProviderName | undefined {
+  providers: readonly string[],
+): string | undefined {
   if (value === undefined || value === "auto") return undefined;
   if (value === "all") return value;
   const provider = providers.find((candidate) => candidate === value);
@@ -317,10 +311,7 @@ function normalizeSearchProvider(
   return provider;
 }
 
-function normalizeImageProvider(
-  value: string | undefined,
-  providers: readonly ImageSearchProviderName[],
-): ImageSearchProviderName {
+function normalizeImageProvider(value: string | undefined, providers: readonly string[]): string {
   const selected = value ?? providers[0];
   const provider = providers.find((candidate) => candidate === selected);
   if (!provider) throw new TypeError(`Unknown image search provider: ${selected ?? "none"}`);
@@ -335,8 +326,8 @@ function normalizeReadFormat(value: string | undefined): ReadOptions["format"] {
 
 function normalizeReadProvider(
   value: string | undefined,
-  providers: readonly ReadProviderName[],
-): ReadProviderName | undefined {
+  providers: readonly string[],
+): string | undefined {
   if (value === undefined || value === "auto") return undefined;
   const provider = providers.find((candidate) => candidate === value);
   if (!provider) throw new TypeError(`Unknown read provider: ${value}`);

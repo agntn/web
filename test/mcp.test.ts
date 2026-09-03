@@ -36,9 +36,13 @@ import {
   HTTPError,
   NoProviderAvailableError,
 } from "../src/core/errors.ts";
+import { Provider } from "../src/core/provider.ts";
+import { register } from "../src/core/registry.ts";
+import type { ProviderConfig, SearchResult } from "../src/core/types.ts";
 import "../src/providers/index.ts";
 
 const openConnections: Array<{ close(): Promise<void> }> = [];
+const customProviderCleanups: Array<() => void> = [];
 
 async function connectTestClient(): Promise<Client> {
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -57,6 +61,7 @@ beforeEach(() => {
 afterEach(async () => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
   await Promise.all(openConnections.splice(0).map((connection) => connection.close()));
 });
 
@@ -185,6 +190,65 @@ describe("web MCP server", () => {
     expect((response.content as Array<{ type: string; text: string }>)[0]?.text).toBe(
       JSON.stringify(payload),
     );
+  });
+
+  it("accepts registered custom providers for each implemented capability", async () => {
+    const providerName = `mcpprovider${Math.random().toString(36).slice(2)}`;
+    class McpProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://mcp.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, McpProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com", title: "Custom", snippet: "Search result" }];
+      }
+
+      async searchByImage() {
+        return [
+          {
+            pageUrl: "https://example.com/page",
+            imageUrl: "https://example.com/image.jpg",
+            title: "Custom image",
+            provider: providerName,
+          },
+        ];
+      }
+
+      async read(url: string) {
+        return { url, content: "Custom page" };
+      }
+    }
+    customProviderCleanups.push(register(McpProvider));
+    const client = await connectTestClient();
+
+    const searchResult = await client.callTool({
+      name: "web_search",
+      arguments: { query: "custom query", provider: providerName },
+    });
+    const imageResult = await client.callTool({
+      name: "web_search_image",
+      arguments: { url: "https://example.com/input.jpg", provider: providerName },
+    });
+    const readResult = await client.callTool({
+      name: "web_read",
+      arguments: { url: "https://example.com", provider: providerName },
+    });
+
+    expect(searchResult.isError).toBeUndefined();
+    expect(searchResult.structuredContent).toMatchObject({
+      result: { provider: providerName, results: [{ title: "Custom" }] },
+    });
+    expect(imageResult.isError).toBeUndefined();
+    expect(imageResult.structuredContent).toMatchObject({
+      result: [{ provider: providerName, title: "Custom image" }],
+    });
+    expect(readResult.isError).toBeUndefined();
+    expect(readResult.structuredContent).toMatchObject({
+      result: { provider: providerName, result: { content: "Custom page" } },
+    });
   });
 
   it("returns detailed search metadata as JSON text", async () => {

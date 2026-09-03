@@ -5,7 +5,6 @@ import type {
   SearchResponse,
   SearchResult,
 } from "./types.ts";
-import type { WebSearchProviderName } from "./providers.ts";
 import {
   hasSearchFilterWarning,
   searchFilterReport,
@@ -74,8 +73,8 @@ export interface SearchProviderResult {
 
 /** Result from automatic search with ordered provider-attempt diagnostics. */
 export interface SearchWithFallbackResult extends SearchProviderResult {
-  readonly provider: WebSearchProviderName;
-  readonly attempts: readonly WebSearchProviderName[];
+  readonly provider: string;
+  readonly attempts: readonly string[];
   readonly failures: readonly ProviderFailure[];
 }
 
@@ -170,11 +169,11 @@ export async function prepareSearchWithFallback(
 }
 
 async function searchProviderNamesWithFallback(
-  providerNames: readonly WebSearchProviderName[],
+  providerNames: readonly string[],
   query: string,
   options?: Readonly<SearchRequestOptions>,
 ): Promise<SearchWithFallbackResult> {
-  const attempts: WebSearchProviderName[] = [];
+  const attempts: string[] = [];
   const failures: ProviderFailure[] = [];
   let lastError: unknown;
 
@@ -220,7 +219,7 @@ async function resolveProviderNames(
   return resolveAutomaticProviderNames();
 }
 
-async function resolveAutomaticProviderNames(): Promise<readonly WebSearchProviderName[]> {
+async function resolveAutomaticProviderNames(): Promise<readonly string[]> {
   const providerNames = await detectAvailableProvidersAsync();
   if (providerNames.length > 0) return providerNames;
 

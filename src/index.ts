@@ -29,6 +29,7 @@ export {
   isAvailabilityProvider,
 } from "./core/provider.ts";
 export type {
+  ProviderCapability,
   ProviderConstructor,
   SearchProvider,
   DetailedSearchProvider,
@@ -67,7 +68,11 @@ export {
   createImageSearchProvider,
   createReadProvider,
   providers,
+  searchProviders,
+  searchImageProviders,
+  readProviders,
   has,
+  getProviderApiKeyEnvVar,
   getSearchFilterCapabilities,
 } from "./core/registry.ts";
 
@@ -112,5 +117,6 @@ export {
   detectAvailableProvidersAsync,
   listProviders,
   listProvidersAsync,
+  isProviderConfigured,
 } from "./core/resolve.ts";
 export type { ProviderStatus } from "./core/resolve.ts";

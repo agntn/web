@@ -26,7 +26,15 @@ vi.mock("../../src/core/client.ts", () => ({
 
 import { providersTool, readTool, searchImageTool, searchTool } from "../../src/ai.ts";
 import { EmptyQueryError, EmptyUrlError, HTTPError } from "../../src/core/errors.ts";
+import { Provider } from "../../src/core/provider.ts";
+import { register } from "../../src/core/registry.ts";
+import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 import { runtimeInfo } from "../../src/version.ts";
+
+const customProviderCleanups: Array<() => void> = [];
+afterEach(() => {
+  for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
+});
 
 const exaResponse = {
   requestId: "test-req",
@@ -153,6 +161,70 @@ describe("searchTool", () => {
       undeclaredFilters: [],
       results: [expect.objectContaining({ url: "https://example.com", title: "Test Result" })],
     });
+  });
+
+  it("accepts registered custom providers for each implemented capability", async () => {
+    const providerName = `aiprovider${Math.random().toString(36).slice(2)}`;
+    class AiProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://ai.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, AiProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com", title: "Custom", snippet: "Search result" }];
+      }
+
+      async searchByImage() {
+        return [
+          {
+            pageUrl: "https://example.com/page",
+            imageUrl: "https://example.com/image.jpg",
+            title: "Custom image",
+            provider: providerName,
+          },
+        ];
+      }
+
+      async read(url: string) {
+        return { url, content: "Custom page" };
+      }
+    }
+    customProviderCleanups.push(register(AiProvider));
+
+    for (const [schema, input] of [
+      [searchTool.inputSchema, { query: "custom query", provider: providerName }],
+      [
+        searchImageTool.inputSchema,
+        { url: "https://example.com/input.jpg", provider: providerName },
+      ],
+      [readTool.inputSchema, { url: "https://example.com", provider: providerName }],
+    ] as const) {
+      const validate = asSchema(schema).validate;
+      if (!validate) throw new TypeError("Tool schema has no validator");
+      await expect(validate(input)).resolves.toMatchObject({ success: true });
+    }
+
+    await expect(
+      searchTool.execute!(
+        { query: "custom query", provider: providerName },
+        { toolCallId: "custom-search", messages: [] },
+      ),
+    ).resolves.toMatchObject({ provider: providerName, results: [{ title: "Custom" }] });
+    await expect(
+      searchImageTool.execute!(
+        { url: "https://example.com/input.jpg", provider: providerName },
+        { toolCallId: "custom-image", messages: [] },
+      ),
+    ).resolves.toMatchObject([{ provider: providerName, title: "Custom image" }]);
+    await expect(
+      readTool.execute!(
+        { url: "https://example.com", provider: providerName },
+        { toolCallId: "custom-read", messages: [] },
+      ),
+    ).resolves.toMatchObject({ provider: providerName, result: { content: "Custom page" } });
   });
 
   it("passes the highlights preference to providers", async () => {
@@ -741,6 +813,26 @@ describe("readTool", () => {
     const [url, headers] = mockGetJSON.mock.calls[0];
     expect(url).toBe("https://r.jina.ai/https%3A%2F%2Fexample.com");
     expect(headers).toEqual({ Accept: "application/json", "X-Return-Format": "markdown" });
+  });
+
+  it("treats explicit auto as automatic selection for scalar and batch reads", async () => {
+    mockGetJSON.mockResolvedValue({
+      code: 200,
+      status: 20000,
+      data: { url: "https://example.com/", content: "Read content" },
+    });
+
+    const scalar = await readTool.execute!(
+      { url: "https://example.com", provider: "auto" },
+      { toolCallId: "read-auto-scalar", messages: [] },
+    );
+    const batch = await readTool.execute!(
+      { url: ["https://example.com"], provider: "auto" },
+      { toolCallId: "read-auto-batch", messages: [] },
+    );
+
+    expect(scalar).toMatchObject({ requestedProvider: "auto", provider: "jina" });
+    expect(batch).toMatchObject([{ requestedProvider: "auto", provider: "jina" }]);
   });
 
   it("keeps requested and effective readers after automatic fallback", async () => {

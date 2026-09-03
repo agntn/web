@@ -7,8 +7,8 @@ import {
   ProviderFallbackError,
   type ProviderFailure,
 } from "./fallback.ts";
-import { createReadProvider } from "./registry.ts";
-import { detectAvailableProviders } from "./resolve.ts";
+import { createReadProvider, has, readProviders } from "./registry.ts";
+import { isProviderConfigured } from "./resolve.ts";
 
 export const readProviderNames = ["jina", "context", "firecrawl", "tinyfish"] as const;
 export type ReadProviderName = (typeof readProviderNames)[number];
@@ -73,7 +73,9 @@ export async function readUrlDetailed(
 }
 
 function resolveReadProviderName(providerName: string): string {
-  if (isBuiltinProvider(providerName) && !isReadProviderName(providerName)) {
+  const registeredOrBuiltin =
+    has(providerName) || (builtinProviders as readonly string[]).includes(providerName);
+  if (registeredOrBuiltin && !readProviders().includes(providerName)) {
     throw new ReadNotSupportedError(providerName);
   }
   return providerName;
@@ -120,17 +122,17 @@ function readFromProvider(
   return createReadProvider(providerName).read(url, options);
 }
 
-function configuredReadProviders(initialProvider: string): ReadProviderName[] {
-  const configuredProviders = detectAvailableProviders();
-  return readProviderNames.filter(
-    (name) => name !== initialProvider && configuredProviders.includes(name),
+function configuredReadProviders(initialProvider: string): string[] {
+  const registeredReaders = readProviders();
+  const builtins = readProviderNames.filter(
+    (name) =>
+      name !== initialProvider && registeredReaders.includes(name) && isProviderConfigured(name),
   );
-}
-
-function isBuiltinProvider(name: string): boolean {
-  return (builtinProviders as readonly string[]).includes(name);
-}
-
-function isReadProviderName(name: string): name is ReadProviderName {
-  return (readProviderNames as readonly string[]).includes(name);
+  const custom = registeredReaders.filter(
+    (name) =>
+      name !== initialProvider &&
+      !(readProviderNames as readonly string[]).includes(name) &&
+      isProviderConfigured(name),
+  );
+  return [...builtins, ...custom];
 }

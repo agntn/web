@@ -13,6 +13,8 @@ import { ProviderFallbackError } from "../../src/core/fallback.ts";
 import { Provider } from "../../src/core/provider.ts";
 import type { ProviderConfig, ReadOptions, ReadResult } from "../../src/core/types.ts";
 
+const readerCleanups: Array<() => void> = [];
+
 function registerReader(
   name: string,
   read: (url: string, options?: Readonly<ReadOptions>) => Promise<ReadResult>,
@@ -30,7 +32,7 @@ function registerReader(
     }
   }
 
-  register(ReaderProvider);
+  readerCleanups.push(register(ReaderProvider));
 }
 
 const paymentRequired = async (): Promise<ReadResult> => {
@@ -55,6 +57,7 @@ describe("readUrl", () => {
   });
 
   afterEach(() => {
+    for (const unregister of readerCleanups.splice(0).reverse()) unregister();
     for (const key of fallbackEnvKeys) {
       const value = savedEnv[key];
       if (value === undefined) delete process.env[key];
@@ -155,20 +158,20 @@ describe("readUrl", () => {
     ]);
   });
 
-  it("keeps trying configured readers until one succeeds", async () => {
+  it("preserves built in fallback order independently of registration order", async () => {
     const attempts: string[] = [];
     registerReader("jina", paymentRequired);
-    registerReader("context", async () => {
-      attempts.push("context");
-      throw new HTTPError(503, "https://context.example.com", "Context unavailable");
+    registerReader("tinyfish", async () => {
+      attempts.push("tinyfish");
+      return { url: "https://example.com", content: "ok" };
     });
     registerReader("firecrawl", async () => {
       attempts.push("firecrawl");
       throw new HTTPError(504, "https://firecrawl.example.com", "Firecrawl unavailable");
     });
-    registerReader("tinyfish", async () => {
-      attempts.push("tinyfish");
-      return { url: "https://example.com", content: "ok" };
+    registerReader("context", async () => {
+      attempts.push("context");
+      throw new HTTPError(503, "https://context.example.com", "Context unavailable");
     });
     process.env.CONTEXT_DEV_API_KEY = "test-key";
     process.env.FIRECRAWL_API_KEY = "test-key";
@@ -318,7 +321,7 @@ describe("readUrl", () => {
         return read(url, options);
       }
     }
-    register(ReaderProvider);
+    readerCleanups.push(register(ReaderProvider));
 
     await readUrl(" https://example.com ", {
       provider: providerName,
@@ -351,10 +354,35 @@ describe("readUrl", () => {
         super(config, SearchOnlyProvider);
       }
     }
-    register(SearchOnlyProvider);
+    readerCleanups.push(register(SearchOnlyProvider));
 
     await expect(readUrl("https://example.com", { provider: providerName })).rejects.toThrow(
       ReadNotSupportedError,
     );
+  });
+
+  it("includes a keyless custom reader in automatic fallback", async () => {
+    const providerName = `automatic-reader-${Math.random().toString(36).slice(2)}`;
+    class AutomaticReader extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://automatic-reader.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, AutomaticReader);
+      }
+
+      async read(url: string): Promise<ReadResult> {
+        return { url, content: "Custom fallback" };
+      }
+    }
+    registerReader("jina", paymentRequired);
+    readerCleanups.push(register(AutomaticReader));
+
+    await expect(readUrlDetailed("https://example.com")).resolves.toMatchObject({
+      provider: providerName,
+      attempts: ["jina", providerName],
+      result: { content: "Custom fallback" },
+    });
   });
 });

@@ -1,53 +1,37 @@
+import { builtinProviders, providerDetectionOrder } from "./providers.ts";
 import {
-  builtinProviders,
-  providerApiKeyEnvVar,
-  providerDetectionOrder,
-  type WebSearchProviderName,
-} from "./providers.ts";
-import { create, getSearchFilterCapabilities, has } from "./registry.ts";
+  create,
+  getProviderApiKeyEnvVar,
+  getSearchFilterCapabilities,
+  providers,
+  searchProviders,
+} from "./registry.ts";
 import { NoProviderAvailableError, NoProviderConfiguredError } from "./errors.ts";
 import { isAvailabilityProvider } from "./provider.ts";
 import type { SearchFilterName } from "./types.ts";
 
-function configuredProviderEntries(): Array<readonly [string, WebSearchProviderName]> {
-  return providerDetectionOrder.flatMap((name) => {
-    const envVar = providerApiKeyEnvVar(name);
-    return envVar === null ? [] : [[envVar, name] as const];
-  });
+/**
+ * Return whether a registered provider has no key requirement or a configured API key.
+ * @param {string} name - Provider name to inspect.
+ * @returns {boolean} Whether automatic selection may use the provider.
+ */
+export function isProviderConfigured(name: string): boolean {
+  const envVar = getProviderApiKeyEnvVar(name);
+  return envVar === null || Boolean(process.env[envVar]);
 }
 
-export function detectAvailableProviders(): WebSearchProviderName[] {
-  const available: WebSearchProviderName[] = [];
-
-  for (const [envVar, name] of configuredProviderEntries()) {
-    if (process.env[envVar]) {
-      available.push(name);
-    }
-  }
-
-  if (has("searxng")) {
-    available.push("searxng");
-  }
-
-  return available;
+export function detectAvailableProviders(): string[] {
+  return orderedSearchProviders().filter(isProviderConfigured);
 }
 
-export function resolveDefaultProvider(): WebSearchProviderName {
-  for (const [envVar, name] of configuredProviderEntries()) {
-    if (process.env[envVar]) {
-      return name;
-    }
-  }
-
-  if (has("searxng")) {
-    return "searxng";
-  }
-
+export function resolveDefaultProvider(): string {
+  const provider = detectAvailableProviders()[0];
+  if (provider !== undefined) return provider;
   throw new NoProviderConfiguredError();
 }
 
 export interface ProviderStatus {
-  name: WebSearchProviderName;
+  name: string;
   configured: boolean;
   envVar: string | null;
   /**
@@ -62,8 +46,9 @@ export interface ProviderStatus {
 }
 
 export function listProviders(): ProviderStatus[] {
-  const available = detectAvailableProviders();
-  return builtinProviders.map((name) => providerStatus(name, available.includes(name)));
+  return orderedRegisteredProviders().map((name) =>
+    providerStatus(name, isProviderConfigured(name)),
+  );
 }
 
 /**
@@ -73,9 +58,9 @@ export function listProviders(): ProviderStatus[] {
  * unreachable self-hosted endpoint should be skipped instead of producing a
  * connection-refused error. Sync {@link detectAvailableProviders} stays the
  * declarative source of truth for env-var inspection.
- * @returns {Promise<WebSearchProviderName[]>} Configured and reachable providers.
+ * @returns {Promise<string[]>} Configured and reachable provider names.
  */
-export async function detectAvailableProvidersAsync(): Promise<WebSearchProviderName[]> {
+export async function detectAvailableProvidersAsync(): Promise<string[]> {
   const candidates = detectAvailableProviders();
   const probes = await Promise.all(
     candidates.map(async (name) => {
@@ -83,7 +68,7 @@ export async function detectAvailableProvidersAsync(): Promise<WebSearchProvider
       return reachable === false ? null : name;
     }),
   );
-  return probes.filter((n): n is WebSearchProviderName => n !== null);
+  return probes.filter((name): name is string => name !== null);
 }
 
 /**
@@ -94,10 +79,9 @@ export async function detectAvailableProvidersAsync(): Promise<WebSearchProvider
  * @returns {Promise<ProviderStatus[]>} Provider status rows.
  */
 export async function listProvidersAsync(): Promise<ProviderStatus[]> {
-  const available = detectAvailableProviders();
   return Promise.all(
-    builtinProviders.map(async (name) => {
-      const configured = available.includes(name);
+    orderedRegisteredProviders().map(async (name) => {
+      const configured = isProviderConfigured(name);
       const base = providerStatus(name, configured);
       if (!configured) return base;
       const reachable = await probeConfiguredProvider(name);
@@ -111,9 +95,9 @@ export async function listProvidersAsync(): Promise<ProviderStatus[]> {
  * that is configured AND (if it has an `isAvailable()` probe) reachable. Use
  * in flows that should not crash when the env-preferred default is down
  * (e.g. SearXNG on `localhost:8080` without a running instance).
- * @returns {Promise<WebSearchProviderName>} First reachable configured provider.
+ * @returns {Promise<string>} First reachable configured provider.
  */
-export async function resolveDefaultProviderAsync(): Promise<WebSearchProviderName> {
+export async function resolveDefaultProviderAsync(): Promise<string> {
   const candidates = detectAvailableProviders();
   for (const name of candidates) {
     const reachable = await probeConfiguredProvider(name);
@@ -128,12 +112,12 @@ export async function resolveDefaultProviderAsync(): Promise<WebSearchProviderNa
   throw new NoProviderAvailableError(candidates);
 }
 
-function providerStatus(name: WebSearchProviderName, configured: boolean): ProviderStatus {
+function providerStatus(name: string, configured: boolean): ProviderStatus {
   const capabilities = getSearchFilterCapabilities(name);
   return {
     name,
     configured,
-    envVar: providerApiKeyEnvVar(name),
+    envVar: getProviderApiKeyEnvVar(name),
     ...(capabilities === undefined ? {} : { searchFilters: capabilities.filters }),
     ...(capabilities?.categories === undefined
       ? {}
@@ -141,7 +125,7 @@ function providerStatus(name: WebSearchProviderName, configured: boolean): Provi
   };
 }
 
-async function probeConfiguredProvider(name: WebSearchProviderName): Promise<boolean | undefined> {
+async function probeConfiguredProvider(name: string): Promise<boolean | undefined> {
   try {
     const provider = create(name);
     if (!isAvailabilityProvider(provider)) return undefined;
@@ -149,4 +133,26 @@ async function probeConfiguredProvider(name: WebSearchProviderName): Promise<boo
   } catch {
     return false;
   }
+}
+
+function orderedRegisteredProviders(): string[] {
+  const registered = providers();
+  const builtins = builtinProviders.filter((name) => registered.includes(name));
+  const custom = registered.filter(
+    (name) => !(builtinProviders as readonly string[]).includes(name),
+  );
+  return [...builtins, ...custom];
+}
+
+function orderedSearchProviders(): string[] {
+  const registered = searchProviders();
+  const known = providerDetectionOrder.filter((name) => registered.includes(name));
+  const knownNames = new Set<string>(known);
+  const custom = registered.filter(
+    (name) => !(builtinProviders as readonly string[]).includes(name),
+  );
+  const remainingBuiltins = builtinProviders.filter(
+    (name) => registered.includes(name) && !knownNames.has(name),
+  );
+  return [...known, ...custom, ...remainingBuiltins];
 }
