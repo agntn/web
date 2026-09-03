@@ -4,7 +4,7 @@ import type {
   SearchRequestOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider } from "../core/provider.ts";
+import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -32,6 +32,12 @@ const SEARXNG_PROBE_TIMEOUT_MS = 2000;
 class SearXNGProvider extends Provider {
   static readonly providerName = "searxng";
   static readonly defaultBaseURL = "http://localhost:8080";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultFields: ["score", "publishedDate", "image", "metadata"],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: ["category"],
   } as const satisfies SearchFilterCapabilities;

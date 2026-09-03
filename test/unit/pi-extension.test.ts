@@ -9,6 +9,7 @@ import {
   Provider,
   register,
   type ProviderConfig,
+  type ProviderStatus,
   type SearchRequestOptions,
   type SearchResult,
 } from "../../src/index.ts";
@@ -663,31 +664,35 @@ describe("Pi extension", () => {
         ["test-call", {}, undefined, undefined, undefined],
       );
 
-      await expect(execution).resolves.toHaveProperty(
-        "details.runtime.buildId",
-        expect.stringMatching(/^[a-f0-9]{12}$/),
-      );
-      await expect(execution).resolves.toHaveProperty(
-        "details.runtime.processStartedAt",
+      const result = (await execution) as {
+        readonly content: readonly { readonly text: string }[];
+        readonly details: {
+          readonly runtime: { readonly buildId: string; readonly processStartedAt: string };
+          readonly providers: readonly ProviderStatus[];
+        };
+      };
+      expect(result.details.runtime.buildId).toMatch(/^[a-f0-9]{12}$/);
+      expect(result.details.runtime.processStartedAt).toBe(
         new Date(performance.timeOrigin).toISOString(),
       );
-      await expect(execution).resolves.toHaveProperty(
-        "content.0.text",
-        expect.stringMatching(/^web \S+ build [a-f0-9]{12}, started /),
+      expect(result.content[0]?.text).toMatch(/^web \S+ build [a-f0-9]{12}, started /);
+      expect(result.content[0]?.text).toContain(
+        "jina (JINA_API_KEY) operations=search,read filters=includeDomains,category",
       );
-      await expect(execution).resolves.toHaveProperty(
-        "content.0.text",
-        expect.stringContaining("jina (JINA_API_KEY) filters=includeDomains,category"),
-      );
-      await expect(execution).resolves.toHaveProperty(
-        "details.providers",
-        expect.arrayContaining([
-          expect.objectContaining({
-            name: "jina",
-            searchFilters: ["includeDomains", "category"],
-            searchCategories: ["web", "images", "news"],
-          }),
-        ]),
+
+      const jina = result.details.providers.find((provider) => provider.name === "jina");
+      expect(jina).toMatchObject({
+        searchFilters: ["includeDomains", "category"],
+        searchCategories: ["web", "images", "news"],
+      });
+      expect(jina?.capabilities.search).toMatchObject({
+        supported: true,
+        resultLimit: { default: 10, maximum: 20 },
+      });
+      expect(jina?.capabilities.searchImage).toEqual({ supported: false });
+      expect(jina?.capabilities.read.supported).toBe(true);
+      expect(jina?.capabilities.read.options).toEqual(
+        expect.arrayContaining(["format", "maxTokens", "timeout"]),
       );
     } finally {
       vi.unstubAllGlobals();

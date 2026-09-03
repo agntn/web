@@ -503,6 +503,16 @@ describe("web MCP server", () => {
       envVar: null,
       reachable: false,
       searchFilters: ["category"],
+      capabilities: {
+        search: {
+          supported: true,
+          filters: ["category"],
+          contentOptions: [],
+          resultFields: ["score", "publishedDate", "image", "metadata"],
+        },
+        searchImage: { supported: false },
+        read: { supported: false },
+      },
     });
     expect(response.structuredContent).toEqual({ result: payload });
   });

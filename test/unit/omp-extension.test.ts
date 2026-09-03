@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import webOmpExtension from "../../packages/omp/extensions/web.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { Provider, register } from "../../src/index.ts";
+import type { ProviderStatus } from "../../src/index.ts";
 import type { ProviderConfig, SearchRequestOptions, SearchResult } from "../../src/core/types.ts";
 
 type OmpTool = {
@@ -332,13 +333,14 @@ describe("OMP extension", () => {
     const result = await providers.execute("call-1", {}, undefined, undefined, {} as never);
     const details = result.details as {
       runtime: { buildId: string };
-      providers: Array<{ name: string }>;
+      providers: ProviderStatus[];
     };
 
     expect(details.runtime.buildId).toMatch(/^[a-f0-9]{12}$/u);
-    expect(details.providers).toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "jina" })]),
-    );
+    const jina = details.providers.find((provider) => provider.name === "jina");
+    expect(jina?.capabilities.search.supported).toBe(true);
+    expect(jina?.capabilities.searchImage).toEqual({ supported: false });
+    expect(jina?.capabilities.read.supported).toBe(true);
     expect(result.content[0]?.type).toBe("text");
     if (!providers.renderResult) throw new Error("Missing providers renderer");
     const rendered = renderedText(

@@ -5,6 +5,7 @@ import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-ag
 import { Type, type Static } from "typebox";
 import {
   createViewportText,
+  formatProviderCapabilities,
   type RenderedToolResult,
   type RenderOptions,
   renderWebToolCall,
@@ -280,14 +281,14 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_search",
     label: "Web Search",
     description:
-      "Read-only/open-world network search: query one configured provider (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Responses report filters the selected provider ignored. Each result includes {url, title, snippet}; optional fields vary by provider: Exa adds highlights by default and can add summaries or full text when requested, Context.dev adds relevance metadata, Firecrawl returns passages relevant to the query in snippet and markdown content from scraped pages, Jina adds content/text + published date/image/metadata, Tavily can add a generated query answer in response metadata or raw_content when requested, TinyFish adds publisher and research metadata, Brave adds extra_snippets, SerpAPI adds thumbnail + position metadata, SerpBase adds Google SERP rank/request metadata, SearXNG adds engine metadata.",
+      "Read-only/open-world network search: query one configured provider (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Responses report filters the selected provider ignored. Each result includes {url, title, snippet}; optional fields vary by provider. Use web_providers for the current machine-readable field, filter, and limit matrix.",
     promptSnippet:
       "Search the web with web_search. Pass a query array for independent batch results, or use provider=all to query every configured provider in parallel.",
     promptGuidelines: [
       "Use web_search when the user explicitly asks for fresh web information, news, references, or links.",
       "Prefer a single provider when the user names one; use provider=all when freshness or coverage matters and at least two providers are configured.",
-      "For highlights use Exa or Firecrawl. `summary` requests result summaries from Exa or a query answer in Tavily response metadata; `fullText` requests page text from either.",
-      "For Jina Search Foundation results use Jina; for TinyFish news or research metadata use TinyFish; for classic SERP metadata Brave/SerpAPI/SerpBase/SearXNG are fine.",
+      "Use web_providers when selecting a provider by rich result fields, filters, or result limits.",
+      "Request summaries or full text deliberately because generated and extracted content can increase cost and context size.",
       "Pass maxResults conservatively (5-10) unless the user asks for more.",
       "Forward domain, source, category, and date filters when the user gives concrete values.",
     ],
@@ -546,10 +547,10 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_providers",
     label: "Web Providers",
     description:
-      "Read only local and environment status: show the running web build and list registered providers with configuration and search filter support.",
+      "Read only local and environment status: show the running web build and list registered providers with configuration, reachability, operations, read options, result limits, and rich search fields.",
     promptSnippet: "List configured web providers.",
     promptGuidelines: [
-      "Use web_providers before web_search if provider availability or filter support is unclear.",
+      "Use web_providers before web_search if provider availability, limits, fields, or option support is unclear.",
     ],
     parameters: emptyParameters,
     ...statusRenderers("web_providers"),
@@ -800,11 +801,7 @@ function formatProviderStatus(s: Readonly<ProviderStatus>): string {
   const symbol = providerStatusSymbol(s);
   const envLabel = s.envVar ? ` (${s.envVar})` : "";
   const reachabilityNote = s.configured && s.reachable === false ? " - unreachable" : "";
-  const filters = s.searchFilters?.join(",") || "none";
-  const categories = s.searchCategories?.length
-    ? ` categories=${s.searchCategories.join(",")}`
-    : "";
-  return `${symbol} ${s.name}${envLabel}${reachabilityNote} filters=${filters}${categories}`;
+  return `${symbol} ${s.name}${envLabel}${reachabilityNote} ${formatProviderCapabilities(s)}`;
 }
 
 function providerStatusSymbol(status: Readonly<ProviderStatus>): string {

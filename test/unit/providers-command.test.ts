@@ -10,15 +10,8 @@ vi.mock("consola", () => ({
 
 import providersCommand from "../../src/commands/providers.ts";
 import { builtinProviders, Provider, register } from "../../src/index.ts";
+import type { ProviderStatus } from "../../src/index.ts";
 import type { ProviderConfig } from "../../src/core/types.ts";
-
-type ProviderStatus = {
-  readonly name: string;
-  readonly envVar: string | null;
-  readonly configured: boolean;
-  readonly searchFilters?: readonly string[];
-  readonly searchCategories?: readonly string[];
-};
 
 const envKeys = [
   "EXA_API_KEY",
@@ -73,6 +66,9 @@ describe("providers command", () => {
       for (const name of builtinProviders) {
         expect(output).toContain(name);
       }
+      expect(output).toContain(
+        "operations=search,searchImage filters=none searchLimit=10 imageLimit=10",
+      );
     });
 
     it("shows configured provider with checkmark when env var is set", async () => {
@@ -83,8 +79,14 @@ describe("providers command", () => {
       const output = mockLog.mock.calls.map((c) => String(c[0])).join("\n");
       expect(output).toContain("\u2713");
       expect(output).toContain("exa");
+      expect(output).toContain("operations=search");
       expect(output).toContain(
         "filters=includeDomains,excludeDomains,category,startPublishedDate,endPublishedDate",
+      );
+      expect(output).toContain("contentOptions=highlights,summary,fullText");
+      expect(output).toContain("searchLimit=10..100");
+      expect(output).toContain(
+        "resultFields=score,publishedDate,author,image,favicon,text,highlights,summary",
       );
     });
 
@@ -126,11 +128,39 @@ describe("providers command", () => {
       const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
       const brave = parsed.find((provider) => provider.name === "brave");
 
-      expect(brave).toEqual({
+      expect(brave).toMatchObject({
         name: "brave",
         envVar: "BRAVE_API_KEY",
         configured: true,
         searchFilters: [],
+      });
+    });
+
+    it("includes machine-readable operation details", async () => {
+      await providersCommand.run!({ args: { json: true } } as never);
+
+      const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      const jina = parsed.find((provider) => provider.name === "jina");
+
+      expect(jina?.capabilities).toMatchObject({
+        search: {
+          supported: true,
+          resultLimit: { default: 10, maximum: 20 },
+          resultFields: ["publishedDate", "image", "text", "metadata"],
+        },
+        searchImage: { supported: false },
+        read: {
+          supported: true,
+          options: [
+            "format",
+            "maxTokens",
+            "targetSelector",
+            "removeSelector",
+            "timeout",
+            "noCache",
+          ],
+          formats: ["markdown", "text", "html"],
+        },
       });
     });
 
@@ -140,7 +170,7 @@ describe("providers command", () => {
       const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
       const exa = parsed.find((provider) => provider.name === "exa");
 
-      expect(exa).toEqual({
+      expect(exa).toMatchObject({
         name: "exa",
         envVar: "EXA_API_KEY",
         configured: false,
@@ -160,7 +190,7 @@ describe("providers command", () => {
       const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
       const searxng = parsed.find((provider) => provider.name === "searxng");
 
-      expect(searxng).toEqual({
+      expect(searxng).toMatchObject({
         name: "searxng",
         envVar: null,
         configured: true,
@@ -203,6 +233,11 @@ describe("providers command", () => {
         name: providerName,
         envVar: null,
         configured: true,
+        capabilities: {
+          search: { supported: false },
+          searchImage: { supported: false },
+          read: { supported: false },
+        },
       });
     });
   });

@@ -6,6 +6,7 @@ import {
   createImageSearchProvider,
   createReadProvider,
   createSearchProvider,
+  getProviderCapabilities,
   getSearchFilterCapabilities,
   readBatch,
   readBatchDetailed,
@@ -64,6 +65,7 @@ describe("@agntn/web", () => {
     expect(searchProviderDetailed).toBeTypeOf("function");
     for (const provider of builtinProviders) {
       expect(getSearchFilterCapabilities(provider)).toBeDefined();
+      expect(getProviderCapabilities(provider)).toBeDefined();
     }
   });
 

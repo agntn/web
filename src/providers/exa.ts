@@ -4,7 +4,7 @@ import type {
   SearchRequestOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider } from "../core/provider.ts";
+import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { AuthError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -43,6 +43,22 @@ interface ExaSearchResponse {
 class ExaProvider extends Provider {
   static readonly providerName = "exa";
   static readonly defaultBaseURL = "https://api.exa.ai";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: ["highlights", "summary", "fullText"],
+      resultLimit: { default: 10, maximum: 100 },
+      resultFields: [
+        "score",
+        "publishedDate",
+        "author",
+        "image",
+        "favicon",
+        "text",
+        "highlights",
+        "summary",
+      ],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: [
       "includeDomains",

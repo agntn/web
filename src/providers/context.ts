@@ -7,7 +7,7 @@ import type {
   SearchResult,
 } from "../core/types.ts";
 import { Client } from "../core/client.ts";
-import { Provider } from "../core/provider.ts";
+import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { AuthError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -54,6 +54,17 @@ const CONTEXT_READ_CLIENT_TIMEOUT_MS = 310_000;
 class ContextProvider extends Provider {
   static readonly providerName = "context";
   static readonly defaultBaseURL = "https://api.context.dev/v1";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultLimit: { default: 10, maximum: 100 },
+      resultFields: ["text", "metadata"],
+    },
+    read: {
+      options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+      formats: ["markdown", "html"],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: ["includeDomains", "excludeDomains"],
   } as const satisfies SearchFilterCapabilities;

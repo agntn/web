@@ -3,6 +3,7 @@ import {
   create,
   createSearchProvider,
   getProviderApiKeyEnvVar,
+  getProviderCapabilities,
   has,
   searchImageProviders,
   providers,
@@ -299,6 +300,27 @@ describe("registry", () => {
       expect(searchImageProviders()).not.toContain(testProviderName);
       expect(getProviderApiKeyEnvVar(testProviderName4)).toBeNull();
       expect(getProviderApiKeyEnvVar("custom-provider")).toBe("CUSTOM_PROVIDER_API_KEY");
+    });
+
+    it("builds capability status from registered methods and declarations", () => {
+      register(MockProvider);
+      register(ReadOnlyProvider);
+      register(ImageOnlyProvider);
+      register(ClassFieldProvider);
+
+      expect(getProviderCapabilities(testProviderName)).toEqual({
+        search: { supported: true },
+        searchImage: { supported: false },
+        read: { supported: false },
+      });
+      expect(getProviderCapabilities(testProviderName3)).toEqual({
+        search: { supported: false },
+        searchImage: { supported: false },
+        read: { supported: true },
+      });
+      expect(getProviderCapabilities(testProviderName4)?.searchImage.supported).toBe(true);
+      expect(getProviderCapabilities(testProviderName5)?.search.supported).toBe(true);
+      expect(getProviderCapabilities("not-registered")).toBeUndefined();
     });
 
     it("returns a search-capable provider when required", async () => {

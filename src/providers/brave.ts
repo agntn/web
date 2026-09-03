@@ -4,7 +4,7 @@ import type {
   SearchRequestOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider } from "../core/provider.ts";
+import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { AuthError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -30,6 +30,13 @@ interface BraveSearchResponse {
 class BraveProvider extends Provider {
   static readonly providerName = "brave";
   static readonly defaultBaseURL = "https://api.search.brave.com";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultLimit: { default: 10, maximum: 20 },
+      resultFields: ["favicon", "text"],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: [],
   } as const satisfies SearchFilterCapabilities;

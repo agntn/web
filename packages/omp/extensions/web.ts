@@ -301,7 +301,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     name: "web_providers",
     label: "Web Providers",
     description:
-      "Show the running web build and provider configuration, reachability, and search filters.",
+      "Show the running web build and each provider's configuration, reachability, operations, read options, result limits, and rich search fields.",
     parameters: Type.Object({}),
     approval: "read",
     ...renderers("web_providers"),

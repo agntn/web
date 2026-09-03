@@ -2,12 +2,13 @@ import { builtinProviders, providerDetectionOrder } from "./providers.ts";
 import {
   create,
   getProviderApiKeyEnvVar,
+  getProviderCapabilities,
   getSearchFilterCapabilities,
   providers,
   searchProviders,
 } from "./registry.ts";
 import { NoProviderAvailableError, NoProviderConfiguredError } from "./errors.ts";
-import { isAvailabilityProvider } from "./provider.ts";
+import { isAvailabilityProvider, type ProviderCapabilities } from "./provider.ts";
 import type { SearchFilterName } from "./types.ts";
 
 /**
@@ -43,6 +44,7 @@ export interface ProviderStatus {
   reachable?: boolean;
   readonly searchFilters?: readonly SearchFilterName[];
   readonly searchCategories?: readonly string[];
+  readonly capabilities: ProviderCapabilities;
 }
 
 export function listProviders(): ProviderStatus[] {
@@ -113,15 +115,20 @@ export async function resolveDefaultProviderAsync(): Promise<string> {
 }
 
 function providerStatus(name: string, configured: boolean): ProviderStatus {
-  const capabilities = getSearchFilterCapabilities(name);
+  const searchCapabilities = getSearchFilterCapabilities(name);
+  const capabilities = getProviderCapabilities(name);
+  if (capabilities === undefined) {
+    throw new TypeError(`Registered provider ${name} has no capability metadata`);
+  }
   return {
     name,
     configured,
     envVar: getProviderApiKeyEnvVar(name),
-    ...(capabilities === undefined ? {} : { searchFilters: capabilities.filters }),
-    ...(capabilities?.categories === undefined
+    ...(searchCapabilities === undefined ? {} : { searchFilters: searchCapabilities.filters }),
+    ...(searchCapabilities?.categories === undefined
       ? {}
-      : { searchCategories: capabilities.categories }),
+      : { searchCategories: searchCapabilities.categories }),
+    capabilities,
   };
 }
 
