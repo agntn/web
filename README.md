@@ -154,7 +154,7 @@ if (isDetailedSearchProvider(firecrawl)) {
 }
 ```
 
-`web search --provider firecrawl --json "query"` prints the detailed provider envelope with results, filter diagnostics, and this metadata. The core detailed helpers preserve response metadata too: scalar `searchProviderDetailed()` and `searchWithFallback()` expose `metadata`, while `searchAllDetailed()` exposes `providerMetadata` entries that keep each metadata object paired with its provider.
+`web search --provider firecrawl --json "query"` prints the detailed provider envelope with results, filter diagnostics, and this metadata. Tavily also uses response metadata for the generated query answer requested by `summary`, exposed as `metadata.answer`. The core detailed helpers preserve response metadata too: scalar `searchProviderDetailed()` and `searchWithFallback()` expose `metadata`, while `searchAllDetailed()` exposes `providerMetadata` entries that keep each metadata object paired with its provider.
 
 ### Reverse image search
 
@@ -250,6 +250,8 @@ type SearchToolInput = {
   provider?: string;
   maxResults?: number;
   highlights?: boolean;
+  summary?: boolean;
+  fullText?: boolean;
 };
 ```
 
@@ -265,6 +267,7 @@ web --provider brave "your query" --max-results 5
 web search "your query" --json
 web search "first query" "second query" --provider all --json
 web search "your query" --provider firecrawl --sources web,news --categories research
+web search "your query" --provider exa --summary --full-text
 web search "your query" --include-domains github.com,stackoverflow.com --start-published-date 2026-01-01
 web search-image https://example.com/image.jpg --max-results 5 --json
 web read https://example.com --format markdown --json
@@ -307,6 +310,8 @@ The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`
 | `--provider <name>`                 | Provider to use (text: first configured or `all`; image: SerpAPI; read: auto starting with Jina) |
 | `--max-results <n>`                 | Maximum text or image search results to return (default: `10`)                                   |
 | `--no-highlights`                   | Disable passages selected for the query when supported                                           |
+| `--summary`                         | Request generated summaries from Exa or an answer from Tavily                                    |
+| `--full-text`                       | Request full page text from Exa or Tavily                                                        |
 | `--include-domains <a,b>`           | Include only these domains in text search                                                        |
 | `--exclude-domains <a,b>`           | Exclude these domains from text search                                                           |
 | `--sources <a,b>`                   | Source types for providers that support them                                                     |
@@ -341,18 +346,18 @@ All search providers always return `{ url, title, snippet }`. Optional fields de
 | Provider    | Optional fields populated                                                                                                                               |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Context.dev | `metadata.{relevance, markdownCode}`                                                                                                                    |
-| Exa         | `text` (full page), `highlights[]`, `summary` (AI), `score`, `publishedDate`, `author`, `image`, `favicon`                                              |
+| Exa         | `highlights[]` by default; requested `text` (full page) and `summary`; `score`, `publishedDate`, `author`, `image`, `favicon`                           |
 | Firecrawl   | `text` (markdown from the scraped page)                                                                                                                 |
 | Jina        | `text` (`content`/`text`), `publishedDate`, `image`, `metadata`                                                                                         |
 | Mojeek      | `score`, `publishedDate`, `image`, `metadata.{confidence, documentSize, lastModifiedDate, crawledDate, moreResultsFromDomain, imageWidth, imageHeight}` |
-| Tavily      | `text` (raw_content, full HTML/markdown), `score`, `publishedDate`                                                                                      |
+| Tavily      | requested `text` (`raw_content`); `score`, `publishedDate`                                                                                              |
 | TinyFish    | `publishedDate`, `author`, `metadata.{position, siteName, publisher, authors, venue, year, citedByCount, pdfUrl}`                                       |
 | Brave       | `text` (joined `extra_snippets`), `favicon`                                                                                                             |
 | SerpAPI     | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}`                                                           |
 | SerpBase    | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}`               |
 | SearXNG     | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}`                                                                               |
 
-Pick the provider that fits the shape you want. Firecrawl returns page passages relevant to the query in `snippet` by default, including Markdown when the source passage contains it. Exa exposes separate summaries, `highlights[]`, and full text. TinyFish carries useful news and research metadata. Jina and Tavily are strong when page content matters. Brave, Mojeek, SerpAPI, SerpBase, and SearXNG return classic SERP metadata.
+Pick the provider that fits the shape you want. Firecrawl returns page passages relevant to the query in `snippet` by default, including Markdown when the source passage contains it. Exa returns highlights by default and can add generated summaries or full text when requested. Tavily can add a query answer in response metadata or raw page content through the same controls. TinyFish carries useful news and research metadata. Jina returns page content with its search results. Brave, Mojeek, SerpAPI, SerpBase, and SearXNG return classic SERP metadata.
 
 SerpBase uses Google SERP endpoints. `category: "images"`, `"news"`, or `"videos"` selects the matching SerpBase endpoint; `maxResults` is applied client-side to the returned page. TinyFish also applies `maxResults` client-side to one result page.
 
@@ -418,7 +423,7 @@ interface SearchAllResult extends SearchAllEvidence {
 }
 ```
 
-Optional fields depend on what the provider returns. Firecrawl uses page passages relevant to the query for `snippet` by default. Exa provides `score`, `text`, and `highlights`. TinyFish provides publisher and research metadata. Jina provides result `text` and metadata when available. Mojeek provides ranking, date, image, and crawl metadata. Brave provides `favicon`. Not all providers populate all fields.
+Optional fields depend on what the provider returns. Firecrawl uses page passages relevant to the query for `snippet` by default. Exa provides `score` and highlights by default, then adds `text` or `summary` when requested. Tavily adds `text` when requested; its generated query answer stays in response `metadata.answer` rather than being assigned to one result. TinyFish provides publisher and research metadata. Jina provides result `text` and metadata when available. Mojeek provides ranking, date, image, and crawl metadata. Brave provides `favicon`. Not all providers populate all fields.
 
 Reverse image results keep page and image identity separate:
 
@@ -463,6 +468,8 @@ Search options you can pass to `.search()` or `searchAll`:
 interface SearchOptions {
   maxResults?: number;
   highlights?: boolean;
+  summary?: boolean;
+  fullText?: boolean;
   includeDomains?: string[];
   excludeDomains?: string[];
   sources?: string[];
@@ -473,7 +480,7 @@ interface SearchOptions {
 }
 ```
 
-`maxResults` defaults to 10 and caps the final result list, including `searchAll` output after URL deduplication. Each provider also receives it as the requested result count. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. The remaining filters are specific to each provider:
+`maxResults` defaults to 10 and caps the final result list, including `searchAll` output after URL deduplication. Each provider also receives it as the requested result count. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. Generated content and full page text default to false and must be requested through `summary` and `fullText`; Exa uses `summary` for result summaries, while Tavily uses it for a query answer. The remaining filters are specific to each provider:
 
 | Provider    | Domain filters   | Source values           | Category values                              | Date bounds |
 | ----------- | ---------------- | ----------------------- | -------------------------------------------- | ----------- |

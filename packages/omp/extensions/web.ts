@@ -91,6 +91,16 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         description: "Return passages relevant to the query when supported. Defaults to true.",
       }),
     ),
+    summary: Type.Optional(
+      Type.Boolean({
+        description: "Request generated summaries or answers when supported. Defaults to false.",
+      }),
+    ),
+    fullText: Type.Optional(
+      Type.Boolean({
+        description: "Request full page text when supported. Defaults to false.",
+      }),
+    ),
     includeDomains: Type.Optional(
       Type.Array(Type.String(), { description: "Only return results from these domains." }),
     ),
@@ -178,6 +188,8 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
       const options: SearchRequestOptions = {
         maxResults: params.maxResults,
         highlights: params.highlights,
+        summary: params.summary,
+        fullText: params.fullText,
         includeDomains: params.includeDomains,
         excludeDomains: params.excludeDomains,
         sources: params.sources,

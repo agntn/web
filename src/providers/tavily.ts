@@ -2,6 +2,7 @@ import type {
   SearchFilterCapabilities,
   SearchResult,
   SearchRequestOptions,
+  SearchResponse,
   ProviderConfig,
 } from "../core/types.ts";
 import { Provider } from "../core/provider.ts";
@@ -53,34 +54,37 @@ class TavilyProvider extends Provider {
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+    const response = await this.searchDetailed(query, options);
+    return response.results;
+  }
+
+  async searchDetailed(query: string, options?: SearchRequestOptions): Promise<SearchResponse> {
+    const searchOptions = options ?? {};
     const body = {
       api_key: this.apiKey,
       query,
-      max_results: options?.maxResults ?? 10,
+      max_results: searchOptions.maxResults ?? 10,
       search_depth: "basic",
-      include_answer: false,
-      include_raw_content: false,
-      include_domains: options?.includeDomains,
-      exclude_domains: options?.excludeDomains,
+      include_answer: searchOptions.summary ?? false,
+      include_raw_content: searchOptions.fullText ?? false,
+      include_domains: searchOptions.includeDomains,
+      exclude_domains: searchOptions.excludeDomains,
     } satisfies TavilySearchRequest;
 
     try {
       const url = `${this.baseURL}/search`;
       const response = await this.client.postJSON<TavilySearchResponse>(url, body);
-      return response.results.map((result, index) =>
-        mapResult(result, response.answer, index === 0),
-      );
+      return {
+        results: response.results.map(mapResult),
+        ...(response.answer === undefined ? {} : { metadata: { answer: response.answer } }),
+      };
     } catch (error) {
       throw normalizeError(error, "tavily");
     }
   }
 }
 
-function mapResult(
-  result: TavilyResult,
-  answer: string | undefined,
-  isFirst: boolean,
-): SearchResult {
+function mapResult(result: TavilyResult): SearchResult {
   return {
     url: result.url,
     title: result.title,
@@ -88,7 +92,6 @@ function mapResult(
     score: result.score,
     publishedDate: result.published_date,
     text: result.raw_content,
-    summary: isFirst && answer ? answer : undefined,
   };
 }
 

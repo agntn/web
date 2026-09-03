@@ -49,6 +49,8 @@ type SearchRunArgs = {
   readonly provider?: string;
   readonly "max-results": string;
   readonly highlights: boolean;
+  readonly summary: boolean;
+  readonly "full-text": boolean;
   readonly json: boolean;
   [key: string]: string | number | boolean | readonly string[] | undefined;
 };
@@ -58,6 +60,8 @@ const defaultArgs: SearchRunArgs = {
   query: "test query",
   "max-results": "10",
   highlights: true,
+  summary: false,
+  "full-text": false,
   json: false,
 };
 
@@ -309,12 +313,19 @@ describe("search command", () => {
     });
   });
 
-  it("passes disabled highlights to the provider", async () => {
-    await runSearch({ provider: "firecrawl", highlights: false });
+  it("passes explicit content preferences to the provider", async () => {
+    await runSearch({
+      provider: "firecrawl",
+      highlights: false,
+      summary: true,
+      "full-text": true,
+    });
 
     expect(mockSearchDetailed).toHaveBeenCalledWith("test query", {
       maxResults: 10,
       highlights: false,
+      summary: true,
+      fullText: true,
     });
   });
 

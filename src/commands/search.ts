@@ -38,6 +38,16 @@ export default defineCommand({
       negativeDescription: "Disable passages relevant to the query when supported",
       default: true,
     },
+    summary: {
+      type: "boolean",
+      description: "Request generated summaries or answers when supported",
+      default: false,
+    },
+    "full-text": {
+      type: "boolean",
+      description: "Request full page text when supported",
+      default: false,
+    },
     "include-domains": {
       type: "string",
       description: "Domains to include, separated by commas",
@@ -92,6 +102,8 @@ type SearchCommandArgs = {
   readonly provider?: string;
   readonly "max-results": string;
   readonly highlights: boolean;
+  readonly summary: boolean;
+  readonly "full-text": boolean;
   readonly "include-domains"?: string;
   readonly "exclude-domains"?: string;
   readonly sources?: string;
@@ -176,6 +188,7 @@ function parseSearchOptions(args: SearchCommandArgs, maxResults: number): Search
   return {
     maxResults,
     highlights: args.highlights,
+    ...parseContentOptions(args),
     ...(includeDomains === undefined ? {} : { includeDomains }),
     ...(excludeDomains === undefined ? {} : { excludeDomains }),
     ...(sources === undefined ? {} : { sources }),
@@ -187,6 +200,15 @@ function parseSearchOptions(args: SearchCommandArgs, maxResults: number): Search
     ...(args["end-published-date"] === undefined
       ? {}
       : { endPublishedDate: args["end-published-date"] }),
+  };
+}
+
+function parseContentOptions(
+  args: SearchCommandArgs,
+): Pick<SearchRequestOptions, "summary" | "fullText"> {
+  return {
+    ...(args.summary ? { summary: true } : {}),
+    ...(args["full-text"] ? { fullText: true } : {}),
   };
 }
 

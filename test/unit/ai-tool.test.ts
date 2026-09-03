@@ -227,17 +227,23 @@ describe("searchTool", () => {
     ).resolves.toMatchObject({ provider: providerName, result: { content: "Custom page" } });
   });
 
-  it("passes the highlights preference to providers", async () => {
+  it("passes explicit content preferences to providers", async () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
     await searchTool.execute!(
-      { query: "test query", provider: "exa", highlights: false },
-      { toolCallId: "call-highlights", messages: [] },
+      {
+        query: "test query",
+        provider: "exa",
+        highlights: false,
+        summary: true,
+        fullText: true,
+      },
+      { toolCallId: "call-content", messages: [] },
     );
 
     const [, body] = mockPostJSON.mock.calls[0];
-    expect(body.contents).toEqual({ text: true, highlights: false });
+    expect(body.contents).toEqual({ text: true, highlights: false, summary: true });
   });
 
   it("returns one ordered outcome per query in a batch", async () => {

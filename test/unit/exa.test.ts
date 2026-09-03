@@ -40,8 +40,17 @@ const exaResponse = {
       author: "Test Author",
       image: "https://example.com/img.png",
       favicon: "https://example.com/favicon.ico",
-      text: "Full text content here for testing purposes",
       highlights: ["Key highlight from the page"],
+    },
+  ],
+};
+
+const richExaResponse = {
+  ...exaResponse,
+  results: [
+    {
+      ...exaResponse.results[0],
+      text: "Full text content here for testing purposes",
       summary: "A brief summary",
     },
   ],
@@ -89,14 +98,18 @@ describe("exa provider", () => {
       expect(body).toMatchObject({
         query: "test query",
         type: "auto",
-        contents: { text: true, highlights: true },
+        contents: { text: false, highlights: true },
       });
       expect(headers).toEqual({ "x-api-key": "test-key" });
     });
 
     it("maps result fields correctly", async () => {
+      mockPostJSON.mockResolvedValueOnce(richExaResponse);
       const provider = createSearchProvider("exa", { apiKey: "test-key" });
-      const results: SearchResult[] = await provider.search("test query");
+      const results: SearchResult[] = await provider.search("test query", {
+        summary: true,
+        fullText: true,
+      });
 
       expect(results).toHaveLength(1);
       const result = results[0];
@@ -106,6 +119,7 @@ describe("exa provider", () => {
       expect(result.score).toBe(0.95);
       expect(result.text).toBe("Full text content here for testing purposes");
       expect(result.highlights).toEqual(["Key highlight from the page"]);
+      expect(result.summary).toBe("A brief summary");
     });
 
     it("maps maxResults option to numResults in body", async () => {
@@ -128,12 +142,20 @@ describe("exa provider", () => {
       expect(results[0].title).toBe("");
     });
 
-    it("can disable search highlights", async () => {
+    it("keeps expensive content disabled by default", async () => {
       const provider = createSearchProvider("exa", { apiKey: "test-key" });
-      await provider.search("test query", { highlights: false });
+      await provider.search("test query");
 
       const [, body] = mockPostJSON.mock.calls[0];
-      expect(body.contents).toEqual({ text: true, highlights: false });
+      expect(body.contents).toEqual({ text: false, highlights: true });
+    });
+
+    it("passes explicit content preferences", async () => {
+      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      await provider.search("test query", { highlights: false, summary: true, fullText: true });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.contents).toEqual({ text: true, highlights: false, summary: true });
     });
 
     it("falls back to truncated text when no highlights", async () => {
@@ -150,7 +172,7 @@ describe("exa provider", () => {
       });
 
       const provider = createSearchProvider("exa", { apiKey: "test-key" });
-      const results = await provider.search("query");
+      const results = await provider.search("query", { fullText: true });
 
       expect(results[0].snippet).toBe(longText.slice(0, 200));
     });

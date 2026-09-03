@@ -17,7 +17,7 @@ interface ExaSearchRequest {
   readonly excludeDomains?: readonly string[];
   readonly startPublishedDate?: string;
   readonly endPublishedDate?: string;
-  readonly contents?: { text: boolean; highlights: boolean };
+  readonly contents?: { text: boolean; highlights: boolean; summary?: true };
 }
 
 interface ExaResult {
@@ -65,16 +65,21 @@ class ExaProvider extends Provider {
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+    const searchOptions = options ?? {};
     const body = {
       query,
       type: "auto",
-      numResults: options?.maxResults,
-      category: options?.category,
-      includeDomains: options?.includeDomains,
-      excludeDomains: options?.excludeDomains,
-      startPublishedDate: options?.startPublishedDate,
-      endPublishedDate: options?.endPublishedDate,
-      contents: { text: true, highlights: includeHighlights(options) },
+      numResults: searchOptions.maxResults,
+      category: searchOptions.category,
+      includeDomains: searchOptions.includeDomains,
+      excludeDomains: searchOptions.excludeDomains,
+      startPublishedDate: searchOptions.startPublishedDate,
+      endPublishedDate: searchOptions.endPublishedDate,
+      contents: {
+        text: searchOptions.fullText ?? false,
+        highlights: includeHighlights(searchOptions),
+        ...(searchOptions.summary ? { summary: true } : {}),
+      },
     } satisfies ExaSearchRequest;
 
     try {
