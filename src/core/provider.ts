@@ -55,6 +55,7 @@ export interface ProviderSearchCapabilities {
   readonly filters?: readonly SearchFilterName[];
   readonly categories?: readonly string[];
   readonly contentOptions?: readonly SearchContentOptionName[];
+  readonly pagination?: boolean;
   readonly resultLimit?: ProviderResultLimit;
   readonly resultFields?: readonly SearchResultField[];
 }
@@ -132,6 +133,21 @@ export interface DetailedSearchProvider {
   searchDetailed(query: string, options?: SearchRequestOptions): Promise<SearchResponse>;
 }
 
+/** One provider page with an opaque provider-native token for the next page. */
+export interface ProviderSearchPage extends SearchResponse {
+  continuation?: string;
+  continuationStatus?: "next" | "unknown";
+}
+
+/** Optional paging contract implemented without exposing provider state to callers. */
+export interface PaginatedSearchProvider {
+  searchPage(
+    query: string,
+    options?: SearchRequestOptions,
+    continuation?: string,
+  ): Promise<ProviderSearchPage>;
+}
+
 /** Provider capability for finding public pages from an image URL. */
 export interface ImageSearchProvider {
   searchByImage(url: string, options?: ImageSearchRequestOptions): Promise<ImageSearchResult[]>;
@@ -153,6 +169,12 @@ export function isDetailedSearchProvider(
   provider: object,
 ): provider is Provider & DetailedSearchProvider {
   return "searchDetailed" in provider && typeof provider.searchDetailed === "function";
+}
+
+export function isPaginatedSearchProvider(
+  provider: object,
+): provider is Provider & SearchProvider & PaginatedSearchProvider {
+  return "searchPage" in provider && typeof provider.searchPage === "function";
 }
 
 /**

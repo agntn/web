@@ -1,6 +1,8 @@
 import type {
   ReadonlySearchResult,
   SearchFilterName,
+  SearchPageOptions,
+  SearchPagination,
   SearchRequestOptions,
   SearchResponse,
   SearchResult,
@@ -15,6 +17,7 @@ import {
   NoProviderConfiguredError,
   NoProviderAvailableError,
   EmptyQueryError,
+  InvalidSearchContinuationError,
   validateDateFilters,
 } from "./errors.ts";
 import {
@@ -24,12 +27,13 @@ import {
   type ProviderFailure,
 } from "./fallback.ts";
 import { createSearchProvider, has } from "./registry.ts";
-import { isDetailedSearchProvider } from "./provider.ts";
+import { isDetailedSearchProvider, isPaginatedSearchProvider } from "./provider.ts";
+import { decodeSearchContinuation, encodeSearchContinuation } from "./search-continuation.ts";
 import { detectAvailableProviders, detectAvailableProvidersAsync } from "./resolve.ts";
 
 const DEFAULT_MAX_RESULTS = 10;
 
-export type SearchAllOptions = SearchRequestOptions & {
+export type SearchAllOptions = SearchPageOptions & {
   readonly providers?: readonly string[];
 };
 
@@ -54,11 +58,18 @@ export interface SearchProviderMetadata {
   readonly metadata: Readonly<Record<string, unknown>>;
 }
 
+/** One provider's independent continuation state in a fanout response. */
+export interface SearchProviderPagination {
+  readonly provider: string;
+  readonly pagination: SearchPagination;
+}
+
 export interface SearchAllResponse {
   results: SearchAllResult[];
   successfulProviders: string[];
   errors: ProviderError[];
   filterReports: SearchFilterReport[];
+  providerPagination: SearchProviderPagination[];
   providerMetadata?: SearchProviderMetadata[];
 }
 
@@ -68,6 +79,7 @@ export interface SearchProviderResult {
   readonly results: readonly SearchResult[];
   readonly ignoredFilters: readonly SearchFilterName[];
   readonly undeclaredFilters: readonly SearchFilterName[];
+  readonly pagination: SearchPagination;
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
@@ -110,7 +122,10 @@ export async function searchAllDetailed(
 ): Promise<SearchAllResponse> {
   validateSearchInput(query, options);
 
-  const { providers: requestedProviders, ...searchOptions } = options ?? {};
+  const { providers: requestedProviders, continuation, ...searchOptions } = options ?? {};
+  if (continuation !== undefined) {
+    throw new TypeError("continuation is not supported with provider=all");
+  }
   validateProviderNames(requestedProviders);
   const providerNames = await resolveProviderNames(requestedProviders);
   const maxResults = searchOptions.maxResults ?? DEFAULT_MAX_RESULTS;
@@ -127,9 +142,16 @@ export async function searchAllDetailed(
  */
 export async function searchWithFallback(
   query: string,
-  options?: Readonly<SearchRequestOptions>,
+  options?: Readonly<SearchPageOptions>,
 ): Promise<SearchWithFallbackResult> {
   validateSearchInput(query, options);
+
+  if (options?.continuation !== undefined) {
+    const { continuation, ...searchOptions } = options;
+    const payload = decodeSearchContinuation(continuation, query, searchOptions);
+    const response = await searchProvider(payload.provider, query, options);
+    return { ...response, attempts: [payload.provider], failures: [] };
+  }
 
   const providerNames = await resolveAutomaticProviderNames();
   return searchProviderNamesWithFallback(providerNames, query, options);
@@ -145,7 +167,7 @@ export async function searchWithFallback(
 export async function searchProviderDetailed(
   providerName: string,
   query: string,
-  options?: Readonly<SearchRequestOptions>,
+  options?: Readonly<SearchPageOptions>,
 ): Promise<SearchProviderResult> {
   validateSearchInput(query, options);
   validateProviderNames([providerName]);
@@ -171,7 +193,7 @@ export async function prepareSearchWithFallback(
 async function searchProviderNamesWithFallback(
   providerNames: readonly string[],
   query: string,
-  options?: Readonly<SearchRequestOptions>,
+  options?: Readonly<SearchPageOptions>,
 ): Promise<SearchWithFallbackResult> {
   const attempts: string[] = [];
   const failures: ProviderFailure[] = [];
@@ -197,7 +219,7 @@ async function searchProviderNamesWithFallback(
   throw new ProviderFallbackError("search", failures, lastError);
 }
 
-function validateSearchInput(query: string, options?: Readonly<SearchRequestOptions>): void {
+function validateSearchInput(query: string, options?: Readonly<SearchPageOptions>): void {
   if (!query.trim()) {
     throw new EmptyQueryError();
   }
@@ -231,18 +253,70 @@ async function resolveAutomaticProviderNames(): Promise<readonly string[]> {
 async function searchProvider<TProvider extends string>(
   providerName: TProvider,
   query: string,
-  options?: Readonly<SearchRequestOptions>,
+  options?: Readonly<SearchPageOptions>,
 ): Promise<SearchProviderResult & { readonly provider: TProvider }> {
+  const { continuation, ...searchOptions } = options ?? {};
+  const payload =
+    continuation === undefined
+      ? undefined
+      : decodeSearchContinuation(continuation, query, searchOptions);
+  if (payload !== undefined && payload.provider !== providerName) {
+    throw new InvalidSearchContinuationError();
+  }
+
   const provider = createSearchProvider(providerName);
-  const response: SearchResponse = isDetailedSearchProvider(provider)
-    ? await provider.searchDetailed(query, options)
-    : { results: await provider.search(query, options) };
-  const report = searchFilterReport(providerName, options);
+  const paginated = isPaginatedSearchProvider(provider);
+  const response = await searchResponse(
+    provider,
+    paginated,
+    query,
+    searchOptions,
+    payload?.providerContinuation,
+  );
+  const pagination = normalizedPagination(providerName, query, searchOptions, response, paginated);
+  const report = searchFilterReport(providerName, searchOptions);
   return {
     ...report,
     provider: providerName,
     results: response.results,
+    pagination,
     ...(response.metadata === undefined ? {} : { metadata: { ...response.metadata } }),
+  };
+}
+
+type SearchResponseWithContinuation = SearchResponse & {
+  readonly continuation?: string;
+  readonly continuationStatus?: "next" | "unknown";
+};
+
+async function searchResponse(
+  provider: Readonly<ReturnType<typeof createSearchProvider>>,
+  paginated: boolean,
+  query: string,
+  options: Readonly<SearchRequestOptions>,
+  providerContinuation?: string,
+): Promise<SearchResponseWithContinuation> {
+  if (paginated && isPaginatedSearchProvider(provider)) {
+    return provider.searchPage(query, options, providerContinuation);
+  }
+  if (providerContinuation !== undefined) throw new InvalidSearchContinuationError();
+  return isDetailedSearchProvider(provider)
+    ? provider.searchDetailed(query, options)
+    : { results: await provider.search(query, options) };
+}
+
+function normalizedPagination(
+  providerName: string,
+  query: string,
+  options: Readonly<SearchRequestOptions>,
+  response: Readonly<Pick<SearchResponseWithContinuation, "continuation" | "continuationStatus">>,
+  paginated: boolean,
+): SearchPagination {
+  if (!paginated) return { status: "unsupported" };
+  if (response.continuation === undefined) return { status: "end" };
+  return {
+    status: response.continuationStatus ?? "next",
+    continuation: encodeSearchContinuation(providerName, query, options, response.continuation),
   };
 }
 
@@ -272,6 +346,7 @@ function collectProviderResults(
   const errors: ProviderError[] = [];
   const filterReports: SearchFilterReport[] = [];
   const providerMetadata: SearchProviderMetadata[] = [];
+  const providerPagination: SearchProviderPagination[] = [];
   for (const [index, outcome] of settled.entries()) {
     if (outcome.status === "fulfilled") {
       successfulProviders.add(outcome.value.provider);
@@ -284,6 +359,10 @@ function collectProviderResults(
         const { provider, ignoredFilters, undeclaredFilters } = outcome.value;
         filterReports.push({ provider, ignoredFilters, undeclaredFilters });
       }
+      providerPagination.push({
+        provider: outcome.value.provider,
+        pagination: outcome.value.pagination,
+      });
       if (outcome.value.metadata !== undefined) {
         providerMetadata.push({
           provider: outcome.value.provider,
@@ -304,6 +383,7 @@ function collectProviderResults(
     successfulProviders: [...successfulProviders],
     errors,
     filterReports,
+    providerPagination,
     ...(providerMetadata.length === 0 ? {} : { providerMetadata }),
   };
 }

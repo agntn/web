@@ -13,6 +13,7 @@ import {
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
 import { listProviders } from "./core/resolve.ts";
+import { MAX_SEARCH_CONTINUATION_LENGTH } from "./core/search-continuation.ts";
 import { runtimeInfo } from "./version.ts";
 import "./providers/index.ts";
 
@@ -20,7 +21,7 @@ const advertisedSearchProviderNames = [...builtinProviders, "all"].join(", ");
 
 export const searchTool = tool({
   description:
-    'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored.',
+    'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored. Single searches may continue with an opaque token bound to its provider.',
   inputSchema: z.object({
     query: z
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])
@@ -32,6 +33,11 @@ export const searchTool = tool({
         `Provider to use. Built in providers: ${advertisedSearchProviderNames}. Automatic selection tries other configured providers after payment, rate limit, timeout, or server failures. Use "all" for parallel search. Registered custom providers are validated at execution time.`,
       ),
     maxResults: z.number().int().min(1).max(20).optional().describe("Max results (default: 10)"),
+    continuation: z
+      .string()
+      .max(MAX_SEARCH_CONTINUATION_LENGTH)
+      .optional()
+      .describe("Opaque token returned by a previous single search."),
     highlights: z
       .boolean()
       .optional()
@@ -76,6 +82,7 @@ export const searchTool = tool({
     query,
     provider: providerName,
     maxResults,
+    continuation,
     highlights,
     summary,
     fullText,
@@ -90,6 +97,7 @@ export const searchTool = tool({
     const normalizedProvider = providerName === "auto" ? undefined : providerName;
     const searchOptions = {
       maxResults,
+      continuation,
       highlights,
       summary,
       fullText,
@@ -103,6 +111,9 @@ export const searchTool = tool({
     };
 
     if (Array.isArray(query)) {
+      if (continuation !== undefined) {
+        throw new TypeError("continuation is only supported for a single query");
+      }
       return searchBatch(query, { provider: normalizedProvider, ...searchOptions });
     }
     if (!query.trim()) {

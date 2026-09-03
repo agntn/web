@@ -67,7 +67,7 @@ describe("providers command", () => {
         expect(output).toContain(name);
       }
       expect(output).toContain(
-        "operations=search,searchImage filters=none searchLimit=10 imageLimit=10",
+        "operations=search,searchImage filters=none pagination=continuation searchLimit=10 imageLimit=10",
       );
     });
 

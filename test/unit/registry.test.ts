@@ -34,6 +34,7 @@ describe("registry", () => {
   const testProviderName3 = `testprovider${Math.random().toString(36).slice(2)}`;
   const testProviderName4 = `testprovider${Math.random().toString(36).slice(2)}`;
   const testProviderName5 = `testprovider${Math.random().toString(36).slice(2)}`;
+  const testProviderName6 = `testprovider${Math.random().toString(36).slice(2)}`;
   const envVarName = `${testProviderName.toUpperCase()}_API_KEY`;
 
   class MockProvider extends Provider {
@@ -96,6 +97,26 @@ describe("registry", () => {
 
     constructor(config: Readonly<ProviderConfig>) {
       super(config, ClassFieldProvider);
+    }
+  }
+
+  class FalsePaginationDeclarationProvider extends Provider {
+    static readonly providerName = testProviderName6;
+    static readonly defaultBaseURL = "https://declaration.example.com";
+    static readonly capabilityDetails = {
+      search: {
+        contentOptions: [],
+        pagination: true,
+        resultFields: [],
+      },
+    } as const;
+
+    constructor(config: Readonly<ProviderConfig>) {
+      super(config, FalsePaginationDeclarationProvider);
+    }
+
+    async search(): Promise<readonly SearchResult[]> {
+      return [];
     }
   }
 
@@ -321,6 +342,16 @@ describe("registry", () => {
       expect(getProviderCapabilities(testProviderName4)?.searchImage.supported).toBe(true);
       expect(getProviderCapabilities(testProviderName5)?.search.supported).toBe(true);
       expect(getProviderCapabilities("not-registered")).toBeUndefined();
+    });
+
+    it("derives pagination only from the searchPage method", () => {
+      register(FalsePaginationDeclarationProvider);
+
+      expect(getProviderCapabilities(testProviderName6)?.search).toEqual({
+        supported: true,
+        contentOptions: [],
+        resultFields: [],
+      });
     });
 
     it("returns a search-capable provider when required", async () => {

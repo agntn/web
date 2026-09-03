@@ -87,6 +87,14 @@ export class EmptyQueryError extends WebError {
   }
 }
 
+/** Thrown when a search continuation is malformed or belongs to another request. */
+export class InvalidSearchContinuationError extends WebError {
+  constructor() {
+    super("Invalid search continuation token");
+    this.name = "InvalidSearchContinuationError";
+  }
+}
+
 /** Thrown when the reverse image search URL is empty or whitespace-only. */
 export class EmptyImageUrlError extends WebError {
   constructor() {

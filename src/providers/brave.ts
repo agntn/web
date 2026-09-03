@@ -4,8 +4,12 @@ import type {
   SearchRequestOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
-import { AuthError, normalizeError } from "../core/errors.ts";
+import {
+  Provider,
+  type ProviderCapabilityDetails,
+  type ProviderSearchPage,
+} from "../core/provider.ts";
+import { AuthError, InvalidSearchContinuationError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface BraveResult {
@@ -22,6 +26,9 @@ interface BraveResult {
 }
 
 interface BraveSearchResponse {
+  readonly query?: {
+    readonly more_results_available?: boolean;
+  };
   readonly web?: {
     readonly results: readonly BraveResult[];
   };
@@ -53,15 +60,51 @@ class BraveProvider extends Provider {
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+    return (await this.searchPage(query, options)).results;
+  }
+
+  async searchPage(
+    query: string,
+    options?: SearchRequestOptions,
+    continuation?: string,
+  ): Promise<ProviderSearchPage> {
     try {
-      const url = `${this.baseURL}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${options?.maxResults ?? 10}`;
+      const offset = braveOffset(continuation);
+      const url = braveSearchUrl(this.baseURL, query, options?.maxResults, offset);
       const headers = { "X-Subscription-Token": this.apiKey };
       const response = await this.client.getJSON<BraveSearchResponse>(url, headers);
-      return (response.web?.results ?? []).map(mapResult);
+      return {
+        results: (response.web?.results ?? []).map(mapResult),
+        ...braveContinuation(response, offset),
+      };
     } catch (error) {
       throw normalizeError(error, "brave");
     }
   }
+}
+
+function braveSearchUrl(
+  baseURL: string,
+  query: string,
+  maxResults: number | undefined,
+  offset: number,
+): string {
+  const offsetParam = offset === 0 ? "" : `&offset=${offset}`;
+  return `${baseURL}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults ?? 10}${offsetParam}`;
+}
+
+function braveContinuation(
+  response: Readonly<BraveSearchResponse>,
+  offset: number,
+): Record<string, string> {
+  if (response.query?.more_results_available !== true || offset >= 9) return {};
+  return { continuation: String(offset + 1) };
+}
+
+function braveOffset(continuation?: string): number {
+  if (continuation === undefined) return 0;
+  if (!/^[1-9]$/u.test(continuation)) throw new InvalidSearchContinuationError();
+  return Number(continuation);
 }
 
 function mapResult(result: BraveResult): SearchResult {

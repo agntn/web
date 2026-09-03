@@ -16,7 +16,8 @@ vi.mock("../../src/core/client.ts", () => ({
 }));
 
 import { createImageSearchProvider, createSearchProvider, has } from "../../src/core/registry.ts";
-import { AuthError } from "../../src/core/errors.ts";
+import { AuthError, InvalidSearchContinuationError } from "../../src/core/errors.ts";
+import { isPaginatedSearchProvider } from "../../src/core/provider.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
 // Triggers self-registration of serpapi provider
@@ -170,6 +171,36 @@ describe("serpapi provider", () => {
       expect(url).toContain("q=test%20query");
       expect(url).toContain("api_key=test-key");
       expect(url).toContain("num=10");
+    });
+
+    it("preserves the next Google result offset as provider continuation", async () => {
+      mockGetJSON
+        .mockResolvedValueOnce({
+          ...serpApiResponse,
+          serpapi_pagination: {
+            next: "https://serpapi.com/search?engine=google&q=test&start=10",
+          },
+        })
+        .mockResolvedValueOnce(serpApiResponse);
+      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
+
+      const first = await provider.searchPage("test query");
+      const second = await provider.searchPage("test query", undefined, first.continuation);
+
+      expect(first.continuation).toBe("10");
+      expect(new URL(mockGetJSON.mock.calls[1][0]).searchParams.get("start")).toBe("10");
+      expect(second.continuation).toBeUndefined();
+    });
+
+    it("rejects unsafe numeric offsets before the request", async () => {
+      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
+
+      await expect(
+        provider.searchPage("test query", undefined, "9007199254740992"),
+      ).rejects.toThrow(InvalidSearchContinuationError);
+      expect(mockGetJSON).not.toHaveBeenCalled();
     });
 
     it("maps result fields correctly", async () => {

@@ -11,8 +11,15 @@ import {
   Provider,
   assertProviderBaseURL,
   type ProviderCapabilityDetails,
+  type ProviderSearchPage,
 } from "../core/provider.ts";
-import { AuthError, HTTPError, WebError, normalizeError } from "../core/errors.ts";
+import {
+  AuthError,
+  HTTPError,
+  InvalidSearchContinuationError,
+  WebError,
+  normalizeError,
+} from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface TinyfishSearchResult {
@@ -112,14 +119,29 @@ class TinyfishProvider extends Provider {
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+    return (await this.searchPage(query, options)).results;
+  }
+
+  async searchPage(
+    query: string,
+    options?: SearchRequestOptions,
+    continuation?: string,
+  ): Promise<ProviderSearchPage> {
     try {
+      const page = tinyfishPage(continuation);
       const response = await this.client.getJSON<TinyfishSearchResponse>(
-        `${this.baseURL}?${searchParams(query, options)}`,
+        `${this.baseURL}?${searchParams(query, options, page)}`,
         this.authHeaders(),
       );
-      return (response.results ?? [])
-        .slice(0, clampMaxResults(options?.maxResults))
-        .map(mapSearchResult);
+      const providerResults = response.results ?? [];
+      return {
+        results: providerResults
+          .slice(0, clampMaxResults(options?.maxResults))
+          .map(mapSearchResult),
+        ...(providerResults.length > 0 && page < 10
+          ? { continuation: String(page + 1), continuationStatus: "unknown" as const }
+          : {}),
+      };
     } catch (error) {
       throw normalizeError(error, "tinyfish");
     }
@@ -145,13 +167,24 @@ class TinyfishProvider extends Provider {
   }
 }
 
-function searchParams(query: string, options?: SearchRequestOptions): string {
+function searchParams(
+  query: string,
+  options: SearchRequestOptions | undefined,
+  page: number,
+): string {
   return new URLSearchParams({
     query,
+    ...(page === 0 ? {} : { page: String(page) }),
     ...domainSearchParams(options),
     ...categorySearchParams(options?.category),
     ...dateSearchParams(options),
   }).toString();
+}
+
+function tinyfishPage(continuation?: string): number {
+  if (continuation === undefined) return 0;
+  if (!/^(?:[1-9]|10)$/u.test(continuation)) throw new InvalidSearchContinuationError();
+  return Number(continuation);
 }
 
 function domainSearchParams(options?: SearchRequestOptions): Record<string, string> {

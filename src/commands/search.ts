@@ -8,9 +8,20 @@ import {
   SearchNotSupportedError,
   UnknownProviderError,
 } from "../core/errors.ts";
-import type { SearchAllResult, SearchProviderMetadata, SearchProviderResult } from "../core/all.ts";
+import type {
+  SearchAllResult,
+  SearchProviderMetadata,
+  SearchProviderPagination,
+  SearchProviderResult,
+} from "../core/all.ts";
 import type { SearchFilterReport } from "../core/search-filters.ts";
-import type { ReadonlySearchResult, SearchRequestOptions, SearchResult } from "../core/types.ts";
+import { MAX_SEARCH_CONTINUATION_LENGTH } from "../core/search-continuation.ts";
+import type {
+  ReadonlySearchResult,
+  SearchPageOptions,
+  SearchPagination,
+  SearchResult,
+} from "../core/types.ts";
 
 export default defineCommand({
   meta: {
@@ -31,6 +42,10 @@ export default defineCommand({
       type: "string",
       description: "Maximum number of results",
       default: "10",
+    },
+    continuation: {
+      type: "string",
+      description: "Opaque token returned by a previous search through one provider",
     },
     highlights: {
       type: "boolean",
@@ -101,6 +116,7 @@ type SearchCommandArgs = {
   readonly query: string;
   readonly provider?: string;
   readonly "max-results": string;
+  readonly continuation?: string;
   readonly highlights: boolean;
   readonly summary: boolean;
   readonly "full-text": boolean;
@@ -117,7 +133,7 @@ type SearchCommandArgs = {
 type ParsedSearchArguments = {
   readonly query: string | readonly string[];
   readonly provider?: string;
-  readonly options: SearchRequestOptions;
+  readonly options: SearchPageOptions;
   readonly json: boolean;
 };
 
@@ -142,6 +158,7 @@ type ReadonlySearchAllResponse = {
     readonly error: Readonly<Error>;
   }[];
   readonly filterReports: readonly Readonly<SearchFilterReport>[];
+  readonly providerPagination: readonly Readonly<SearchProviderPagination>[];
   readonly providerMetadata?: readonly Readonly<SearchProviderMetadata>[];
 };
 
@@ -155,6 +172,8 @@ type ReadonlySearchBatchItem =
       readonly provider: string;
       readonly results: readonly ReadonlySearchResult[];
       readonly filterReports: readonly Readonly<SearchFilterReport>[];
+      readonly pagination?: SearchPagination;
+      readonly providerPagination?: readonly Readonly<SearchProviderPagination>[];
       readonly providerMetadata?: readonly Readonly<SearchProviderMetadata>[];
     }
   | { readonly query: string; readonly error: string };
@@ -180,13 +199,14 @@ function parseSearchArguments(args: SearchCommandArgs): ParsedSearchArguments {
   };
 }
 
-function parseSearchOptions(args: SearchCommandArgs, maxResults: number): SearchRequestOptions {
+function parseSearchOptions(args: SearchCommandArgs, maxResults: number): SearchPageOptions {
   const includeDomains = parseList(args["include-domains"]);
   const excludeDomains = parseList(args["exclude-domains"]);
   const sources = parseList(args.sources);
   const categories = parseList(args.categories);
   return {
     maxResults,
+    ...(args.continuation === undefined ? {} : { continuation: args.continuation }),
     highlights: args.highlights,
     ...parseContentOptions(args),
     ...(includeDomains === undefined ? {} : { includeDomains }),
@@ -205,7 +225,7 @@ function parseSearchOptions(args: SearchCommandArgs, maxResults: number): Search
 
 function parseContentOptions(
   args: SearchCommandArgs,
-): Pick<SearchRequestOptions, "summary" | "fullText"> {
+): Pick<SearchPageOptions, "summary" | "fullText"> {
   return {
     ...(args.summary ? { summary: true } : {}),
     ...(args["full-text"] ? { fullText: true } : {}),
@@ -253,9 +273,13 @@ function writeSearchOutput(output: SearchCommandOutput, json: boolean): void {
   if ("errors" in output) reportProviderErrors(output.errors);
   if ("ignoredFilters" in output) {
     reportFilterWarning(output.provider, output.ignoredFilters, output.undeclaredFilters);
+    reportPagination(output.provider, output.pagination);
   } else {
     for (const report of output.filterReports) {
       reportFilterWarning(report.provider, report.ignoredFilters, report.undeclaredFilters);
+    }
+    for (const page of output.providerPagination) {
+      reportPagination(page.provider, page.pagination);
     }
   }
 }
@@ -277,6 +301,12 @@ function writeHumanSearchBatch(outcomes: readonly ReadonlySearchBatchItem[]): vo
     writeHumanSearchResults(outcome.results);
     for (const report of outcome.filterReports) {
       reportFilterWarning(report.provider, report.ignoredFilters, report.undeclaredFilters);
+    }
+    if (outcome.pagination !== undefined) {
+      reportPagination(outcome.provider, outcome.pagination);
+    }
+    for (const page of outcome.providerPagination ?? []) {
+      reportPagination(page.provider, page.pagination);
     }
   }
 }
@@ -301,6 +331,16 @@ function writeHumanSearchResults(
     }
     consola.log("");
   }
+}
+
+function reportPagination(providerName: string, pagination: SearchPagination): void {
+  if (pagination.status !== "next" && pagination.status !== "unknown") return;
+  const provider = sanitizeTerminalText(providerName, 200);
+  const continuation = sanitizeTerminalText(
+    pagination.continuation,
+    MAX_SEARCH_CONTINUATION_LENGTH,
+  );
+  consola.info(`${provider} continuation (${pagination.status}): ${continuation}`);
 }
 
 function reportProviderErrors(

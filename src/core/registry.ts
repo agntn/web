@@ -3,6 +3,7 @@ import { providerApiKeyEnvVar } from "./providers.ts";
 import {
   Provider,
   isImageSearchProvider,
+  isPaginatedSearchProvider,
   isReadProvider,
   isSearchProvider,
   type ImageSearchProvider,
@@ -177,10 +178,18 @@ function searchCapabilityStatus(ProviderClass: ProviderConstructor): ProviderSea
   if (!providerSupportsCapability(ProviderClass, "search", isSearchProvider)) {
     return { supported: false };
   }
+  const details = ProviderClass.capabilityDetails?.search;
   return {
     supported: true,
     ...ProviderClass.searchFilterCapabilities,
-    ...ProviderClass.capabilityDetails?.search,
+    ...(details
+      ? {
+          contentOptions: details.contentOptions,
+          ...(details.resultLimit ? { resultLimit: details.resultLimit } : {}),
+          resultFields: details.resultFields,
+        }
+      : {}),
+    ...(isPaginatedSearchProvider(ProviderClass.prototype) ? { pagination: true } : {}),
   };
 }
 

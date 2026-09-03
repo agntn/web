@@ -14,7 +14,13 @@ vi.mock("../../src/core/client.ts", () => ({
   })),
 }));
 
-import { AuthError, RateLimitError, WebError } from "../../src/core/errors.ts";
+import {
+  AuthError,
+  InvalidSearchContinuationError,
+  RateLimitError,
+  WebError,
+} from "../../src/core/errors.ts";
+import { isPaginatedSearchProvider } from "../../src/core/provider.ts";
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import "../../src/providers/mojeek.ts";
 
@@ -95,6 +101,54 @@ describe("mojeek provider", () => {
       since: "20240102",
       before: "20240203",
     });
+  });
+
+  it("derives continuation from the response offset when Mojeek normalizes the request", async () => {
+    mockGetJSON.mockResolvedValueOnce({
+      response: {
+        status: "OK",
+        head: { query: "independent search", start: 10, return: 5, results: 100 },
+        results: [mojeekResponse.response.results[0]],
+      },
+    });
+    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    if (!isPaginatedSearchProvider(provider)) throw new Error("Mojeek must support pagination");
+
+    const page = await provider.searchPage("independent search", { maxResults: 5 }, "8");
+
+    expect(new URL(mockGetJSON.mock.calls[0][0]).searchParams.get("s")).toBe("8");
+    expect(page.continuation).toBe("15");
+  });
+
+  it("continues from the returned result offset and reports the terminal page", async () => {
+    mockGetJSON.mockResolvedValueOnce({
+      response: {
+        status: "OK",
+        head: { query: "independent search", start: 8, return: 1, results: 8 },
+        results: [mojeekResponse.response.results[0]],
+      },
+    });
+    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    if (!isPaginatedSearchProvider(provider)) throw new Error("Mojeek must support pagination");
+
+    const page = await provider.searchPage("independent search", { maxResults: 1 }, "8");
+
+    expect(new URL(mockGetJSON.mock.calls[0][0]).searchParams.get("s")).toBe("8");
+    expect(page.continuation).toBeUndefined();
+  });
+
+  it("rejects result offsets beyond Mojeek's result window before the request", async () => {
+    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    if (!isPaginatedSearchProvider(provider)) throw new Error("Mojeek must support pagination");
+
+    await provider.searchPage("independent search", undefined, "1000");
+    expect(new URL(mockGetJSON.mock.calls[0][0]).searchParams.get("s")).toBe("1000");
+
+    mockGetJSON.mockClear();
+    await expect(provider.searchPage("independent search", undefined, "1001")).rejects.toThrow(
+      InvalidSearchContinuationError,
+    );
+    expect(mockGetJSON).not.toHaveBeenCalled();
   });
 
   it("maps search results and native metadata", async () => {

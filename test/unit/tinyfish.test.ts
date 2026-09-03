@@ -45,7 +45,7 @@ vi.mock("../../src/core/client.ts", () => ({
 
 import { Client } from "../../src/core/client.ts";
 import { AuthError, HTTPError, InvalidProviderUrlError, WebError } from "../../src/core/errors.ts";
-import { isReadProvider } from "../../src/core/provider.ts";
+import { isPaginatedSearchProvider, isReadProvider } from "../../src/core/provider.ts";
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import type { ProviderConfig } from "../../src/core/types.ts";
 import "../../src/providers/index.ts";
@@ -172,6 +172,20 @@ describe("tinyfish provider", () => {
         metadata: { position: 1, siteName: "example.com", publisher: "Example" },
       },
     ]);
+  });
+
+  it("continues with TinyFish page state and stops at its documented maximum", async () => {
+    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    if (!isPaginatedSearchProvider(provider)) throw new Error("TinyFish must paginate");
+
+    const first = await provider.searchPage("web agents");
+    mockGetJSON.mockResolvedValueOnce({ ...searchResponse, page: 10 });
+    const last = await provider.searchPage("web agents", undefined, "10");
+
+    expect(first.continuation).toBe("1");
+    expect(first.continuationStatus).toBe("unknown");
+    expect(new URL(mockGetJSON.mock.calls[1][0]).searchParams.get("page")).toBe("10");
+    expect(last.continuation).toBeUndefined();
   });
 
   it("preserves research metadata", async () => {

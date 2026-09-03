@@ -6,6 +6,7 @@ import {
   type SearchAllEvidence,
   type SearchAllResult,
   type SearchProviderMetadata,
+  type SearchProviderPagination,
   type SearchProviderResult,
 } from "./all.ts";
 import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
@@ -14,6 +15,8 @@ import { hasSearchFilterWarning, type SearchFilterReport } from "./search-filter
 import type {
   ReadonlySearchResult,
   ReadResult,
+  SearchPageOptions,
+  SearchPagination,
   SearchRequestOptions,
   SearchResult,
 } from "./types.ts";
@@ -22,7 +25,7 @@ import type {
 export const MAX_BATCH_ITEMS = 10;
 
 /** Shared search options applied to every query in a batch. */
-export type SearchBatchOptions = SearchRequestOptions & {
+export type SearchBatchOptions = SearchPageOptions & {
   readonly provider?: string;
 };
 
@@ -33,6 +36,8 @@ export type SearchBatchItem =
       readonly provider: string;
       readonly results: readonly (SearchResult | SearchAllResult)[];
       readonly filterReports: readonly SearchFilterReport[];
+      readonly pagination?: SearchPagination;
+      readonly providerPagination?: readonly SearchProviderPagination[];
       readonly providerMetadata?: readonly SearchProviderMetadata[];
       readonly attempts?: readonly string[];
       readonly failures?: readonly ProviderFailure[];
@@ -78,7 +83,10 @@ export async function searchBatch(
 ): Promise<readonly SearchBatchItem[]> {
   validateBatch(queries, "query", EmptyQueryError);
 
-  const { provider: requestedProvider, ...searchOptions } = options ?? {};
+  const { provider: requestedProvider, continuation, ...searchOptions } = options ?? {};
+  if (continuation !== undefined) {
+    throw new TypeError("continuation is only supported for a single query");
+  }
   if (requestedProvider === "all") {
     return mapSearchOutcomes(
       await settleBatch(queries, (query) => searchAllForBatch(query, searchOptions)),
@@ -172,6 +180,8 @@ interface BatchSearchResult {
   readonly provider: string;
   readonly results: readonly (ReadonlySearchResult | ReadonlySearchAllResult)[];
   readonly filterReports: readonly SearchFilterReport[];
+  readonly pagination?: SearchPagination;
+  readonly providerPagination?: readonly SearchProviderPagination[];
   readonly providerMetadata?: readonly SearchProviderMetadata[];
   readonly attempts?: readonly string[];
   readonly failures?: readonly ProviderFailure[];
@@ -196,6 +206,7 @@ async function searchAllForBatch(
     provider: "all",
     results: response.results,
     filterReports: response.filterReports,
+    providerPagination: response.providerPagination,
     ...(response.providerMetadata === undefined
       ? {}
       : { providerMetadata: response.providerMetadata }),
@@ -211,6 +222,7 @@ function singleBatchResult(response: ReadonlySearchProviderResult): BatchSearchR
     provider,
     results: response.results,
     filterReports,
+    pagination: response.pagination,
     ...(response.metadata === undefined
       ? {}
       : { providerMetadata: [{ provider, metadata: response.metadata }] }),
@@ -253,6 +265,12 @@ function mapSearchOutcomes(
               : mutableSearchResult(result),
           ),
           filterReports: outcome.value.filterReports,
+          ...(outcome.value.pagination === undefined
+            ? {}
+            : { pagination: outcome.value.pagination }),
+          ...(outcome.value.providerPagination === undefined
+            ? {}
+            : { providerPagination: outcome.value.providerPagination }),
           ...(outcome.value.providerMetadata === undefined
             ? {}
             : { providerMetadata: outcome.value.providerMetadata }),

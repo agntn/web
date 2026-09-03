@@ -27,8 +27,10 @@ import type {
   SearchBatchItem,
   SearchFilterName,
   SearchFilterReport,
+  SearchPageOptions,
+  SearchPagination,
   SearchProviderMetadata,
-  SearchRequestOptions,
+  SearchProviderPagination,
   SearchResult,
 } from "../../../src/index.ts";
 
@@ -36,11 +38,12 @@ type SearchSingleDetails = {
   readonly mode: "single";
   readonly query: string;
   readonly provider: string;
-  readonly options: SearchRequestOptions;
+  readonly options: SearchPageOptions;
   readonly count: number;
   readonly results: readonly SearchResult[];
   readonly ignoredFilters: readonly SearchFilterName[];
   readonly undeclaredFilters: readonly SearchFilterName[];
+  readonly pagination: SearchPagination;
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly attempts?: readonly string[];
   readonly failures?: readonly ProviderFailure[];
@@ -49,12 +52,13 @@ type SearchSingleDetails = {
 type SearchAllDetails = {
   readonly mode: "all";
   readonly query: string;
-  readonly options: SearchRequestOptions;
+  readonly options: SearchPageOptions;
   readonly count: number;
   readonly results: readonly SearchAllResult[];
   readonly successfulProviders: readonly string[];
   readonly errors: { provider: string; error: string }[];
   readonly filterReports: readonly SearchFilterReport[];
+  readonly providerPagination: readonly SearchProviderPagination[];
   readonly providerMetadata?: readonly SearchProviderMetadata[];
 };
 
@@ -62,7 +66,7 @@ type SearchBatchDetails = {
   readonly mode: "batch";
   readonly queries: readonly string[];
   readonly provider?: string;
-  readonly options: SearchRequestOptions;
+  readonly options: SearchPageOptions;
   readonly outcomes: readonly SearchBatchItem[];
 };
 
@@ -137,6 +141,7 @@ const READ_PROVIDER_HINT =
 const MAX_RESULTS_HARD_CAP = 20;
 const MAX_BATCH_ITEMS_HARD_CAP = 10;
 const DEFAULT_MAX_RESULTS = 10;
+const MAX_SEARCH_CONTINUATION_CHARACTERS = 4_096;
 const DEFAULT_READ_MAX_CHARS = 20_000;
 const MAX_READ_MAX_CHARS = 200_000;
 const MODEL_RESULT_MAX_CHARACTERS = 4_000;
@@ -156,6 +161,12 @@ const searchParameters = Type.Object({
       description: `Maximum results to return. Defaults to ${DEFAULT_MAX_RESULTS}.`,
       minimum: 1,
       maximum: MAX_RESULTS_HARD_CAP,
+    }),
+  ),
+  continuation: Type.Optional(
+    Type.String({
+      description: "Opaque token returned by a previous single search.",
+      maxLength: MAX_SEARCH_CONTINUATION_CHARACTERS,
     }),
   ),
   highlights: Type.Optional(
@@ -303,6 +314,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Use web_providers when selecting a provider by rich result fields, filters, or result limits.",
       "Request summaries or full text deliberately because generated and extracted content can increase cost and context size.",
       "Pass maxResults conservatively (5-10) unless the user asks for more.",
+      "Use a returned search continuation only with the same single query, provider, and options; an unknown state means the next page must be probed.",
       "Forward domain, source, category, and date filters when the user gives concrete values.",
     ],
     parameters: searchParameters,
@@ -310,8 +322,9 @@ export default function webExtension(pi: ExtensionAPI) {
     async execute(_toolCallId, params): Promise<AgentToolResult<SearchDetails>> {
       const web = await loadWeb();
       const providerName = normalizeSearchProviderInput(params.provider, web.searchProviders());
-      const searchOptions: SearchRequestOptions = stripUndefined({
+      const searchOptions: SearchPageOptions = stripUndefined({
         maxResults: params.maxResults,
+        continuation: params.continuation,
         highlights: params.highlights,
         summary: params.summary,
         fullText: params.fullText,
@@ -365,6 +378,7 @@ export default function webExtension(pi: ExtensionAPI) {
                   results,
                   response.errors,
                   response.filterReports,
+                  response.providerPagination,
                   response.providerMetadata ?? [],
                 ),
               ),
@@ -382,6 +396,7 @@ export default function webExtension(pi: ExtensionAPI) {
               error: e.error.message,
             })),
             filterReports: response.filterReports,
+            providerPagination: response.providerPagination,
             ...(response.providerMetadata === undefined
               ? {}
               : { providerMetadata: response.providerMetadata }),
@@ -405,7 +420,10 @@ export default function webExtension(pi: ExtensionAPI) {
           content: [
             {
               type: "text",
-              text: withHeader(header, formatSingleResults(response.results, response.metadata)),
+              text: withHeader(
+                header,
+                formatSingleResults(response.results, response.pagination, response.metadata),
+              ),
             },
           ],
           details: {
@@ -417,6 +435,7 @@ export default function webExtension(pi: ExtensionAPI) {
             results: response.results,
             ignoredFilters: response.ignoredFilters,
             undeclaredFilters: response.undeclaredFilters,
+            pagination: response.pagination,
             ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
           },
         };
@@ -436,7 +455,10 @@ export default function webExtension(pi: ExtensionAPI) {
         content: [
           {
             type: "text",
-            text: withHeader(header, formatSingleResults(response.results, response.metadata)),
+            text: withHeader(
+              header,
+              formatSingleResults(response.results, response.pagination, response.metadata),
+            ),
           },
         ],
         details: {
@@ -448,6 +470,7 @@ export default function webExtension(pi: ExtensionAPI) {
           results: response.results,
           ignoredFilters: response.ignoredFilters,
           undeclaredFilters: response.undeclaredFilters,
+          pagination: response.pagination,
           attempts: response.attempts,
           failures: response.failures,
           ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
@@ -587,7 +610,8 @@ export default function webExtension(pi: ExtensionAPI) {
       const lines = statuses.map((s) => formatProviderStatus(s));
       const runtimeLine = `web ${web.runtimeInfo.version} build ${web.runtimeInfo.buildId}, started ${web.runtimeInfo.processStartedAt}`;
       const readLimit = web.packageCapabilities.read.outputLimit;
-      const packageLine = `portable read content: ${readLimit.option} defaults to ${readLimit.agentDefault}, max ${readLimit.agentMaximum}; continuation=${web.packageCapabilities.read.continuation.option}`;
+      const searchContinuation = web.packageCapabilities.search.continuation;
+      const packageLine = `search continuation=${searchContinuation.option} (${searchContinuation.scope}); portable read content: ${readLimit.option} defaults to ${readLimit.agentDefault}, max ${readLimit.agentMaximum}; continuation=${web.packageCapabilities.read.continuation.option}`;
       return {
         content: [
           {
@@ -731,6 +755,7 @@ function normalizeReadFormat(format: string | undefined): ReadOptions["format"] 
 
 type SearchOptionValues = {
   readonly maxResults?: number;
+  readonly continuation?: string;
   readonly highlights?: boolean;
   readonly summary?: boolean;
   readonly fullText?: boolean;
@@ -743,9 +768,10 @@ type SearchOptionValues = {
   readonly category?: string;
 };
 
-function stripUndefined(input: SearchOptionValues): SearchRequestOptions {
+function stripUndefined(input: SearchOptionValues): SearchPageOptions {
   return {
     ...(input.maxResults === undefined ? {} : { maxResults: input.maxResults }),
+    ...(input.continuation === undefined ? {} : { continuation: input.continuation }),
     ...(input.highlights === undefined ? {} : { highlights: input.highlights }),
     ...(input.summary === undefined ? {} : { summary: input.summary }),
     ...(input.fullText === undefined ? {} : { fullText: input.fullText }),
@@ -758,7 +784,7 @@ function stripUndefined(input: SearchOptionValues): SearchRequestOptions {
   };
 }
 
-function searchArrayOptions(input: SearchOptionValues): SearchRequestOptions {
+function searchArrayOptions(input: SearchOptionValues): SearchPageOptions {
   return {
     ...(input.includeDomains === undefined ? {} : { includeDomains: input.includeDomains }),
     ...(input.excludeDomains === undefined ? {} : { excludeDomains: input.excludeDomains }),
@@ -856,6 +882,8 @@ type SearchBatchItemView =
       readonly provider: string;
       readonly results: readonly SearchResultView[];
       readonly filterReports: readonly SearchFilterReport[];
+      readonly pagination?: SearchPagination;
+      readonly providerPagination?: readonly SearchProviderPagination[];
       readonly providerMetadata?: readonly SearchProviderMetadata[];
     };
 type ReadBatchItemView =
@@ -960,9 +988,11 @@ function hasResultProvenance(result: SearchResultView): result is SearchAllResul
 
 function formatSingleResults(
   results: readonly SearchResultView[],
+  pagination: SearchPagination,
   metadata: Readonly<Record<string, unknown>> | undefined,
 ): readonly string[] {
   const lines = results.length === 0 ? ["No results."] : [...formatResults(results)];
+  lines.push(...formatPagination(pagination));
   if (metadata !== undefined) {
     lines.push("", `Provider metadata: ${formatMetadataValue(metadata)}`);
   }
@@ -1012,13 +1042,18 @@ function formatAllResults(
   results: readonly SearchAllResultView[],
   errors: readonly ProviderErrorView[],
   filterReports: readonly SearchFilterReport[],
+  providerPagination: readonly SearchProviderPagination[],
   providerMetadata: readonly SearchProviderMetadata[],
 ): readonly string[] {
   const lines =
     results.length === 0
       ? ["No results."]
       : results.map((result, index) => formatSearchAllModelResult(result, index));
-  lines.push(...formatFilterReports(filterReports), ...formatProviderMetadata(providerMetadata));
+  lines.push(
+    ...formatFilterReports(filterReports),
+    ...formatProviderPaginations(providerPagination),
+    ...formatProviderMetadata(providerMetadata),
+  );
   if (errors.length > 0) {
     lines.push("", "Provider errors:");
     for (const e of errors) {
@@ -1038,6 +1073,8 @@ function formatSearchBatch(outcomes: readonly SearchBatchItemView[]): string {
           ? ["No results."]
           : formatBatchResults(outcome.results, outcome.provider)),
         ...formatFilterReports(outcome.filterReports),
+        ...(outcome.pagination === undefined ? [] : formatPagination(outcome.pagination)),
+        ...formatProviderPaginations(outcome.providerPagination ?? []),
         ...formatProviderMetadata(outcome.providerMetadata ?? []),
       ];
       return withHeader(`${header} [provider=${outcome.provider}]`, lines);
@@ -1059,6 +1096,36 @@ function formatFilterReports(reports: readonly SearchFilterReport[]): readonly s
     }
   }
   return lines;
+}
+
+function formatPagination(pagination: SearchPagination): readonly string[] {
+  return pagination.status === "next" || pagination.status === "unknown"
+    ? [
+        "",
+        `Continuation (${pagination.status}): ${sanitizeTerminalText(pagination.continuation, MAX_SEARCH_CONTINUATION_CHARACTERS)}`,
+      ]
+    : [];
+}
+
+function formatProviderPaginations(
+  records: readonly SearchProviderPagination[],
+): readonly string[] {
+  const continuing = records.filter(
+    (
+      record,
+    ): record is SearchProviderPagination & {
+      readonly pagination: Extract<SearchPagination, { readonly status: "next" | "unknown" }>;
+    } => record.pagination.status === "next" || record.pagination.status === "unknown",
+  );
+  if (continuing.length === 0) return [];
+  return [
+    "",
+    "Provider continuations:",
+    ...continuing.map(
+      ({ provider, pagination }) =>
+        `  ${sanitizeTerminalText(provider, 80)}: ${sanitizeTerminalText(pagination.continuation, MAX_SEARCH_CONTINUATION_CHARACTERS)}`,
+    ),
+  ];
 }
 
 function formatProviderMetadata(records: readonly SearchProviderMetadata[]): readonly string[] {

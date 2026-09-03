@@ -35,10 +35,16 @@ import {
   EmptyQueryError,
   HTTPError,
   InvalidDateFilterError,
+  InvalidSearchContinuationError,
   RateLimitError,
 } from "../../src/core/errors.ts";
 import { ProviderFallbackError } from "../../src/core/fallback.ts";
 import { searchBatch } from "../../src/core/batch.ts";
+import {
+  encodeSearchContinuation,
+  MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH,
+  MAX_SEARCH_CONTINUATION_LENGTH,
+} from "../../src/core/search-continuation.ts";
 
 import "../../src/providers/index.ts";
 
@@ -546,6 +552,9 @@ describe("searchAllDetailed", () => {
     expect(response.results).toHaveLength(1);
     expect(response.errors).toHaveLength(0);
     expect(response.filterReports).toEqual([]);
+    expect(response.providerPagination).toEqual([
+      { provider: "exa", pagination: { status: "unsupported" } },
+    ]);
   });
 
   it("keeps response metadata with provider provenance in fanout", async () => {
@@ -569,6 +578,180 @@ describe("searchAllDetailed", () => {
       ignoredFilters: [],
       undeclaredFilters: [],
     });
+  });
+
+  it("publishes bounds that accommodate provider-native continuation state", () => {
+    const continuation = encodeSearchContinuation(
+      "custom",
+      "test",
+      {},
+      "x".repeat(MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH),
+    );
+
+    expect(continuation.length).toBeLessThanOrEqual(MAX_SEARCH_CONTINUATION_LENGTH);
+    expect(() =>
+      encodeSearchContinuation(
+        "custom",
+        "test",
+        {},
+        "x".repeat(MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH + 1),
+      ),
+    ).toThrow(InvalidSearchContinuationError);
+  });
+
+  it("returns and consumes an opaque continuation for one provider", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON
+      .mockResolvedValueOnce({
+        query: { more_results_available: true },
+        web: {
+          results: [
+            {
+              url: "https://page-one.example",
+              title: "Page one",
+              description: "First page",
+            },
+          ],
+        },
+      })
+      .mockResolvedValueOnce({
+        query: { more_results_available: false },
+        web: {
+          results: [
+            {
+              url: "https://page-two.example",
+              title: "Page two",
+              description: "Second page",
+            },
+          ],
+        },
+      });
+
+    const first = await searchProviderDetailed("brave", "test", { maxResults: 1 });
+
+    expect(first.pagination.status).toBe("next");
+    if (first.pagination.status !== "next") throw new Error("expected another page");
+    expect(first.pagination.continuation).toBeTypeOf("string");
+
+    const second = await searchProviderDetailed("brave", "test", {
+      maxResults: 1,
+      continuation: first.pagination.continuation,
+    });
+
+    expect(new URL(mockGetJSON.mock.calls[1][0]).searchParams.get("offset")).toBe("1");
+    expect(second.results[0]?.url).toBe("https://page-two.example");
+    expect(second.pagination).toEqual({ status: "end" });
+  });
+
+  it("continues one provider from a fanout token with the same default page size", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON
+      .mockResolvedValueOnce({
+        query: { more_results_available: true },
+        web: { results: [] },
+      })
+      .mockResolvedValueOnce({
+        query: { more_results_available: false },
+        web: { results: [] },
+      });
+    const fanout = await searchAllDetailed("test", { providers: ["brave"] });
+    const page = fanout.providerPagination[0]?.pagination;
+    if (page?.status !== "next") throw new Error("expected another page");
+
+    const continued = await searchProviderDetailed("brave", "test", {
+      continuation: page.continuation,
+    });
+
+    expect(new URL(mockGetJSON.mock.calls[1][0]).searchParams.get("offset")).toBe("1");
+    expect(continued.pagination).toEqual({ status: "end" });
+  });
+
+  it("keeps uncertain provider paging distinct from an authoritative next page", async () => {
+    mockGetJSON.mockResolvedValueOnce({
+      results: [
+        {
+          title: "Result",
+          url: "https://example.com",
+          content: "Snippet",
+          engine: "google",
+          engines: ["google"],
+          score: 1,
+          category: "general",
+        },
+      ],
+      query: "test",
+    });
+
+    const response = await searchProviderDetailed("searxng", "test");
+
+    expect(response.pagination.status).toBe("unknown");
+    if (response.pagination.status !== "unknown") throw new Error("expected uncertain paging");
+    expect(response.pagination.continuation).toBeTypeOf("string");
+  });
+
+  it("rejects a continuation after the query changes without calling a provider", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON.mockResolvedValueOnce({
+      query: { more_results_available: true },
+      web: { results: [] },
+    });
+    const first = await searchProviderDetailed("brave", "original", { maxResults: 1 });
+    if (first.pagination.status !== "next") throw new Error("expected another page");
+
+    await expect(
+      searchProviderDetailed("brave", "changed", {
+        maxResults: 1,
+        continuation: first.pagination.continuation,
+      }),
+    ).rejects.toThrow(InvalidSearchContinuationError);
+    expect(mockGetJSON).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a recomputed token with provider state outside the accepted range before the request", async () => {
+    process.env.MOJEEK_API_KEY = "test-mojeek";
+    const continuation = encodeSearchContinuation("mojeek", "test", {}, "1001");
+
+    await expect(searchProviderDetailed("mojeek", "test", { continuation })).rejects.toThrow(
+      InvalidSearchContinuationError,
+    );
+    expect(mockGetJSON).not.toHaveBeenCalled();
+  });
+
+  it("rejects a corrupted continuation before calling a provider", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON.mockResolvedValueOnce({
+      query: { more_results_available: true },
+      web: { results: [] },
+    });
+    const first = await searchProviderDetailed("brave", "test", { maxResults: 1 });
+    if (first.pagination.status !== "next") throw new Error("expected another page");
+    const index = Math.floor(first.pagination.continuation.length / 2);
+    const current = first.pagination.continuation[index];
+    const corrupted = `${first.pagination.continuation.slice(0, index)}${current === "A" ? "B" : "A"}${first.pagination.continuation.slice(index + 1)}`;
+
+    await expect(
+      searchProviderDetailed("brave", "test", { maxResults: 1, continuation: corrupted }),
+    ).rejects.toThrow(InvalidSearchContinuationError);
+    expect(mockGetJSON).toHaveBeenCalledOnce();
+  });
+
+  it("rejects one continuation for fanout and batch searches", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON.mockResolvedValueOnce({
+      query: { more_results_available: true },
+      web: { results: [] },
+    });
+    const first = await searchProviderDetailed("brave", "test", { maxResults: 1 });
+    if (first.pagination.status !== "next") throw new Error("expected another page");
+    const continuation = first.pagination.continuation;
+
+    await expect(
+      searchAllDetailed("test", { providers: ["brave"], maxResults: 1, continuation }),
+    ).rejects.toThrow("continuation is not supported with provider=all");
+    await expect(
+      searchBatch(["test"], { provider: "brave", maxResults: 1, continuation }),
+    ).rejects.toThrow("continuation is only supported for a single query");
+    expect(mockGetJSON).toHaveBeenCalledOnce();
   });
 
   it("defaults the global result cap to ten", async () => {
@@ -778,6 +961,34 @@ describe("searchWithFallback", () => {
     else process.env.BRAVE_API_KEY = savedBraveApiKey;
     if (savedFirecrawlApiKey === undefined) delete process.env.FIRECRAWL_API_KEY;
     else process.env.FIRECRAWL_API_KEY = savedFirecrawlApiKey;
+  });
+
+  it("pins an automatic continuation to the provider that issued it", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON.mockResolvedValueOnce({
+      query: { more_results_available: true },
+      web: { results: [] },
+    });
+    const first = await searchWithFallback("test", { maxResults: 1 });
+    if (first.pagination.status !== "next") throw new Error("expected another page");
+
+    process.env.EXA_API_KEY = "test-exa";
+    mockGetJSON.mockResolvedValueOnce({
+      query: { more_results_available: false },
+      web: { results: [] },
+    });
+    const second = await searchWithFallback("test", {
+      maxResults: 1,
+      continuation: first.pagination.continuation,
+    });
+
+    expect(second).toMatchObject({
+      provider: "brave",
+      attempts: ["brave"],
+      failures: [],
+      pagination: { status: "end" },
+    });
+    expect(mockPostJSON).not.toHaveBeenCalled();
   });
 
   it("returns the provider and diagnostics after an automatic 402", async () => {

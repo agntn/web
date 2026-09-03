@@ -22,7 +22,8 @@ import {
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
-import { searchFilterNames, type SearchRequestOptions } from "./core/types.ts";
+import { MAX_SEARCH_CONTINUATION_LENGTH } from "./core/search-continuation.ts";
+import { searchFilterNames, type SearchPageOptions } from "./core/types.ts";
 import "./providers/index.ts";
 import { runtimeInfo, version } from "./version.ts";
 
@@ -72,11 +73,22 @@ const providerFailureSchema = strictObject({
   provider: Type.String(),
   error: Type.String(),
 });
+const searchPaginationSchema = Type.Union([
+  strictObject({ status: Type.Literal("next"), continuation: Type.String() }),
+  strictObject({ status: Type.Literal("unknown"), continuation: Type.String() }),
+  strictObject({ status: Type.Literal("end") }),
+  strictObject({ status: Type.Literal("unsupported") }),
+]);
+const searchProviderPaginationSchema = strictObject({
+  provider: Type.String(),
+  pagination: searchPaginationSchema,
+});
 const searchProviderResultSchema = strictObject({
   provider: Type.String(),
   results: Type.Array(searchResultSchema),
   ignoredFilters: Type.Array(searchFilterSchema),
   undeclaredFilters: Type.Array(searchFilterSchema),
+  pagination: searchPaginationSchema,
   metadata: Type.Optional(unknownRecordSchema),
   attempts: Type.Optional(Type.Array(Type.String())),
   failures: Type.Optional(Type.Array(providerFailureSchema)),
@@ -86,6 +98,7 @@ const searchAllResponseSchema = strictObject({
   successfulProviders: Type.Array(Type.String()),
   errors: Type.Array(strictObject({ provider: Type.String(), error: Type.String() })),
   filterReports: Type.Array(searchFilterReportSchema),
+  providerPagination: Type.Array(searchProviderPaginationSchema),
   providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
 });
 const searchBatchItemSchema = Type.Union([
@@ -94,6 +107,7 @@ const searchBatchItemSchema = Type.Union([
     provider: namedSearchProviderSchema,
     results: Type.Array(searchResultSchema),
     filterReports: Type.Array(searchFilterReportSchema),
+    pagination: searchPaginationSchema,
     providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
     attempts: Type.Optional(Type.Array(Type.String())),
     failures: Type.Optional(Type.Array(providerFailureSchema)),
@@ -103,6 +117,7 @@ const searchBatchItemSchema = Type.Union([
     provider: Type.Literal("all"),
     results: Type.Array(searchAllResultSchema),
     filterReports: Type.Array(searchFilterReportSchema),
+    providerPagination: Type.Array(searchProviderPaginationSchema),
     providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
   }),
   strictObject({
@@ -188,6 +203,7 @@ const providerCapabilitiesSchema = strictObject({
     filters: Type.Optional(Type.Array(searchFilterSchema)),
     categories: Type.Optional(Type.Array(Type.String())),
     contentOptions: Type.Optional(Type.Array(Type.String())),
+    pagination: Type.Optional(Type.Boolean()),
     resultLimit: Type.Optional(providerResultLimitSchema),
     resultFields: Type.Optional(Type.Array(Type.String())),
   }),
@@ -211,6 +227,15 @@ const providerStatusSchema = strictObject({
   capabilities: providerCapabilitiesSchema,
 });
 const packageCapabilitiesSchema = strictObject({
+  search: strictObject({
+    continuation: strictObject({
+      option: Type.Literal("continuation"),
+      opaque: Type.Boolean(),
+      maximum: Type.Integer({ minimum: 1 }),
+      providerStateMaximum: Type.Integer({ minimum: 1 }),
+      scope: Type.Literal("single-provider-query"),
+    }),
+  }),
   read: strictObject({
     outputLimit: strictObject({
       option: Type.Literal("maxChars"),
@@ -253,7 +278,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_search",
       title: webToolTitle("web_search"),
       description:
-        'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored.',
+        'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored. Single searches may continue with an opaque token bound to its provider.',
       inputSchema: Type.Object({
         query: Type.Union(
           [
@@ -275,6 +300,12 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
             description: `Max results (default: 10, max: ${MAX_RESULTS_HARD_CAP})`,
             minimum: 1,
             maximum: MAX_RESULTS_HARD_CAP,
+          }),
+        ),
+        continuation: Type.Optional(
+          Type.String({
+            description: "Opaque token returned by a previous single search.",
+            maxLength: MAX_SEARCH_CONTINUATION_LENGTH,
           }),
         ),
         highlights: Type.Optional(
@@ -477,8 +508,18 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
     throw new TypeError(`maxResults must be at most ${MAX_RESULTS_HARD_CAP}`);
   }
 
+  const continuation = stringArg("continuation", args.continuation);
+  if (continuation !== undefined && continuation.length > MAX_SEARCH_CONTINUATION_LENGTH) {
+    throw new TypeError(
+      `continuation must be at most ${MAX_SEARCH_CONTINUATION_LENGTH} characters`,
+    );
+  }
+  if (Array.isArray(query) && continuation !== undefined) {
+    throw new TypeError("continuation is only supported for a single query");
+  }
   const searchOptions = {
     maxResults,
+    continuation,
     highlights: boolArg("highlights", args.highlights),
     summary: boolArg("summary", args.summary),
     fullText: boolArg("fullText", args.fullText),
@@ -497,7 +538,7 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
 async function runSearch(
   query: string | readonly string[],
   requestedProvider: string | undefined,
-  searchOptions: SearchRequestOptions,
+  searchOptions: SearchPageOptions,
 ): Promise<unknown> {
   if (typeof query !== "string") {
     return searchBatch(query, { provider: requestedProvider, ...searchOptions });

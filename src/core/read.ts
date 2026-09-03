@@ -15,6 +15,10 @@ import {
 } from "./fallback.ts";
 import { createReadProvider, has, readProviders } from "./registry.ts";
 import { isProviderConfigured } from "./resolve.ts";
+import {
+  MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH,
+  MAX_SEARCH_CONTINUATION_LENGTH,
+} from "./search-continuation.ts";
 
 export const readProviderNames = ["jina", "context", "firecrawl", "tinyfish"] as const;
 export type ReadProviderName = (typeof readProviderNames)[number];
@@ -27,6 +31,15 @@ export const MAX_AGENT_READ_CHARS = 200_000;
 
 /** Package guarantees that apply after every provider returns. */
 export const packageCapabilities = {
+  search: {
+    continuation: {
+      option: "continuation",
+      opaque: true,
+      maximum: MAX_SEARCH_CONTINUATION_LENGTH,
+      providerStateMaximum: MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH,
+      scope: "single-provider-query",
+    },
+  },
   read: {
     outputLimit: {
       option: "maxChars",
