@@ -1,4 +1,4 @@
-import { isAvailabilityProvider } from "../../src/core/provider.ts";
+import { isAvailabilityProvider, isPaginatedSearchProvider } from "../../src/core/provider.ts";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 const mockGetJSON =
@@ -110,6 +110,31 @@ describe("searxng provider", () => {
       expect(url).toContain("q=test+query");
       expect(url).toContain("format=json");
       expect(url).toContain("pageno=1");
+    });
+
+    it("marks a nonempty page as requiring an uncertain probe of the next page", async () => {
+      const provider = createSearchProvider("searxng", {});
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SearXNG must paginate");
+
+      await expect(provider.searchPage("test query")).resolves.toMatchObject({
+        continuation: "2",
+        continuationStatus: "unknown",
+      });
+    });
+
+    it("uses the continued page number and ends after an empty page", async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        results: [],
+        number_of_results: 100,
+        query: "test query",
+      });
+      const provider = createSearchProvider("searxng", {});
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SearXNG must paginate");
+
+      const page = await provider.searchPage("test query", undefined, "2");
+
+      expect(new URL(mockGetJSON.mock.calls[0][0]).searchParams.get("pageno")).toBe("2");
+      expect(page).toEqual({ results: [] });
     });
 
     it("maps result fields correctly", async () => {

@@ -10,6 +10,8 @@ export type {
   SearchResponse,
   SearchOptions,
   SearchRequestOptions,
+  SearchPageOptions,
+  SearchPagination,
   SearchFilterName,
   SearchFilterCapabilities,
   ImageSearchResult,
@@ -24,6 +26,7 @@ export {
   Provider,
   isSearchProvider,
   isDetailedSearchProvider,
+  isPaginatedSearchProvider,
   isImageSearchProvider,
   isReadProvider,
   isAvailabilityProvider,
@@ -46,6 +49,8 @@ export type {
   ReadOptionName,
   SearchProvider,
   DetailedSearchProvider,
+  PaginatedSearchProvider,
+  ProviderSearchPage,
   ImageSearchProvider,
   ReadProvider,
   AvailabilityProvider,
@@ -63,6 +68,7 @@ export {
   NoProviderConfiguredError,
   NoProviderAvailableError,
   EmptyQueryError,
+  InvalidSearchContinuationError,
   EmptyImageUrlError,
   InvalidImageUrlError,
   EmptyUrlError,
@@ -104,11 +110,16 @@ export type {
   SearchAllResult,
   SearchAllResponse,
   SearchProviderMetadata,
+  SearchProviderPagination,
   SearchProviderResult,
   SearchWithFallbackResult,
   ProviderError,
 } from "./core/all.ts";
 export type { SearchFilterReport } from "./core/search-filters.ts";
+export {
+  MAX_SEARCH_CONTINUATION_LENGTH,
+  MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH,
+} from "./core/search-continuation.ts";
 export { ProviderFallbackError } from "./core/fallback.ts";
 export type { FallbackOperation, ProviderFailure } from "./core/fallback.ts";
 

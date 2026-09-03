@@ -6,8 +6,12 @@ import type {
   SearchRequestOptions,
   SearchResult,
 } from "../core/types.ts";
-import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
-import { AuthError, normalizeError } from "../core/errors.ts";
+import {
+  Provider,
+  type ProviderCapabilityDetails,
+  type ProviderSearchPage,
+} from "../core/provider.ts";
+import { AuthError, InvalidSearchContinuationError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface SerpApiResult {
@@ -28,6 +32,9 @@ interface SerpApiSearchResponse {
     readonly status: string;
   };
   readonly organic_results?: readonly SerpApiResult[];
+  readonly serpapi_pagination?: {
+    readonly next?: string;
+  };
 }
 
 interface SerpApiVisualMatch {
@@ -82,10 +89,22 @@ class SerpApiProvider extends Provider {
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+    return (await this.searchPage(query, options)).results;
+  }
+
+  async searchPage(
+    query: string,
+    options?: SearchRequestOptions,
+    continuation?: string,
+  ): Promise<ProviderSearchPage> {
     try {
-      const url = `${this.baseURL}/search?engine=google&q=${encodeURIComponent(query)}&api_key=${this.apiKey}&num=${options?.maxResults ?? 10}`;
+      const start = serpApiStart(continuation);
+      const url = `${this.baseURL}/search?engine=google&q=${encodeURIComponent(query)}&api_key=${this.apiKey}&num=${options?.maxResults ?? 10}${start === undefined ? "" : `&start=${start}`}`;
       const response = await this.client.getJSON<SerpApiSearchResponse>(url);
-      return (response.organic_results ?? []).map(mapResult);
+      return {
+        results: (response.organic_results ?? []).map(mapResult),
+        ...serpApiContinuation(response.serpapi_pagination?.next),
+      };
     } catch (error) {
       throw normalizeError(error, "serpapi");
     }
@@ -109,6 +128,24 @@ class SerpApiProvider extends Provider {
     } catch (error) {
       throw normalizeError(error, "serpapi");
     }
+  }
+}
+
+function serpApiStart(continuation?: string): number | undefined {
+  if (continuation === undefined) return undefined;
+  if (!/^[1-9]\d*$/u.test(continuation)) throw new InvalidSearchContinuationError();
+  const start = Number(continuation);
+  if (!Number.isSafeInteger(start)) throw new InvalidSearchContinuationError();
+  return start;
+}
+
+function serpApiContinuation(next?: string): Record<string, string> {
+  if (next === undefined) return {};
+  try {
+    const start = new URL(next).searchParams.get("start");
+    return start === null ? {} : { continuation: String(serpApiStart(start)) };
+  } catch {
+    return {};
   }
 }
 

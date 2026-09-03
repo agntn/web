@@ -133,6 +133,7 @@ export function formatProviderCapabilities(
     `filters=${joinCapabilityValues(status.searchFilters) || "none"}`,
     optionalCapabilityList("categories", status.searchCategories),
     optionalCapabilityList("contentOptions", capabilities.search.contentOptions),
+    capabilities.search.pagination === true ? "pagination=continuation" : undefined,
     formatResultLimit("searchLimit", capabilities.search.resultLimit),
     formatResultLimit("imageLimit", capabilities.searchImage.resultLimit),
     optionalCapabilityList("resultFields", capabilities.search.resultFields),

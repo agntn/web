@@ -4,8 +4,12 @@ import type {
   SearchRequestOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
-import { normalizeError } from "../core/errors.ts";
+import {
+  Provider,
+  type ProviderCapabilityDetails,
+  type ProviderSearchPage,
+} from "../core/provider.ts";
+import { InvalidSearchContinuationError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface SearXNGResult {
@@ -71,11 +75,20 @@ class SearXNGProvider extends Provider {
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+    return (await this.searchPage(query, options)).results;
+  }
+
+  async searchPage(
+    query: string,
+    options?: SearchRequestOptions,
+    continuation?: string,
+  ): Promise<ProviderSearchPage> {
     try {
+      const page = searxngPage(continuation);
       const params = new URLSearchParams({
         q: query,
         format: "json",
-        pageno: "1",
+        pageno: String(page),
       });
 
       if (options?.category) {
@@ -84,18 +97,26 @@ class SearXNGProvider extends Provider {
 
       const url = `${this.baseURL}/search?${params.toString()}`;
       const response = await this.client.getJSON<SearXNGSearchResponse>(url);
+      const results = response.results.map(mapResult);
 
-      let results = response.results.map(mapResult);
-
-      if (options?.maxResults) {
-        results = results.slice(0, options.maxResults);
-      }
-
-      return results;
+      return {
+        results: options?.maxResults ? results.slice(0, options.maxResults) : results,
+        ...(response.results.length > 0
+          ? { continuation: String(page + 1), continuationStatus: "unknown" as const }
+          : {}),
+      };
     } catch (error) {
       throw normalizeError(error, "searxng");
     }
   }
+}
+
+function searxngPage(continuation?: string): number {
+  if (continuation === undefined) return 1;
+  if (!/^[1-9]\d*$/u.test(continuation)) throw new InvalidSearchContinuationError();
+  const page = Number(continuation);
+  if (!Number.isSafeInteger(page)) throw new InvalidSearchContinuationError();
+  return page;
 }
 
 function mapResult(result: SearXNGResult): SearchResult {

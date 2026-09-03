@@ -23,6 +23,7 @@ vi.mock("../../src/core/client.ts", () => ({
 
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import { WebError, AuthError, RateLimitError } from "../../src/core/errors.ts";
+import { isPaginatedSearchProvider } from "../../src/core/provider.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
 // Triggers self-registration of serpbase provider
@@ -98,6 +99,20 @@ describe("serpbase provider", () => {
       expect(url).toBe("https://api.serpbase.dev/google/search");
       expect(body).toEqual({ q: "test query", hl: "en", gl: "us", page: 1 });
       expect(headers).toEqual({ "X-API-Key": "test-key" });
+    });
+
+    it("continues with the next SerpBase page and ends on an empty response", async () => {
+      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SerpBase must paginate");
+
+      const first = await provider.searchPage("test query");
+      mockPostJSON.mockResolvedValueOnce({ ...serpBaseResponse, organic: [] });
+      const second = await provider.searchPage("test query", undefined, first.continuation);
+
+      expect(first.continuation).toBe("2");
+      expect(first.continuationStatus).toBe("unknown");
+      expect(mockPostJSON.mock.calls[1][1]).toMatchObject({ page: 2 });
+      expect(second.continuation).toBeUndefined();
     });
 
     it("maps organic result fields correctly", async () => {

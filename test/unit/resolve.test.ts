@@ -200,6 +200,7 @@ describe("resolve", () => {
           supported: true,
           filters: [],
           contentOptions: [],
+          pagination: true,
           resultLimit: { default: 10, maximum: 20 },
           resultFields: ["favicon", "text"],
         },
@@ -289,6 +290,7 @@ describe("resolve", () => {
         search: {
           supported: true,
           contentOptions: [],
+          pagination: true,
           resultLimit: { default: 10 },
           resultFields: ["score", "publishedDate", "image", "metadata"],
         },
@@ -300,6 +302,7 @@ describe("resolve", () => {
           supported: true,
           filters: [],
           contentOptions: [],
+          pagination: true,
           resultLimit: { default: 10 },
           resultFields: ["publishedDate", "image", "favicon", "metadata"],
         },
@@ -313,6 +316,7 @@ describe("resolve", () => {
         search: {
           supported: true,
           contentOptions: [],
+          pagination: true,
           resultLimit: { default: 10, maximum: 20 },
           resultFields: ["publishedDate", "image", "favicon", "metadata"],
         },
@@ -329,6 +333,7 @@ describe("resolve", () => {
         search: {
           supported: true,
           contentOptions: [],
+          pagination: true,
           resultLimit: { default: 10 },
           resultFields: ["publishedDate", "author", "metadata"],
         },
@@ -342,6 +347,7 @@ describe("resolve", () => {
         search: {
           supported: true,
           contentOptions: [],
+          pagination: true,
           resultFields: ["score", "publishedDate", "image", "metadata"],
         },
       });

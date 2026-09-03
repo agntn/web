@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { AgentToolResult, ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import type { ReadOptions, SearchRequestOptions } from "../../../src/index.ts";
+import type { ReadOptions, SearchPageOptions } from "../../../src/index.ts";
 
 import {
   createViewportText,
@@ -33,6 +33,7 @@ function loadWeb(): Promise<WebModule> {
 
 const MAX_RESULTS = 20;
 const MAX_BATCH_ITEMS = 10;
+const MAX_SEARCH_CONTINUATION_CHARACTERS = 4_096;
 const DEFAULT_READ_MAX_CHARS = 20_000;
 const MAX_READ_MAX_CHARS = 200_000;
 
@@ -86,6 +87,12 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         description: "Maximum results to return. Defaults to 10.",
         minimum: 1,
         maximum: MAX_RESULTS,
+      }),
+    ),
+    continuation: Type.Optional(
+      Type.String({
+        description: "Opaque token returned by a previous single search.",
+        maxLength: MAX_SEARCH_CONTINUATION_CHARACTERS,
       }),
     ),
     highlights: Type.Optional(
@@ -190,15 +197,16 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     name: "web_search",
     label: "Web Search",
     description:
-      "Search one query or an independent batch through a selected provider, automatic fallback, or every configured provider.",
+      "Search one query or an independent batch through a selected provider, automatic fallback, or every configured provider. Continue one provider's result sequence with its opaque token.",
     parameters: searchParameters,
     approval: "read",
     ...renderers("web_search"),
     async execute(_toolCallId, params) {
       const web = await loadWeb();
       const provider = normalizeSearchProvider(params.provider, web.searchProviders());
-      const options: SearchRequestOptions = {
+      const options: SearchPageOptions = {
         maxResults: params.maxResults,
+        continuation: params.continuation,
         highlights: params.highlights,
         summary: params.summary,
         fullText: params.fullText,
@@ -212,6 +220,9 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
       };
 
       if (Array.isArray(params.query)) {
+        if (params.continuation !== undefined) {
+          throw new TypeError("continuation is only supported for a single query");
+        }
         const outcomes = await web.searchBatch(params.query, { provider, ...options });
         return toolResult({ mode: "batch" as const, provider, outcomes });
       }

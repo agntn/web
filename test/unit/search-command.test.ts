@@ -107,6 +107,10 @@ describe("search command", () => {
     stdoutSpy = undefined;
   });
 
+  it("exposes an opaque continuation argument", () => {
+    expect(searchCommand.args?.continuation).toMatchObject({ type: "string" });
+  });
+
   it("falls through automatic providers after HTTP 402", async () => {
     const results = [{ url: "https://example.com", title: "Example", snippet: "Result" }];
     mockSearch
@@ -124,6 +128,7 @@ describe("search command", () => {
           ignoredFilters: [],
           undeclaredFilters: [],
           results,
+          pagination: { status: "unsupported" },
           attempts: ["exa", "brave"],
           failures: [
             {
@@ -188,6 +193,7 @@ describe("search command", () => {
           ignoredFilters: [],
           undeclaredFilters: [],
           results: [],
+          pagination: { status: "unsupported" },
           metadata: { id: "job-1", creditsUsed: 1 },
         },
         null,
@@ -215,6 +221,7 @@ describe("search command", () => {
           ignoredFilters: [],
           undeclaredFilters: [],
           results,
+          pagination: { status: "unsupported" },
         },
         null,
         2,
@@ -244,6 +251,7 @@ describe("search command", () => {
           successfulProviders: ["exa"],
           errors: [{ provider: "brave", error: "Brave unavailable" }],
           filterReports: [],
+          providerPagination: [{ provider: "exa", pagination: { status: "unsupported" } }],
         },
         null,
         2,
@@ -271,12 +279,14 @@ describe("search command", () => {
             provider: "exa",
             results: [{ url: "https://one.example", title: "One", snippet: "First" }],
             filterReports: [],
+            pagination: { status: "unsupported" },
           },
           {
             query: "second query",
             provider: "exa",
             results: [{ url: "https://two.example", title: "Two", snippet: "Second" }],
             filterReports: [],
+            pagination: { status: "unsupported" },
           },
         ],
         null,

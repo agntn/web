@@ -146,6 +146,20 @@ describe("searchTool", () => {
     });
   });
 
+  it("accepts bounded search continuations at the schema boundary", async () => {
+    const validate = asSchema(searchTool.inputSchema).validate;
+    if (!validate) throw new TypeError("Search schema has no validator");
+
+    await expect(validate({ query: "test", continuation: "opaque-token" })).resolves.toMatchObject({
+      success: true,
+    });
+    await expect(
+      validate({ query: "test", continuation: "x".repeat(4097) }),
+    ).resolves.toMatchObject({
+      success: false,
+    });
+  });
+
   it("execute with explicit provider", async () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
@@ -247,6 +261,32 @@ describe("searchTool", () => {
     expect(body.contents).toEqual({ text: true, highlights: false, summary: true });
   });
 
+  it("continues one provider search with the returned opaque token", async () => {
+    process.env.BRAVE_API_KEY = "test-brave-key";
+    mockGetJSON
+      .mockResolvedValueOnce({ ...braveResponse, query: { more_results_available: true } })
+      .mockResolvedValueOnce({ ...braveResponse, query: { more_results_available: false } });
+
+    const first = (await searchTool.execute!(
+      { query: "test query", provider: "brave", maxResults: 1 },
+      { toolCallId: "call-page-one", messages: [] },
+    )) as { readonly pagination: { readonly status: string; readonly continuation?: string } };
+    if (first.pagination.continuation === undefined) throw new Error("missing continuation");
+    const second = await searchTool.execute!(
+      {
+        query: "test query",
+        provider: "brave",
+        maxResults: 1,
+        continuation: first.pagination.continuation,
+      },
+      { toolCallId: "call-page-two", messages: [] },
+    );
+
+    expect(first.pagination.status).toBe("next");
+    expect(new URL(mockGetJSON.mock.calls[1][0]).searchParams.get("offset")).toBe("1");
+    expect(second).toMatchObject({ pagination: { status: "end" } });
+  });
+
   it("returns one ordered outcome per query in a batch", async () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON
@@ -264,6 +304,7 @@ describe("searchTool", () => {
         provider: "exa",
         results: [expect.objectContaining({ title: "Test Result" })],
         filterReports: [],
+        pagination: { status: "unsupported" },
       },
       { query: "second query", error: "second query failed" },
     ]);
@@ -289,6 +330,7 @@ describe("searchTool", () => {
         provider: "firecrawl",
         results: [],
         filterReports: [],
+        pagination: { status: "unsupported" },
         providerMetadata: [
           { provider: "firecrawl", metadata: { id: "batch-request", creditsUsed: 3 } },
         ],
@@ -298,6 +340,7 @@ describe("searchTool", () => {
         provider: "firecrawl",
         results: [],
         filterReports: [],
+        pagination: { status: "unsupported" },
         providerMetadata: [
           { provider: "firecrawl", metadata: { id: "batch-request", creditsUsed: 3 } },
         ],
@@ -325,6 +368,7 @@ describe("searchTool", () => {
         provider: "all",
         results: [],
         filterReports: [],
+        providerPagination: [{ provider: "firecrawl", pagination: { status: "unsupported" } }],
         providerMetadata: [
           {
             provider: "firecrawl",
@@ -369,6 +413,7 @@ describe("searchTool", () => {
             undeclaredFilters: [],
           },
         ],
+        pagination: { status: "end" },
       },
       {
         query: "second query",
@@ -388,6 +433,7 @@ describe("searchTool", () => {
             undeclaredFilters: [],
           },
         ],
+        pagination: { status: "end" },
       },
     ]);
     expect(availabilityProbe).toHaveBeenCalledOnce();
@@ -745,6 +791,15 @@ describe("providersTool", () => {
     expect(result).toMatchObject({
       runtime: runtimeInfo,
       packageCapabilities: {
+        search: {
+          continuation: {
+            option: "continuation",
+            opaque: true,
+            maximum: 4_096,
+            providerStateMaximum: 2_048,
+            scope: "single-provider-query",
+          },
+        },
         read: {
           outputLimit: { option: "maxChars", agentDefault: 20_000, agentMaximum: 200_000 },
           continuation: { option: "continuation", opaque: true },

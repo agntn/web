@@ -4,9 +4,14 @@ import type {
   SearchRequestOptions,
   SearchResult,
 } from "../core/types.ts";
-import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
+import {
+  Provider,
+  type ProviderCapabilityDetails,
+  type ProviderSearchPage,
+} from "../core/provider.ts";
 import {
   AuthError,
+  InvalidSearchContinuationError,
   DEFAULT_RETRY_AFTER,
   RateLimitError,
   WebError,
@@ -20,8 +25,15 @@ interface MojeekSearchEnvelope {
 
 interface MojeekSearchResponse {
   readonly status: string;
+  readonly head?: {
+    readonly start: number;
+    readonly return: number;
+    readonly results: number;
+  };
   readonly results?: readonly MojeekResult[];
 }
+
+const MOJEEK_MAX_RESULT_START = 1_000;
 
 interface MojeekResult {
   readonly url: string;
@@ -67,18 +79,36 @@ class MojeekProvider extends Provider {
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+    return (await this.searchPage(query, options)).results;
+  }
+
+  async searchPage(
+    query: string,
+    options?: SearchRequestOptions,
+    continuation?: string,
+  ): Promise<ProviderSearchPage> {
     try {
+      const start = mojeekStart(continuation);
       const envelope = await this.client.getJSON<MojeekSearchEnvelope>(
-        `${this.baseURL}/search?${searchParams(query, this.apiKey, options)}`,
+        `${this.baseURL}/search?${searchParams(query, this.apiKey, options, start)}`,
       );
-      return successfulResponse(envelope).results?.map(mapResult) ?? [];
+      const response = successfulResponse(envelope);
+      return {
+        results: response.results?.map(mapResult) ?? [],
+        ...mojeekContinuation(response.head),
+      };
     } catch (error) {
       throw normalizeError(error, "mojeek");
     }
   }
 }
 
-function searchParams(query: string, apiKey: string, options?: SearchRequestOptions): string {
+function searchParams(
+  query: string,
+  apiKey: string,
+  options: SearchRequestOptions | undefined,
+  start: number,
+): string {
   return new URLSearchParams({
     q: query,
     api_key: apiKey,
@@ -87,9 +117,39 @@ function searchParams(query: string, apiKey: string, options?: SearchRequestOpti
     date: "1",
     cdate: "1",
     size: "1",
+    ...(start === 1 ? {} : { s: String(start) }),
     ...domainParams(options),
     ...dateParams(options),
   }).toString();
+}
+
+function mojeekStart(continuation?: string): number {
+  if (continuation === undefined) return 1;
+  if (!/^[1-9]\d*$/u.test(continuation)) throw new InvalidSearchContinuationError();
+  const start = Number(continuation);
+  if (!Number.isSafeInteger(start) || start > MOJEEK_MAX_RESULT_START) {
+    throw new InvalidSearchContinuationError();
+  }
+  return start;
+}
+
+function mojeekContinuation(
+  head: Readonly<{ start: number; return: number; results: number }> | undefined,
+): Record<string, string> {
+  if (!head || !isPositiveSafeInteger(head.start)) return {};
+  if (!isPositiveSafeInteger(head.return) || !isNonnegativeSafeInteger(head.results)) return {};
+  const nextStart = head.start + head.return;
+  return nextStart <= head.results && nextStart <= MOJEEK_MAX_RESULT_START
+    ? { continuation: String(nextStart) }
+    : {};
+}
+
+function isPositiveSafeInteger(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 1;
+}
+
+function isNonnegativeSafeInteger(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
 }
 
 function domainParams(options?: SearchRequestOptions): Record<string, string> {

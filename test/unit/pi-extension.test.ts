@@ -117,6 +117,25 @@ describe("Pi extension", () => {
     for (const provider of builtinProviders) {
       expect(parameters).toContain(`, ${provider}`);
     }
+    expect(parameters).toContain('"continuation"');
+    const schema = searchTool.parameters as {
+      readonly properties?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+    };
+    expect(schema.properties?.continuation).toMatchObject({ type: "string", maxLength: 4096 });
+  });
+
+  it("rejects one continuation for a search batch", async () => {
+    const searchTool = captureTools().get("web_search");
+    if (!searchTool) throw new Error("web_search was not registered");
+    const execution: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
+      "test-call",
+      { query: ["first", "second"], continuation: "opaque-token" },
+      undefined,
+      undefined,
+      undefined,
+    ]);
+
+    await expect(execution).rejects.toThrow("continuation is only supported for a single query");
   });
 
   it("executes reverse image search through the live SerpAPI provider", async () => {
@@ -625,6 +644,7 @@ describe("Pi extension", () => {
       if (url.startsWith("https://api.search.brave.com/res/v1/web/search")) {
         return new Response(
           JSON.stringify({
+            query: { more_results_available: true },
             web: {
               results: [
                 {
@@ -673,6 +693,11 @@ describe("Pi extension", () => {
         "startPublishedDate",
       ]);
       await expect(execution).resolves.toHaveProperty("details.attempts", ["exa", "brave"]);
+      await expect(execution).resolves.toHaveProperty("details.pagination.status", "next");
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.stringContaining("Continuation (next):"),
+      );
       await expect(execution).resolves.toHaveProperty("details.failures.0", {
         provider: "exa",
         error: 'HTTP 402: https://api.exa.ai/search: {"error":"Payment required"}',
@@ -717,12 +742,21 @@ describe("Pi extension", () => {
       );
       expect(result.content[0]?.text).toMatch(/^web \S+ build [a-f0-9]{12}, started /);
       expect(result.content[0]?.text).toContain(
-        "portable read content: maxChars defaults to 20000, max 200000; continuation=continuation",
+        "search continuation=continuation (single-provider-query); portable read content: maxChars defaults to 20000, max 200000; continuation=continuation",
       );
       expect(result.content[0]?.text).toContain(
         "jina (JINA_API_KEY) operations=search,read filters=includeDomains,category",
       );
       expect(result.details.packageCapabilities).toMatchObject({
+        search: {
+          continuation: {
+            option: "continuation",
+            opaque: true,
+            maximum: 4_096,
+            providerStateMaximum: 2_048,
+            scope: "single-provider-query",
+          },
+        },
         read: {
           outputLimit: { option: "maxChars", agentDefault: 20_000, agentMaximum: 200_000 },
           continuation: { option: "continuation", opaque: true },

@@ -87,6 +87,13 @@ describe("web MCP server", () => {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     }
     expect(response.tools[3]?.annotations).toMatchObject({ openWorldHint: false });
+    const searchInput = response.tools[0]?.inputSchema as {
+      readonly properties: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
+    };
+    expect(searchInput.properties.continuation).toMatchObject({
+      type: "string",
+      maxLength: 4096,
+    });
     const readInput = response.tools[2]?.inputSchema as {
       readonly properties: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
     };
@@ -194,11 +201,52 @@ describe("web MCP server", () => {
       results: [
         { title: "Test Result", url: "https://example.com", snippet: "A test description" },
       ],
+      pagination: { status: "unsupported" },
     });
     expect(response.structuredContent).toEqual({ result: payload });
     expect((response.content as Array<{ type: string; text: string }>)[0]?.text).toBe(
       JSON.stringify(payload),
     );
+  });
+
+  it("continues one provider search with the returned opaque token", async () => {
+    vi.stubEnv("BRAVE_API_KEY", "test-key");
+    mockGetJSON.mockReset();
+    mockGetJSON
+      .mockResolvedValueOnce({
+        query: { more_results_available: true },
+        web: { results: [] },
+      })
+      .mockResolvedValueOnce({
+        query: { more_results_available: false },
+        web: { results: [] },
+      });
+    const client = await connectTestClient();
+
+    const firstResponse = await client.callTool({
+      name: "web_search",
+      arguments: { query: "test query", provider: "brave", maxResults: 1 },
+    });
+    const first = firstResponse.structuredContent?.result as {
+      readonly pagination: { readonly status: string; readonly continuation?: string };
+    };
+    if (first.pagination.continuation === undefined) throw new Error("missing continuation");
+    const secondResponse = await client.callTool({
+      name: "web_search",
+      arguments: {
+        query: "test query",
+        provider: "brave",
+        maxResults: 1,
+        continuation: first.pagination.continuation,
+      },
+    });
+
+    expect(firstResponse.isError).toBeUndefined();
+    expect(first.pagination.status).toBe("next");
+    expect(new URL(String(mockGetJSON.mock.calls[1][0])).searchParams.get("offset")).toBe("1");
+    expect(secondResponse.structuredContent).toMatchObject({
+      result: { pagination: { status: "end" } },
+    });
   });
 
   it("accepts registered custom providers for each implemented capability", async () => {
@@ -415,6 +463,7 @@ describe("web MCP server", () => {
         provider: "jina",
         results: [{ title: "First", url: "https://example.com/one", snippet: "one" }],
         filterReports: [],
+        pagination: { status: "unsupported" },
       },
       { query: "second query", error: "second query failed" },
     ]);
@@ -508,6 +557,15 @@ describe("web MCP server", () => {
     });
     expect(payload.runtime.buildId).toMatch(/^[a-f0-9]{12}$/);
     expect(payload.packageCapabilities).toMatchObject({
+      search: {
+        continuation: {
+          option: "continuation",
+          opaque: true,
+          maximum: 4_096,
+          providerStateMaximum: 2_048,
+          scope: "single-provider-query",
+        },
+      },
       read: {
         outputLimit: { option: "maxChars", agentDefault: 20_000, agentMaximum: 200_000 },
         continuation: { option: "continuation", opaque: true },
@@ -524,6 +582,7 @@ describe("web MCP server", () => {
           supported: true,
           filters: ["category"],
           contentOptions: [],
+          pagination: true,
           resultFields: ["score", "publishedDate", "image", "metadata"],
         },
         searchImage: { supported: false },
@@ -531,6 +590,20 @@ describe("web MCP server", () => {
       },
     });
     expect(response.structuredContent).toEqual({ result: payload });
+  });
+
+  it("rejects one continuation for a search batch", async () => {
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search",
+      arguments: { query: ["first", "second"], continuation: "opaque-token" },
+    });
+
+    expect(response.isError).toBe(true);
+    expect((response.content as Array<{ type: string; text: string }>)[0]?.text).toContain(
+      "continuation is only supported for a single query",
+    );
   });
 
   it("rejects arguments that miss the schema", async () => {

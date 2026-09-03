@@ -190,10 +190,26 @@ describe("OMP extension", () => {
     const searchSchema = search.parameters as unknown as ompTypebox.TSchema;
 
     expect(searchSchema.safeParse({ query: "valid", maxResults: 5 }).success).toBe(true);
+    expect(searchSchema.safeParse({ query: "valid", continuation: "opaque-token" }).success).toBe(
+      true,
+    );
+    expect(searchSchema.safeParse({ query: "valid", continuation: "x".repeat(4097) }).success).toBe(
+      false,
+    );
     expect(searchSchema.safeParse({ query: "valid", maxResults: 5.5 }).success).toBe(false);
     expect(
       searchSchema.safeParse({ query: Array.from({ length: 11 }, () => "query") }).success,
     ).toBe(false);
+
+    await expect(
+      search.execute(
+        "call-search",
+        { query: ["first", "second"], continuation: "opaque-token" },
+        undefined,
+        undefined,
+        {} as never,
+      ),
+    ).rejects.toThrow("continuation is only supported for a single query");
 
     await expect(
       read.execute(
@@ -250,6 +266,65 @@ describe("OMP extension", () => {
     } finally {
       if (previousKey === undefined) delete process.env.FIRECRAWL_API_KEY;
       else process.env.FIRECRAWL_API_KEY = previousKey;
+      vi.unstubAllGlobals();
+      resetDefaultClientForTests();
+    }
+  });
+
+  it("continues a Brave search through the OMP tool", async () => {
+    const previousKey = process.env.BRAVE_API_KEY;
+    process.env.BRAVE_API_KEY = "test-key";
+    const requestedUrls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url = input instanceof Request ? input.url : String(input);
+        requestedUrls.push(url);
+        return new Response(
+          JSON.stringify({
+            query: { more_results_available: requestedUrls.length === 1 },
+            web: { results: [] },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }),
+    );
+    resetDefaultClientForTests();
+
+    try {
+      const search = requiredTool(captureOmpExtension().tools, "web_search");
+      const first = await search.execute(
+        "call-page-one",
+        { query: "test query", provider: "brave", maxResults: 1 },
+        undefined,
+        undefined,
+        {} as never,
+      );
+      const firstDetails = first.details as {
+        readonly pagination: { readonly status: string; readonly continuation?: string };
+      };
+      if (firstDetails.pagination.continuation === undefined) {
+        throw new Error("missing continuation");
+      }
+      const second = await search.execute(
+        "call-page-two",
+        {
+          query: "test query",
+          provider: "brave",
+          maxResults: 1,
+          continuation: firstDetails.pagination.continuation,
+        },
+        undefined,
+        undefined,
+        {} as never,
+      );
+
+      expect(firstDetails.pagination.status).toBe("next");
+      expect(new URL(requestedUrls[1]).searchParams.get("offset")).toBe("1");
+      expect(second.details).toMatchObject({ pagination: { status: "end" } });
+    } finally {
+      if (previousKey === undefined) delete process.env.BRAVE_API_KEY;
+      else process.env.BRAVE_API_KEY = previousKey;
       vi.unstubAllGlobals();
       resetDefaultClientForTests();
     }
@@ -340,6 +415,15 @@ describe("OMP extension", () => {
 
     expect(details.runtime.buildId).toMatch(/^[a-f0-9]{12}$/u);
     expect(details.packageCapabilities).toMatchObject({
+      search: {
+        continuation: {
+          option: "continuation",
+          opaque: true,
+          maximum: 4_096,
+          providerStateMaximum: 2_048,
+          scope: "single-provider-query",
+        },
+      },
       read: {
         outputLimit: { option: "maxChars", agentDefault: 20_000, agentMaximum: 200_000 },
         continuation: { option: "continuation", opaque: true },

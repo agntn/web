@@ -4,8 +4,18 @@ import type {
   SearchRequestOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
-import { WebError, AuthError, RateLimitError, normalizeError } from "../core/errors.ts";
+import {
+  Provider,
+  type ProviderCapabilityDetails,
+  type ProviderSearchPage,
+} from "../core/provider.ts";
+import {
+  WebError,
+  AuthError,
+  InvalidSearchContinuationError,
+  RateLimitError,
+  normalizeError,
+} from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface SerpBaseSearchRequest {
@@ -81,12 +91,21 @@ class SerpBaseProvider extends Provider {
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+    return (await this.searchPage(query, options)).results;
+  }
+
+  async searchPage(
+    query: string,
+    options?: SearchRequestOptions,
+    continuation?: string,
+  ): Promise<ProviderSearchPage> {
+    const page = serpBasePage(continuation);
     const endpoint = endpointForCategory(options?.category);
     const body = {
       q: query,
       hl: "en",
       gl: "us",
-      page: 1,
+      page,
     } satisfies SerpBaseSearchRequest;
 
     try {
@@ -94,13 +113,27 @@ class SerpBaseProvider extends Provider {
       const headers = { "X-API-Key": this.apiKey };
       const response = await this.client.postJSON<SerpBaseSearchResponse>(url, body, headers);
       assertSerpBaseSuccess(response);
-      return resultsForResponse(response)
-        .slice(0, clampMaxResults(options?.maxResults ?? 10))
-        .map((result) => mapResult(result, response));
+      const providerResults = resultsForResponse(response);
+      return {
+        results: providerResults
+          .slice(0, clampMaxResults(options?.maxResults ?? 10))
+          .map((result) => mapResult(result, response)),
+        ...(providerResults.length > 0
+          ? { continuation: String(page + 1), continuationStatus: "unknown" as const }
+          : {}),
+      };
     } catch (error) {
       throw normalizeError(error, "serpbase");
     }
   }
+}
+
+function serpBasePage(continuation?: string): number {
+  if (continuation === undefined) return 1;
+  if (!/^[1-9]\d*$/u.test(continuation)) throw new InvalidSearchContinuationError();
+  const page = Number(continuation);
+  if (!Number.isSafeInteger(page)) throw new InvalidSearchContinuationError();
+  return page;
 }
 
 function endpointForCategory(

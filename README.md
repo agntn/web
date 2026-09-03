@@ -126,6 +126,8 @@ Provider names use lowercase ASCII letters, digits, and single internal hyphens.
 
 `getProviderCapabilities(name)` reads one registered provider's matrix. `listProviders()` and `listProvidersAsync()` include the same matrix under `capabilities`, alongside configuration and optional reachability state. Unsupported operations are explicit (`{ supported: false }`); details omitted by a backward-compatible custom provider remain unknown instead of being guessed.
 
+A custom search provider may additionally implement `searchPage(query, options, continuation?)`. Its returned `continuation` is provider-native state consumed only by the same adapter; the detailed core helpers wrap it in a public token bound to that provider. Provider-native continuation state may contain up to 2,048 characters; the wrapped public token may contain up to 4,096. These limits are exported as `MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH` and `MAX_SEARCH_CONTINUATION_LENGTH` and reported by `packageCapabilities.search.continuation`. The absence of a returned provider continuation marks the page as terminal. Pagination support is discovered from the prototype and reported as `capabilities.search.pagination: true`.
+
 ### Search all providers
 
 Query all available providers in parallel and get deduplicated results:
@@ -165,6 +167,30 @@ if (isDetailedSearchProvider(firecrawl)) {
 ```
 
 `web search --provider firecrawl --json "query"` prints the detailed provider envelope with results, filter diagnostics, and this metadata. Tavily also uses response metadata for the generated query answer requested by `summary`, exposed as `metadata.answer`. The core detailed helpers preserve response metadata too: scalar `searchProviderDetailed()` and `searchWithFallback()` expose `metadata`, while `searchAllDetailed()` exposes `providerMetadata` entries that keep each metadata object paired with its provider.
+
+### Continue a search
+
+Brave, Mojeek, SearXNG, SerpAPI, SerpBase, and TinyFish expose deeper result pages through the detailed search helpers. A response from one provider has a normalized `pagination` state: `next` carries an opaque token backed by an authoritative provider signal, `unknown` carries a token when another page must be probed, `end` confirms that no further probe is available, and `unsupported` identifies providers without paging support. Opaque means callers must not depend on the token format; it does not make a continuation an authorization credential or a tamper-proof signature. Treat externally supplied continuations and their provider-native state as untrusted input.
+
+```typescript
+import { searchProviderDetailed } from "@agntn/web";
+
+const first = await searchProviderDetailed("brave", "typescript runtimes", {
+  maxResults: 10,
+});
+
+if (first.pagination.status === "next") {
+  const second = await searchProviderDetailed("brave", "typescript runtimes", {
+    maxResults: 10,
+    continuation: first.pagination.continuation,
+  });
+  console.log(second.results, second.pagination);
+}
+```
+
+The token is bound to the provider, query, and options that affect the result page. Changing any of them rejects the token before another provider request. `searchWithFallback()` chooses normally for the first page, then pins subsequent calls to the provider encoded in the token instead of mixing result sequences across fallback providers.
+
+Fan-out has no single cursor. `searchAllDetailed()` returns `providerPagination`, one independent state per successful provider, and rejects a continuation input. Use a `next` or `unknown` token from that array with `searchProviderDetailed()` and the matching provider. `searchBatch()` also rejects a single continuation because it cannot unambiguously belong to several queries.
 
 ### Reverse image search
 
@@ -231,7 +257,7 @@ const searches = await searchBatch(["TypeScript 7", "Node.js releases"], {
 const pages = await readBatch(["https://example.com/one", "https://example.com/two"]);
 ```
 
-Each successful search outcome is `{ query, provider, results, filterReports, providerMetadata?, attempts?, failures? }`; exhausted automatic failures are `{ query, error, attempts, failures }`. `attempts` and `failures` are present for automatic selection, while `providerMetadata` is present only when a provider returned response-level metadata. Each basic read outcome is `{ url, result }` or `{ url, error }`.
+Each successful search through one provider returns `{ query, provider, results, filterReports, pagination, providerMetadata?, attempts?, failures? }`; fan-out outcomes use `providerPagination` instead. Exhausted automatic failures are `{ query, error, attempts, failures }`. `attempts` and `failures` are present for automatic selection, while `providerMetadata` is present only when a provider returned response-level metadata. A single continuation input is rejected for batches. Each basic read outcome is `{ url, result }` or `{ url, error }`.
 
 ### AI SDK tool
 
@@ -252,7 +278,7 @@ const { text } = await generateText({
 });
 ```
 
-`searchTool` accepts one query or an array of queries. Explicit scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, metadata? }`; automatic searches also include `attempts` and `failures`. `provider="all"` returns `{ results, successfulProviders, errors, filterReports, providerMetadata? }`, with `providers` and `evidence` on every deduplicated result. Batch search items retain the same diagnostics. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts, failures }`; successful batch items keep the same reader provenance beside `url`, while exhausted automatic failures keep `attempts` and `failures` beside the error:
+`searchTool` accepts one query or an array of queries. Explicit scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, pagination, metadata? }`; automatic searches also include `attempts` and `failures`. `provider="all"` returns `{ results, successfulProviders, errors, filterReports, providerPagination, providerMetadata? }`, with `providers` and `evidence` on every deduplicated result. Batch search items retain the same diagnostics. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts, failures }`; successful batch items keep the same reader provenance beside `url`, while exhausted automatic failures keep `attempts` and `failures` beside the error:
 
 ```typescript
 tools: { web_search: searchTool, web_search_image: searchImageTool, web_read: readTool }
@@ -261,6 +287,7 @@ type SearchToolInput = {
   query: string | string[];
   provider?: string;
   maxResults?: number;
+  continuation?: string;
   highlights?: boolean;
   summary?: boolean;
   fullText?: boolean;
@@ -280,6 +307,7 @@ web search "your query" --json
 web search "first query" "second query" --provider all --json
 web search "your query" --provider firecrawl --sources web,news --categories research
 web search "your query" --provider exa --summary --full-text
+web search "your query" --provider brave --continuation <opaque-token> --json
 web search "your query" --include-domains github.com,stackoverflow.com --start-published-date 2026-01-01
 web search-image https://example.com/image.jpg --max-results 5 --json
 web read https://example.com --format markdown --max-chars 20000 --json
@@ -477,11 +505,11 @@ interface ReadResult {
 }
 ```
 
-Search options you can pass to `.search()` or `searchAll`:
+Search request options you can pass to `.search()` or the detailed core helpers:
 
 ```typescript
-interface SearchOptions {
-  maxResults?: number;
+interface SearchRequestOptions {
+  readonly maxResults?: number;
   highlights?: boolean;
   summary?: boolean;
   fullText?: boolean;
@@ -493,9 +521,13 @@ interface SearchOptions {
   endPublishedDate?: string;
   category?: string;
 }
+
+type SearchPageOptions = SearchRequestOptions & {
+  continuation?: string;
+};
 ```
 
-`maxResults` defaults to 10 and caps the final result list, including `searchAll` output after URL deduplication. Each provider also receives it as the requested result count. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. Generated content and full page text default to false and must be requested through `summary` and `fullText`; Exa uses `summary` for result summaries, while Tavily uses it for a query answer. The remaining filters are specific to each provider:
+Provider `.search()` remains a list API for the first page. The detailed core helpers accept `SearchPageOptions` and return normalized pagination state. `maxResults` defaults to 10 and caps the final result list, including `searchAll` output after URL deduplication. Each provider also receives it as the requested result count. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. Generated content and full page text default to false and must be requested through `summary` and `fullText`; Exa uses `summary` for result summaries, while Tavily uses it for a query answer. The remaining filters are specific to each provider:
 
 | Provider    | Domain filters   | Source values           | Category values                              | Date bounds |
 | ----------- | ---------------- | ----------------------- | -------------------------------------------- | ----------- |
@@ -513,7 +545,7 @@ interface SearchOptions {
 
 Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
-`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional metadata for the whole response. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Each deduplicated result keeps a stable representative, ordered `providers`, and complete `evidence` for each provider. Metadata for the whole response is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes native provider support under `providers[].capabilities` and provider-independent guarantees under `packageCapabilities`; the legacy `searchFilters` and `searchCategories` fields remain available for compatibility.
+`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, `pagination`, and optional metadata for the whole response. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, independent continuation states in `providerPagination`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Each deduplicated result keeps a stable representative, ordered `providers`, and complete `evidence` for each provider. Metadata for the whole response is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes native provider support under `providers[].capabilities` and provider-independent guarantees under `packageCapabilities`; the legacy `searchFilters` and `searchCategories` fields remain available for compatibility.
 
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 

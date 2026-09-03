@@ -23,6 +23,13 @@ export interface SearchResponse {
   metadata?: Record<string, unknown>;
 }
 
+/** Normalized state of one provider's search sequence. */
+export type SearchPagination =
+  | { readonly status: "next"; readonly continuation: string }
+  | { readonly status: "unknown"; readonly continuation: string }
+  | { readonly status: "end" }
+  | { readonly status: "unsupported" };
+
 export interface SearchOptions {
   maxResults?: number;
   highlights?: boolean;
@@ -44,6 +51,11 @@ export type SearchRequestOptions = Readonly<
   readonly excludeDomains?: readonly string[];
   readonly sources?: readonly string[];
   readonly categories?: readonly string[];
+};
+
+/** Detailed search options with an opaque token for one provider and query. */
+export type SearchPageOptions = SearchRequestOptions & {
+  readonly continuation?: string;
 };
 
 export const searchFilterNames = [
