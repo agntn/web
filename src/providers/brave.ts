@@ -72,7 +72,11 @@ class BraveProvider extends Provider {
       const offset = braveOffset(continuation);
       const url = braveSearchUrl(this.baseURL, query, options?.maxResults, offset);
       const headers = { "X-Subscription-Token": this.apiKey };
-      const response = await this.client.getJSON<BraveSearchResponse>(url, headers);
+      const response = await this.client.getJSON<BraveSearchResponse>(
+        url,
+        headers,
+        options?.signal,
+      );
       return {
         results: (response.web?.results ?? []).map(mapResult),
         ...braveContinuation(response, offset),

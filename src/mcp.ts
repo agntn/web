@@ -227,6 +227,19 @@ const providerStatusSchema = strictObject({
   capabilities: providerCapabilitiesSchema,
 });
 const packageCapabilitiesSchema = strictObject({
+  execution: strictObject({
+    cancellation: strictObject({ option: Type.Literal("signal") }),
+    deadline: strictObject({
+      option: Type.Literal("deadline"),
+      unit: Type.Literal("unix-ms"),
+    }),
+    concurrency: strictObject({
+      option: Type.Literal("concurrency"),
+      default: Type.Integer({ minimum: 1 }),
+      maximum: Type.Integer({ minimum: 1 }),
+      scope: Type.Literal("batch-and-fanout"),
+    }),
+  }),
   search: strictObject({
     continuation: strictObject({
       option: Type.Literal("continuation"),
@@ -269,7 +282,7 @@ interface ToolDefinition {
   readonly inputSchema: TSchema;
   readonly outputSchema: TSchema;
   readonly annotations: Tool["annotations"];
-  execute(args: Readonly<Record<string, unknown>>): unknown;
+  execute(args: Readonly<Record<string, unknown>>, signal?: Readonly<AbortSignal>): unknown;
 }
 
 const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
@@ -484,10 +497,13 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         idempotentHint: true,
         openWorldHint: false,
       },
-      execute: async () => ({
+      execute: async (
+        _args: Readonly<Record<string, unknown>>,
+        signal?: Readonly<AbortSignal>,
+      ) => ({
         runtime: runtimeInfo,
         packageCapabilities,
-        providers: await listProvidersAsync(),
+        providers: await listProvidersAsync({ signal }),
       }),
     },
   ].map((tool) => [tool.name, tool]),
@@ -499,9 +515,13 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
  * A host may skip schema validation, so the executor re-checks the boundaries
  * that would otherwise reach a provider malformed.
  * @param {Readonly<Record<string, unknown>>} args - Untrusted tool arguments.
+ * @param signal - MCP request cancellation signal.
  * @returns {Promise<unknown>} Search result payload.
  */
-export async function executeSearch(args: Readonly<Record<string, unknown>>): Promise<unknown> {
+export async function executeSearch(
+  args: Readonly<Record<string, unknown>>,
+  signal?: Readonly<AbortSignal>,
+): Promise<unknown> {
   const query = searchInputArg(args.query);
   const maxResults = intArg("maxResults", args.maxResults);
   if (maxResults !== undefined && maxResults > MAX_RESULTS_HARD_CAP) {
@@ -530,6 +550,7 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
     category: stringArg("category", args.category),
     startPublishedDate: stringArg("startPublishedDate", args.startPublishedDate),
     endPublishedDate: stringArg("endPublishedDate", args.endPublishedDate),
+    signal,
   };
 
   return runSearch(query, searchProviderArg(args.provider), searchOptions);
@@ -538,7 +559,7 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
 async function runSearch(
   query: string | readonly string[],
   requestedProvider: string | undefined,
-  searchOptions: SearchPageOptions,
+  searchOptions: Readonly<SearchPageOptions>,
 ): Promise<unknown> {
   if (typeof query !== "string") {
     return searchBatch(query, { provider: requestedProvider, ...searchOptions });
@@ -560,10 +581,12 @@ async function runSearch(
 /**
  * Guards reverse image search when a host skips schema validation.
  * @param args - Untrusted tool arguments.
+ * @param signal - MCP request cancellation signal.
  * @returns {Promise<unknown>} Normalized reverse image matches.
  */
 export async function executeImageSearch(
   args: Readonly<Record<string, unknown>>,
+  signal?: Readonly<AbortSignal>,
 ): Promise<unknown> {
   const url = stringArg("url", args.url);
   if (!url?.trim()) throw new EmptyImageUrlError();
@@ -574,15 +597,20 @@ export async function executeImageSearch(
   return searchByImage(url, {
     provider: imageSearchProviderArg(args.provider),
     maxResults,
+    signal,
   });
 }
 
 /**
  * Mirrors {@link executeSearch}: guards the read contract when validation was skipped.
  * @param {Readonly<Record<string, unknown>>} args - Untrusted tool arguments.
+ * @param signal - MCP request cancellation signal.
  * @returns {Promise<unknown>} Read result payload.
  */
-export async function executeRead(args: Readonly<Record<string, unknown>>): Promise<unknown> {
+export async function executeRead(
+  args: Readonly<Record<string, unknown>>,
+  signal?: Readonly<AbortSignal>,
+): Promise<unknown> {
   const urlInput = args.url;
   const urls = Array.isArray(urlInput) ? stringListArg("url", urlInput) : undefined;
   const url = typeof urlInput === "string" ? urlInput : "";
@@ -603,6 +631,7 @@ export async function executeRead(args: Readonly<Record<string, unknown>>): Prom
     removeSelector: stringArg("removeSelector", args.removeSelector),
     timeout: intArg("timeout", args.timeout),
     noCache: boolArg("noCache", args.noCache),
+    signal,
   };
   return urls === undefined
     ? readUrlDetailed(url, readOptions)
@@ -764,7 +793,7 @@ export function createMcpServer(): Server {
     })),
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const name = request.params.name;
     if (!Object.hasOwn(toolsByName, name)) {
       return errorResult(`Unknown web tool: ${JSON.stringify(name)}`);
@@ -777,7 +806,7 @@ export function createMcpServer(): Server {
     }
 
     try {
-      const result = await tool.execute(args);
+      const result = await tool.execute(args, extra.signal);
       const structuredContent = { result };
       if (!Value.Check(tool.outputSchema, structuredContent)) {
         return errorResult(`${tool.name} returned a result that does not match its output schema`);

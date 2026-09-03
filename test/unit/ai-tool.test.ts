@@ -7,10 +7,17 @@ const mockPostJSON =
       url: string,
       body: Readonly<Record<string, unknown>>,
       headers?: Readonly<Record<string, string>>,
+      signal?: Readonly<AbortSignal>,
     ) => Promise<unknown>
   >();
 const mockGetJSON =
-  vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();
+  vi.fn<
+    (
+      url: string,
+      headers?: Readonly<Record<string, string>>,
+      signal?: Readonly<AbortSignal>,
+    ) => Promise<unknown>
+  >();
 
 vi.mock("../../src/core/client.ts", () => ({
   Client: vi.fn(),
@@ -176,6 +183,29 @@ describe("searchTool", () => {
       undeclaredFilters: [],
       results: [expect.objectContaining({ url: "https://example.com", title: "Test Result" })],
     });
+  });
+
+  it("forwards the AI SDK cancellation signal through every network tool", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    process.env.SERPAPI_API_KEY = "test-serpapi-key";
+    mockPostJSON.mockResolvedValue(exaResponse);
+    mockGetJSON.mockResolvedValueOnce({ visual_matches: [] }).mockResolvedValueOnce({
+      code: 200,
+      status: 20_000,
+      data: { url: "https://example.com", content: "page" },
+    });
+    const abortSignal = new AbortController().signal;
+    const context = { toolCallId: "call-cancel", messages: [], abortSignal };
+
+    await searchTool.execute!({ query: "test query", provider: "exa" }, context);
+    await searchImageTool.execute!(
+      { url: "https://example.com/image.jpg", provider: "serpapi" },
+      context,
+    );
+    await readTool.execute!({ url: "https://example.com", provider: "jina" }, context);
+
+    expect(mockPostJSON.mock.calls[0]?.[3]).toBe(abortSignal);
+    expect(mockGetJSON.mock.calls.map((call) => call[2])).toEqual([abortSignal, abortSignal]);
   });
 
   it("accepts registered custom providers for each implemented capability", async () => {
@@ -791,6 +821,16 @@ describe("providersTool", () => {
     expect(result).toMatchObject({
       runtime: runtimeInfo,
       packageCapabilities: {
+        execution: {
+          cancellation: { option: "signal" },
+          deadline: { option: "deadline", unit: "unix-ms" },
+          concurrency: {
+            option: "concurrency",
+            default: 3,
+            maximum: 10,
+            scope: "batch-and-fanout",
+          },
+        },
         search: {
           continuation: {
             option: "continuation",

@@ -201,7 +201,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     parameters: searchParameters,
     approval: "read",
     ...renderers("web_search"),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       const web = await loadWeb();
       const provider = normalizeSearchProvider(params.provider, web.searchProviders());
       const options: SearchPageOptions = {
@@ -218,18 +218,22 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         startPublishedDate: params.startPublishedDate,
         endPublishedDate: params.endPublishedDate,
       };
+      const executionOptions = { ...options, signal };
 
       if (Array.isArray(params.query)) {
         if (params.continuation !== undefined) {
           throw new TypeError("continuation is only supported for a single query");
         }
-        const outcomes = await web.searchBatch(params.query, { provider, ...options });
+        const outcomes = await web.searchBatch(params.query, {
+          provider,
+          ...executionOptions,
+        });
         return toolResult({ mode: "batch" as const, provider, outcomes });
       }
       const query = params.query.trim();
       if (!query) throw new web.EmptyQueryError();
       if (provider === "all") {
-        const response = await web.searchAllDetailed(query, options);
+        const response = await web.searchAllDetailed(query, executionOptions);
         return toolResult({
           mode: "all" as const,
           count: response.results.length,
@@ -241,7 +245,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         });
       }
       if (provider !== undefined) {
-        const response = await web.searchProviderDetailed(provider, query, options);
+        const response = await web.searchProviderDetailed(provider, query, executionOptions);
         return toolResult({
           ...response,
           mode: "single" as const,
@@ -249,7 +253,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
           count: response.results.length,
         });
       }
-      const response = await web.searchWithFallback(query, options);
+      const response = await web.searchWithFallback(query, executionOptions);
       return toolResult({
         ...response,
         mode: "single" as const,
@@ -267,7 +271,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     parameters: imageSearchParameters,
     approval: "read",
     ...renderers("web_search_image"),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       const web = await loadWeb();
       const provider = normalizeImageProvider(params.provider, web.searchImageProviders());
       const url = params.url.trim();
@@ -275,6 +279,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
       const results = await web.searchByImage(url, {
         provider,
         maxResults: params.maxResults,
+        signal,
       });
       return toolResult({ url, provider, maxResults: params.maxResults, results });
     },
@@ -288,7 +293,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     parameters: readParameters,
     approval: "read",
     ...renderers("web_read"),
-    async execute(_toolCallId, params) {
+    async execute(_toolCallId, params, signal) {
       const web = await loadWeb();
       const provider = normalizeReadProvider(params.provider, web.readProviders());
       const providerLabel = provider ?? "auto";
@@ -307,12 +312,12 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         throw new TypeError("continuation is only supported for a single URL");
       }
       if (Array.isArray(params.url)) {
-        const outcomes = await web.readBatchDetailed(params.url, options);
+        const outcomes = await web.readBatchDetailed(params.url, { ...options, signal });
         return toolResult({ mode: "batch" as const, provider: providerLabel, options, outcomes });
       }
       const url = params.url.trim();
       if (!url) throw new TypeError("URL cannot be empty");
-      const response = await web.readUrlDetailed(url, options);
+      const response = await web.readUrlDetailed(url, { ...options, signal });
       return toolResult({
         mode: "read" as const,
         url,
@@ -334,12 +339,12 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({}),
     approval: "read",
     ...renderers("web_providers"),
-    async execute() {
+    async execute(_toolCallId, _params, signal) {
       const web = await loadWeb();
       return toolResult({
         runtime: web.runtimeInfo,
         packageCapabilities: web.packageCapabilities,
-        providers: await web.listProvidersAsync(),
+        providers: await web.listProvidersAsync({ signal }),
       });
     },
   });

@@ -5,6 +5,7 @@ import type {
   ProviderConfig,
   ReadOptions,
   ReadResult,
+  ExecutionOptions,
   SearchFilterCapabilities,
   SearchFilterName,
   SearchRequestOptions,
@@ -16,7 +17,7 @@ import { InvalidProviderUrlError } from "./errors.ts";
 export type ProviderCapability = "search" | "searchImage" | "read";
 export type SearchResultField = Exclude<keyof SearchResult, "url" | "title" | "snippet">;
 export type SearchContentOptionName = "highlights" | "summary" | "fullText";
-export type ReadOptionName = keyof ReadOptions;
+export type ReadOptionName = Exclude<keyof ReadOptions, keyof ExecutionOptions>;
 export type ReadFormat = NonNullable<ReadOptions["format"]>;
 
 /** Known result count behavior exposed by one provider adapter. */
@@ -158,7 +159,7 @@ export interface ReadProvider {
 }
 
 export interface AvailabilityProvider {
-  isAvailable(): Promise<boolean>;
+  isAvailable(signal?: Readonly<AbortSignal>): Promise<boolean>;
 }
 
 export function isSearchProvider(provider: object): provider is Provider & SearchProvider {

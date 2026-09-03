@@ -30,6 +30,12 @@ import { createSearchProvider, has } from "./registry.ts";
 import { isDetailedSearchProvider, isPaginatedSearchProvider } from "./provider.ts";
 import { decodeSearchContinuation, encodeSearchContinuation } from "./search-continuation.ts";
 import { detectAvailableProviders, detectAvailableProvidersAsync } from "./resolve.ts";
+import {
+  providerRequestOptions,
+  settleWithConcurrency,
+  throwIfAborted,
+  withExecutionBudget,
+} from "./execution.ts";
 
 const DEFAULT_MAX_RESULTS = 10;
 
@@ -127,10 +133,13 @@ export async function searchAllDetailed(
     throw new TypeError("continuation is not supported with provider=all");
   }
   validateProviderNames(requestedProviders);
-  const providerNames = await resolveProviderNames(requestedProviders);
   const maxResults = searchOptions.maxResults ?? DEFAULT_MAX_RESULTS;
-  const effectiveSearchOptions = { ...searchOptions, maxResults };
+  const effectiveSearchOptions = withExecutionBudget({ ...searchOptions, maxResults });
+  throwIfAborted(effectiveSearchOptions.signal);
+  const providerNames = await resolveProviderNames(requestedProviders, effectiveSearchOptions);
+  throwIfAborted(effectiveSearchOptions.signal);
   const settled = await searchProviders(providerNames, query, effectiveSearchOptions);
+  throwIfAborted(effectiveSearchOptions.signal);
   return collectProviderResults(providerNames, settled, maxResults);
 }
 
@@ -145,16 +154,19 @@ export async function searchWithFallback(
   options?: Readonly<SearchPageOptions>,
 ): Promise<SearchWithFallbackResult> {
   validateSearchInput(query, options);
+  const effectiveOptions = withExecutionBudget(options);
+  throwIfAborted(effectiveOptions.signal);
 
-  if (options?.continuation !== undefined) {
-    const { continuation, ...searchOptions } = options;
+  const continuation = options?.continuation;
+  if (continuation !== undefined) {
+    const { continuation: _continuation, ...searchOptions } = effectiveOptions;
     const payload = decodeSearchContinuation(continuation, query, searchOptions);
-    const response = await searchProvider(payload.provider, query, options);
+    const response = await searchProvider(payload.provider, query, effectiveOptions);
     return { ...response, attempts: [payload.provider], failures: [] };
   }
 
-  const providerNames = await resolveAutomaticProviderNames();
-  return searchProviderNamesWithFallback(providerNames, query, options);
+  const providerNames = await resolveAutomaticProviderNames(effectiveOptions);
+  return searchProviderNamesWithFallback(providerNames, query, effectiveOptions);
 }
 
 /**
@@ -183,10 +195,12 @@ export async function prepareSearchWithFallback(
   options?: Readonly<SearchRequestOptions>,
 ): Promise<PreparedSearchWithFallback> {
   validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
-  const providerNames = await resolveAutomaticProviderNames();
+  const effectiveOptions = withExecutionBudget(options);
+  throwIfAborted(effectiveOptions.signal);
+  const providerNames = await resolveAutomaticProviderNames(effectiveOptions);
   return (query) => {
     if (!query.trim()) throw new EmptyQueryError();
-    return searchProviderNamesWithFallback(providerNames, query, options);
+    return searchProviderNamesWithFallback(providerNames, query, effectiveOptions);
   };
 }
 
@@ -200,6 +214,7 @@ async function searchProviderNamesWithFallback(
   let lastError: unknown;
 
   for (const providerName of providerNames) {
+    throwIfAborted(options?.signal);
     attempts.push(providerName);
     try {
       const response = await searchProvider(providerName, query, options);
@@ -233,16 +248,19 @@ function validateProviderNames(providerNames?: readonly string[]): void {
 
 async function resolveProviderNames(
   requestedProviders?: readonly string[],
+  options?: Readonly<SearchRequestOptions>,
 ): Promise<readonly string[]> {
   if (requestedProviders !== undefined) {
     if (requestedProviders.length > 0) return requestedProviders;
     throw new NoProviderConfiguredError();
   }
-  return resolveAutomaticProviderNames();
+  return resolveAutomaticProviderNames(options);
 }
 
-async function resolveAutomaticProviderNames(): Promise<readonly string[]> {
-  const providerNames = await detectAvailableProvidersAsync();
+async function resolveAutomaticProviderNames(
+  options?: Readonly<SearchRequestOptions>,
+): Promise<readonly string[]> {
+  const providerNames = await detectAvailableProvidersAsync(options);
   if (providerNames.length > 0) return providerNames;
 
   const configuredProviders = detectAvailableProviders();
@@ -256,25 +274,35 @@ async function searchProvider<TProvider extends string>(
   options?: Readonly<SearchPageOptions>,
 ): Promise<SearchProviderResult & { readonly provider: TProvider }> {
   const { continuation, ...searchOptions } = options ?? {};
+  const effectiveSearchOptions = withExecutionBudget(searchOptions);
+  throwIfAborted(effectiveSearchOptions.signal);
+  const requestOptions = providerRequestOptions(effectiveSearchOptions);
   const payload =
     continuation === undefined
       ? undefined
-      : decodeSearchContinuation(continuation, query, searchOptions);
+      : decodeSearchContinuation(continuation, query, requestOptions);
   if (payload !== undefined && payload.provider !== providerName) {
     throw new InvalidSearchContinuationError();
   }
 
   const provider = createSearchProvider(providerName);
   const paginated = isPaginatedSearchProvider(provider);
-  const response = await searchResponse(
-    provider,
-    paginated,
-    query,
-    searchOptions,
-    payload?.providerContinuation,
-  );
-  const pagination = normalizedPagination(providerName, query, searchOptions, response, paginated);
-  const report = searchFilterReport(providerName, searchOptions);
+  let response: SearchResponseWithContinuation;
+  try {
+    response = await searchResponse(
+      provider,
+      paginated,
+      query,
+      requestOptions,
+      payload?.providerContinuation,
+    );
+  } catch (error) {
+    throwIfAborted(effectiveSearchOptions.signal);
+    throw error;
+  }
+  throwIfAborted(effectiveSearchOptions.signal);
+  const pagination = normalizedPagination(providerName, query, requestOptions, response, paginated);
+  const report = searchFilterReport(providerName, requestOptions);
   return {
     ...report,
     provider: providerName,
@@ -333,7 +361,11 @@ function searchProviders(
   query: string,
   options: Readonly<SearchRequestOptions>,
 ): Promise<readonly ProviderSearchOutcome[]> {
-  return Promise.allSettled(providerNames.map((name) => searchProvider(name, query, options)));
+  return settleWithConcurrency(
+    providerNames,
+    (name) => searchProvider(name, query, options),
+    options,
+  );
 }
 
 function collectProviderResults(

@@ -74,6 +74,28 @@ describe("resolve async", () => {
       expect(available).toContain("exa");
       expect(available).not.toContain("searxng");
     });
+
+    it("forwards caller cancellation to availability probes", async () => {
+      const controller = new AbortController();
+      let probeSignal: AbortSignal | undefined;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(
+          async (
+            _url: string,
+            init?: Readonly<{ readonly signal?: Readonly<AbortSignal> | null }>,
+          ) => {
+            probeSignal = init?.signal ?? undefined;
+            return new Response("ok", { status: 200 });
+          },
+        ),
+      );
+
+      await detectAvailableProvidersAsync({ signal: controller.signal });
+      controller.abort();
+
+      expect(probeSignal?.aborted).toBe(true);
+    });
   });
 
   describe("listProvidersAsync", () => {

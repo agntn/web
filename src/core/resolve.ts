@@ -9,7 +9,8 @@ import {
 } from "./registry.ts";
 import { NoProviderAvailableError, NoProviderConfiguredError } from "./errors.ts";
 import { isAvailabilityProvider, type ProviderCapabilities } from "./provider.ts";
-import type { SearchFilterName } from "./types.ts";
+import { settleWithConcurrency, throwIfAborted, withExecutionBudget } from "./execution.ts";
+import type { ExecutionOptions, SearchFilterName } from "./types.ts";
 
 /**
  * Return whether a registered provider has no key requirement or a configured API key.
@@ -60,17 +61,28 @@ export function listProviders(): ProviderStatus[] {
  * unreachable self-hosted endpoint should be skipped instead of producing a
  * connection-refused error. Sync {@link detectAvailableProviders} stays the
  * declarative source of truth for env-var inspection.
+ * @param options - Shared cancellation, deadline, and concurrency controls.
  * @returns {Promise<string[]>} Configured and reachable provider names.
  */
-export async function detectAvailableProvidersAsync(): Promise<string[]> {
+export async function detectAvailableProvidersAsync(
+  options?: Readonly<ExecutionOptions>,
+): Promise<string[]> {
   const candidates = detectAvailableProviders();
-  const probes = await Promise.all(
-    candidates.map(async (name) => {
-      const reachable = await probeConfiguredProvider(name);
+  const executionOptions = withExecutionBudget(options);
+  const signal = executionOptions.signal;
+  throwIfAborted(signal);
+  const probes = await settleWithConcurrency(
+    candidates,
+    async (name, _index, workerSignal) => {
+      const reachable = await probeConfiguredProvider(name, workerSignal);
       return reachable === false ? null : name;
-    }),
+    },
+    executionOptions,
   );
-  return probes.filter((name): name is string => name !== null);
+  throwIfAborted(signal);
+  return probes.flatMap((probe) =>
+    probe.status === "fulfilled" && probe.value !== null ? [probe.value] : [],
+  );
 }
 
 /**
@@ -78,18 +90,28 @@ export async function detectAvailableProvidersAsync(): Promise<string[]> {
  * reachability probe and surfaces it as `reachable` on each row. Providers
  * without an `isAvailable()` probe get `reachable: undefined` (trust
  * `configured`).
+ * @param options - Shared cancellation, deadline, and concurrency controls.
  * @returns {Promise<ProviderStatus[]>} Provider status rows.
  */
-export async function listProvidersAsync(): Promise<ProviderStatus[]> {
-  return Promise.all(
-    orderedRegisteredProviders().map(async (name) => {
+export async function listProvidersAsync(
+  options?: Readonly<ExecutionOptions>,
+): Promise<ProviderStatus[]> {
+  const executionOptions = withExecutionBudget(options);
+  const signal = executionOptions.signal;
+  throwIfAborted(signal);
+  const statuses = await settleWithConcurrency(
+    orderedRegisteredProviders(),
+    async (name, _index, workerSignal) => {
       const configured = isProviderConfigured(name);
       const base = providerStatus(name, configured);
       if (!configured) return base;
-      const reachable = await probeConfiguredProvider(name);
+      const reachable = await probeConfiguredProvider(name, workerSignal);
       return reachable === undefined ? base : { ...base, reachable };
-    }),
+    },
+    executionOptions,
   );
+  throwIfAborted(signal);
+  return statuses.flatMap((status) => (status.status === "fulfilled" ? [status.value] : []));
 }
 
 /**
@@ -97,12 +119,18 @@ export async function listProvidersAsync(): Promise<ProviderStatus[]> {
  * that is configured AND (if it has an `isAvailable()` probe) reachable. Use
  * in flows that should not crash when the env-preferred default is down
  * (e.g. SearXNG on `localhost:8080` without a running instance).
+ * @param options - Shared cancellation and deadline controls.
  * @returns {Promise<string>} First reachable configured provider.
  */
-export async function resolveDefaultProviderAsync(): Promise<string> {
+export async function resolveDefaultProviderAsync(
+  options?: Readonly<ExecutionOptions>,
+): Promise<string> {
   const candidates = detectAvailableProviders();
+  const signal = withExecutionBudget(options).signal;
   for (const name of candidates) {
-    const reachable = await probeConfiguredProvider(name);
+    throwIfAborted(signal);
+    const reachable = await probeConfiguredProvider(name, signal);
+    throwIfAborted(signal);
     if (reachable !== false) {
       return name;
     }
@@ -132,12 +160,16 @@ function providerStatus(name: string, configured: boolean): ProviderStatus {
   };
 }
 
-async function probeConfiguredProvider(name: string): Promise<boolean | undefined> {
+async function probeConfiguredProvider(
+  name: string,
+  signal?: Readonly<AbortSignal>,
+): Promise<boolean | undefined> {
   try {
     const provider = create(name);
     if (!isAvailabilityProvider(provider)) return undefined;
-    return await provider.isAvailable();
+    return await provider.isAvailable(signal);
   } catch {
+    throwIfAborted(signal);
     return false;
   }
 }

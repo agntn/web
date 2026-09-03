@@ -222,6 +222,56 @@ describe("OMP extension", () => {
     ).rejects.toThrow("Unknown read format: pdf");
   });
 
+  it("forwards the host cancellation signal through every network tool", async () => {
+    const providerName = `ompsignalprovider${Math.random().toString(36).slice(2)}`;
+    const receivedSignals: Array<AbortSignal | undefined> = [];
+    class SignalProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://signal.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, SignalProvider);
+      }
+
+      async search(_query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+        receivedSignals.push(options?.signal);
+        return [];
+      }
+
+      async searchByImage(
+        _url: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<[]> {
+        receivedSignals.push(options?.signal);
+        return [];
+      }
+
+      async read(
+        url: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<{ url: string; content: string }> {
+        receivedSignals.push(options?.signal);
+        return { url, content: "page" };
+      }
+    }
+    customProviderCleanups.push(register(SignalProvider));
+    const tools = captureOmpExtension().tools;
+    const search = requiredTool(tools, "web_search");
+    const image = requiredTool(tools, "web_search_image");
+    const read = requiredTool(tools, "web_read");
+    const signal = new AbortController().signal;
+
+    for (const [tool, params] of [
+      [search, { query: "test", provider: providerName }],
+      [image, { url: "https://example.com/image.jpg", provider: providerName }],
+      [read, { url: "https://example.com", provider: providerName }],
+    ] as const) {
+      await tool.execute("signal-call", params, signal, undefined, {} as never);
+    }
+
+    expect(receivedSignals).toEqual([signal, signal, signal]);
+  });
+
   it("keeps detailed search metadata in OMP results", async () => {
     const previousKey = process.env.FIRECRAWL_API_KEY;
     process.env.FIRECRAWL_API_KEY = "test-key";

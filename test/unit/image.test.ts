@@ -37,6 +37,15 @@ describe("searchByImage", () => {
     });
   });
 
+  it("does not start an image search after the operation deadline", async () => {
+    await expect(
+      searchByImage("https://example.com/image.jpg", { deadline: Date.now() - 1 }),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+
+    expect(mockCreateImageSearchProvider).not.toHaveBeenCalled();
+    expect(mockSearchByImage).not.toHaveBeenCalled();
+  });
+
   it("rejects empty and non-HTTP image URLs before provider creation", async () => {
     await expect(searchByImage("   ")).rejects.toBeInstanceOf(EmptyImageUrlError);
     await expect(searchByImage("file:///tmp/image.jpg")).rejects.toBeInstanceOf(

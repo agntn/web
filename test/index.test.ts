@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   Provider,
+  DEFAULT_CONCURRENCY,
+  MAX_CONCURRENCY,
   builtinProviders,
   create,
   createImageSearchProvider,
@@ -76,5 +78,7 @@ describe("@agntn/web", () => {
     expect(searchBatch).toBeTypeOf("function");
     expect(readBatch).toBeTypeOf("function");
     expect(readBatchDetailed).toBeTypeOf("function");
+    expect(DEFAULT_CONCURRENCY).toBe(3);
+    expect(MAX_CONCURRENCY).toBe(10);
   });
 });

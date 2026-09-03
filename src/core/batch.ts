@@ -11,6 +11,7 @@ import {
 } from "./all.ts";
 import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
 import { ProviderFallbackError, type ProviderFailure } from "./fallback.ts";
+import { settleWithConcurrency, throwIfAborted, withExecutionBudget } from "./execution.ts";
 import { hasSearchFilterWarning, type SearchFilterReport } from "./search-filters.ts";
 import type {
   ReadonlySearchResult,
@@ -87,17 +88,23 @@ export async function searchBatch(
   if (continuation !== undefined) {
     throw new TypeError("continuation is only supported for a single query");
   }
+  const executionOptions = withExecutionBudget(searchOptions);
+  throwIfAborted(executionOptions.signal);
   if (requestedProvider === "all") {
     return mapSearchOutcomes(
-      await settleBatch(queries, (query) => searchAllForBatch(query, searchOptions)),
+      await settleNestedBatch(queries, (query) => searchAllForBatch(query, executionOptions)),
     );
   }
 
   if (requestedProvider === undefined) {
     try {
-      const search = await prepareSearchWithFallback(searchOptions);
+      const search = await prepareSearchWithFallback(executionOptions);
       return mapSearchOutcomes(
-        await settleBatch(queries, async (query) => singleBatchResult(await search(query))),
+        await settleBatch(
+          queries,
+          async (query) => singleBatchResult(await search(query)),
+          executionOptions,
+        ),
       );
     } catch (error) {
       return queries.map((query) => ({ query, error: errorMessage(error) }));
@@ -106,8 +113,13 @@ export async function searchBatch(
 
   try {
     return mapSearchOutcomes(
-      await settleBatch(queries, async (query) =>
-        singleBatchResult(await searchProviderDetailed(requestedProvider, query, searchOptions)),
+      await settleBatch(
+        queries,
+        async (query) =>
+          singleBatchResult(
+            await searchProviderDetailed(requestedProvider, query, executionOptions),
+          ),
+        executionOptions,
       ),
     );
   } catch (error) {
@@ -147,7 +159,13 @@ export async function readBatchDetailed(
   if (options?.continuation !== undefined) {
     throw new TypeError("continuation is only supported for a single URL");
   }
-  const outcomes = await settleBatch(urls, (url) => readUrlDetailed(url, options));
+  const executionOptions = withExecutionBudget(options);
+  throwIfAborted(executionOptions.signal);
+  const outcomes = await settleBatch(
+    urls,
+    (url) => readUrlDetailed(url, executionOptions),
+    executionOptions,
+  );
   return outcomes.map((outcome): ReadBatchDetailedItem =>
     outcome.ok
       ? { url: outcome.input, ...outcome.value }
@@ -231,18 +249,39 @@ function singleBatchResult(response: ReadonlySearchProviderResult): BatchSearchR
   };
 }
 
-async function settleBatch<TResult>(
+async function settleNestedBatch<TResult>(
   inputs: readonly string[],
   execute: (input: string) => Promise<TResult>,
 ): Promise<readonly BatchOutcome<TResult>[]> {
-  return Promise.all(
-    inputs.map(async (input): Promise<BatchOutcome<TResult>> => {
+  const settled = await Promise.allSettled(
+    inputs.map((input) => {
       try {
-        return { ok: true, input, value: await execute(input) };
+        return execute(input);
       } catch (error) {
-        return { ok: false, input, ...batchFailure(error) };
+        return Promise.reject(error);
       }
     }),
+  );
+  return batchOutcomes(inputs, settled);
+}
+
+async function settleBatch<TResult>(
+  inputs: readonly string[],
+  execute: (input: string) => Promise<TResult>,
+  options?: Readonly<SearchRequestOptions | ReadUrlOptions>,
+): Promise<readonly BatchOutcome<TResult>[]> {
+  const settled = await settleWithConcurrency(inputs, (input) => execute(input), options);
+  return batchOutcomes(inputs, settled);
+}
+
+function batchOutcomes<TResult>(
+  inputs: readonly string[],
+  settled: readonly Readonly<PromiseSettledResult<TResult>>[],
+): readonly BatchOutcome<TResult>[] {
+  return settled.map((outcome, index): BatchOutcome<TResult> =>
+    outcome.status === "fulfilled"
+      ? { ok: true, input: inputs[index] as string, value: outcome.value }
+      : { ok: false, input: inputs[index] as string, ...batchFailure(outcome.reason) },
   );
 }
 

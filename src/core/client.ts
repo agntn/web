@@ -8,6 +8,7 @@ const DEFAULT_MAX_RETRIES = 5;
 const DEFAULT_BASE_DELAY = 50;
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_USER_AGENT = `agntn-web/${version}`;
+const RETRY_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 
 /** HTTP client with exponential backoff retry and error mapping to web error types. */
 export class Client {
@@ -57,7 +58,12 @@ export class Client {
     signal?: Readonly<AbortSignal>,
   ): Promise<T> {
     try {
-      return await this.fetch<T>(url, { headers, signal });
+      return signal
+        ? await this.fetchWithCancellation(
+            () => this.fetch<T>(url, { headers, signal, retry: false }),
+            signal,
+          )
+        : await this.fetch<T>(url, { headers, signal });
     } catch (error) {
       throw this.mapError(error, url);
     }
@@ -78,15 +84,48 @@ export class Client {
     signal?: Readonly<AbortSignal>,
   ): Promise<T> {
     try {
-      return await this.fetch<T>(url, {
-        method: "POST",
-        body,
-        headers,
-        signal,
-      });
+      return signal
+        ? await this.fetchWithCancellation(
+            () =>
+              this.fetch<T>(url, {
+                method: "POST",
+                body,
+                headers,
+                signal,
+                retry: false,
+              }),
+            signal,
+          )
+        : await this.fetch<T>(url, {
+            method: "POST",
+            body,
+            headers,
+            signal,
+          });
     } catch (error) {
       throw this.mapError(error, url);
     }
+  }
+
+  private async fetchWithCancellation<T>(
+    request: () => Promise<T>,
+    signal: Readonly<AbortSignal>,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt += 1) {
+      signal.throwIfAborted();
+      try {
+        return await request();
+      } catch (error) {
+        signal.throwIfAborted();
+        if (attempt >= this.maxRetries || !isRetryable(error)) throw error;
+        await abortableDelay(this.retryDelay(attempt), signal);
+      }
+    }
+  }
+
+  private retryDelay(attempt: number): number {
+    const delay = this.baseDelay * Math.pow(2, attempt - 1);
+    return delay + delay * Math.random() * 0.1;
   }
 
   private mapError(error: unknown, url: string): Error {
@@ -102,6 +141,27 @@ export class Client {
     }
     return error instanceof Error ? error : new Error(String(error));
   }
+}
+
+function isRetryable(error: unknown): boolean {
+  if (!(error instanceof FetchError)) return false;
+  const statusCode = error.statusCode ?? 0;
+  return statusCode === 0 || RETRY_STATUS_CODES.has(statusCode);
+}
+
+function abortableDelay(milliseconds: number, signal: Readonly<AbortSignal>): Promise<void> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, milliseconds);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
 }
 
 const SENSITIVE_PARAMS = ["api_key", "key", "token", "secret", "password", "apikey", "url"];

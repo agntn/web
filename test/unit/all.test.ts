@@ -6,10 +6,17 @@ const mockPostJSON =
       url: string,
       body: Readonly<Record<string, unknown>>,
       headers?: Readonly<Record<string, string>>,
+      signal?: Readonly<AbortSignal>,
     ) => Promise<unknown>
   >();
 const mockGetJSON =
-  vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();
+  vi.fn<
+    (
+      url: string,
+      headers?: Readonly<Record<string, string>>,
+      signal?: Readonly<AbortSignal>,
+    ) => Promise<unknown>
+  >();
 
 vi.mock("../../src/core/client.ts", () => ({
   Client: vi.fn(),
@@ -40,6 +47,9 @@ import {
 } from "../../src/core/errors.ts";
 import { ProviderFallbackError } from "../../src/core/fallback.ts";
 import { searchBatch } from "../../src/core/batch.ts";
+import { Provider } from "../../src/core/provider.ts";
+import { register } from "../../src/core/registry.ts";
+import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 import {
   encodeSearchContinuation,
   MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH,
@@ -580,6 +590,141 @@ describe("searchAllDetailed", () => {
     });
   });
 
+  it("forwards caller cancellation to the provider request", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    mockPostJSON.mockResolvedValue(exaResponse);
+    const signal = new AbortController().signal;
+
+    await searchProviderDetailed("exa", "test", { signal });
+
+    expect(mockPostJSON.mock.calls[0]?.[3]).toBe(signal);
+  });
+
+  it("preserves the caller abort reason after a provider normalizes fetch errors", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    mockPostJSON.mockImplementation(
+      async (_url, _body, _headers, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("fetch cancelled")), {
+            once: true,
+          });
+        }),
+    );
+    const controller = new AbortController();
+    const reason = new DOMException("cancelled by host", "AbortError");
+
+    const pending = searchProviderDetailed("exa", "test", { signal: controller.signal });
+    controller.abort(reason);
+
+    await expect(pending).rejects.toBe(reason);
+  });
+
+  it("does not start a provider request after the operation deadline", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    mockPostJSON.mockResolvedValue(exaResponse);
+
+    await expect(
+      searchProviderDetailed("exa", "test", { deadline: Date.now() - 1 }),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(mockPostJSON).not.toHaveBeenCalled();
+  });
+
+  it("keeps long absolute deadlines beyond the Node timer limit", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    mockPostJSON.mockResolvedValue(exaResponse);
+
+    await searchProviderDetailed("exa", "test", { deadline: Date.now() + 3_000_000_000 });
+    const signal = mockPostJSON.mock.calls[0]?.[3];
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it("rejects invalid execution budgets before provider requests", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+
+    await expect(searchAllDetailed("test", { providers: ["exa"], concurrency: 0 })).rejects.toThrow(
+      "concurrency must be an integer between 1 and 10",
+    );
+    await expect(searchProviderDetailed("exa", "test", { deadline: Number.NaN })).rejects.toThrow(
+      "deadline must be a finite Unix timestamp",
+    );
+    expect(mockPostJSON).not.toHaveBeenCalled();
+  });
+
+  it("bounds provider fanout concurrency", async () => {
+    const providerNames = Array.from(
+      { length: 4 },
+      (_, index) => `fanout-concurrency-${index}-${Math.random().toString(36).slice(2)}`,
+    );
+    let active = 0;
+    let maximumActive = 0;
+    const cleanups = providerNames.map((name) => {
+      class ConcurrencyProvider extends Provider {
+        static readonly providerName = name;
+        static readonly defaultBaseURL = "https://concurrency.example.com";
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, ConcurrencyProvider);
+        }
+
+        async search(): Promise<SearchResult[]> {
+          active += 1;
+          maximumActive = Math.max(maximumActive, active);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          active -= 1;
+          return [];
+        }
+      }
+      return register(ConcurrencyProvider);
+    });
+
+    try {
+      await searchAllDetailed("test", { providers: providerNames });
+      expect(maximumActive).toBe(3);
+    } finally {
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  });
+
+  it("shares one deadline signal across provider fanout", async () => {
+    const providerNames = Array.from(
+      { length: 2 },
+      (_, index) => `fanout-deadline-${index}-${Math.random().toString(36).slice(2)}`,
+    );
+    const signals = new Set<AbortSignal | undefined>();
+    const cleanups = providerNames.map((name) => {
+      class DeadlineProvider extends Provider {
+        static readonly providerName = name;
+        static readonly defaultBaseURL = "https://deadline.example.com";
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, DeadlineProvider);
+        }
+
+        async search(
+          _query: string,
+          options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+        ): Promise<SearchResult[]> {
+          signals.add(options?.signal);
+          return [];
+        }
+      }
+      return register(DeadlineProvider);
+    });
+
+    try {
+      await searchAllDetailed("test", {
+        providers: providerNames,
+        deadline: Date.now() + 60_000,
+      });
+      expect(signals.size).toBe(1);
+      expect([...signals][0]).toBeInstanceOf(AbortSignal);
+    } finally {
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  });
+
   it("publishes bounds that accommodate provider-native continuation state", () => {
     const continuation = encodeSearchContinuation(
       "custom",
@@ -641,6 +786,35 @@ describe("searchAllDetailed", () => {
     expect(new URL(mockGetJSON.mock.calls[1][0]).searchParams.get("offset")).toBe("1");
     expect(second.results[0]?.url).toBe("https://page-two.example");
     expect(second.pagination).toEqual({ status: "end" });
+  });
+
+  it("keeps execution controls outside continuation fingerprints", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON
+      .mockResolvedValueOnce({
+        query: { more_results_available: true },
+        web: { results: [] },
+      })
+      .mockResolvedValueOnce({
+        query: { more_results_available: false },
+        web: { results: [] },
+      });
+    const first = await searchProviderDetailed("brave", "test", {
+      maxResults: 1,
+      concurrency: 1,
+      deadline: Date.now() + 60_000,
+    });
+    if (first.pagination.status !== "next") throw new Error("expected another page");
+
+    await expect(
+      searchProviderDetailed("brave", "test", {
+        maxResults: 1,
+        concurrency: 3,
+        deadline: Date.now() + 120_000,
+        signal: new AbortController().signal,
+        continuation: first.pagination.continuation,
+      }),
+    ).resolves.toMatchObject({ pagination: { status: "end" } });
   });
 
   it("continues one provider from a fanout token with the same default page size", async () => {
@@ -1120,6 +1294,61 @@ describe("searchWithFallback", () => {
     ]);
   });
 
+  it("does not renew the deadline between fallback providers", async () => {
+    const firstName = `deadline-fallback-first-${Math.random().toString(36).slice(2)}`;
+    const secondName = `deadline-fallback-second-${Math.random().toString(36).slice(2)}`;
+    const started: string[] = [];
+    class FirstProvider extends Provider {
+      static readonly providerName = firstName;
+      static readonly defaultBaseURL = "https://first.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, FirstProvider);
+      }
+
+      async search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        started.push(firstName);
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener(
+            "abort",
+            () => reject(new HTTPError(503, this.baseURL, "Unavailable")),
+            { once: true },
+          );
+        });
+      }
+    }
+    class SecondProvider extends Provider {
+      static readonly providerName = secondName;
+      static readonly defaultBaseURL = "https://second.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, SecondProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        started.push(secondName);
+        return [];
+      }
+    }
+    const cleanups = [register(FirstProvider), register(SecondProvider)];
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("unavailable"));
+
+    try {
+      await expect(searchWithFallback("test", { deadline: Date.now() + 25 })).rejects.toMatchObject(
+        { name: "TimeoutError" },
+      );
+      expect(started).toEqual([firstName]);
+    } finally {
+      fetchSpy.mockRestore();
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  });
+
   it("keeps transient failures strict for explicit providers", async () => {
     process.env.EXA_API_KEY = "test-exa";
     process.env.BRAVE_API_KEY = "test-brave";
@@ -1129,5 +1358,159 @@ describe("searchWithFallback", () => {
 
     await expect(searchProviderDetailed("exa", "test")).rejects.toBe(failure);
     expect(mockGetJSON).not.toHaveBeenCalled();
+  });
+
+  it("stops queued provider fanout after cancellation", async () => {
+    const controller = new AbortController();
+    const reason = new DOMException("Cancelled fanout", "AbortError");
+    const started: string[] = [];
+    const providerNames = Array.from(
+      { length: 3 },
+      (_, index) => `fanout-cancel-${index}-${Math.random().toString(36).slice(2)}`,
+    );
+    const cleanups = providerNames.map((name) => {
+      class FanoutCancellationProvider extends Provider {
+        static readonly providerName = name;
+        static readonly defaultBaseURL = "https://fanout-cancel.example.com";
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, FanoutCancellationProvider);
+        }
+
+        async search(): Promise<SearchResult[]> {
+          started.push(name);
+          controller.abort(reason);
+          controller.signal.throwIfAborted();
+          return [];
+        }
+      }
+      return register(FanoutCancellationProvider);
+    });
+
+    try {
+      await expect(
+        searchAllDetailed("test", {
+          providers: providerNames,
+          concurrency: 1,
+          signal: controller.signal,
+        }),
+      ).rejects.toBe(reason);
+      expect(started).toEqual([providerNames[0]]);
+    } finally {
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  });
+
+  it("stops launching batch queries after cancellation", async () => {
+    const providerName = `batch-cancel-${Math.random().toString(36).slice(2)}`;
+    const controller = new AbortController();
+    const started: string[] = [];
+    class BatchCancellationProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://batch-cancel.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, BatchCancellationProvider);
+      }
+
+      async search(
+        query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        started.push(query);
+        controller.abort(new DOMException("Cancelled by caller", "AbortError"));
+        options?.signal?.throwIfAborted();
+        return [];
+      }
+    }
+    const cleanup = register(BatchCancellationProvider);
+
+    try {
+      const outcomes = await searchBatch(["one", "two", "three"], {
+        provider: providerName,
+        concurrency: 1,
+        signal: controller.signal,
+      });
+      expect(started).toEqual(["one"]);
+      expect(outcomes).toEqual([
+        { query: "one", error: "Cancelled by caller" },
+        { query: "two", error: "Cancelled by caller" },
+        { query: "three", error: "Cancelled by caller" },
+      ]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("keeps nested provider fanout inside the batch concurrency budget", async () => {
+    const providerNames = Array.from(
+      { length: 2 },
+      (_, index) => `nested-concurrency-${index}-${Math.random().toString(36).slice(2)}`,
+    );
+    let active = 0;
+    let maximumActive = 0;
+    const cleanups = providerNames.map((name) => {
+      class NestedConcurrencyProvider extends Provider {
+        static readonly providerName = name;
+        static readonly defaultBaseURL = "https://nested-concurrency.example.com";
+        static readonly apiKeyEnvVar = null;
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, NestedConcurrencyProvider);
+        }
+
+        async search(): Promise<SearchResult[]> {
+          active += 1;
+          maximumActive = Math.max(maximumActive, active);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          active -= 1;
+          return [];
+        }
+      }
+      return register(NestedConcurrencyProvider);
+    });
+
+    try {
+      await searchBatch(["one", "two", "three"], {
+        provider: "all",
+        concurrency: 2,
+      });
+      expect(maximumActive).toBe(2);
+    } finally {
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  });
+
+  it("bounds concurrent queries in a search batch", async () => {
+    const providerName = `batch-concurrency-${Math.random().toString(36).slice(2)}`;
+    let active = 0;
+    let maximumActive = 0;
+    class BatchConcurrencyProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://batch-concurrency.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, BatchConcurrencyProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        active += 1;
+        maximumActive = Math.max(maximumActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        active -= 1;
+        return [];
+      }
+    }
+    const cleanup = register(BatchConcurrencyProvider);
+
+    try {
+      await searchBatch(["one", "two", "three", "four"], {
+        provider: providerName,
+        concurrency: 2,
+      });
+      expect(maximumActive).toBe(2);
+    } finally {
+      cleanup();
+    }
   });
 });

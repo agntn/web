@@ -91,6 +91,8 @@ class MojeekProvider extends Provider {
       const start = mojeekStart(continuation);
       const envelope = await this.client.getJSON<MojeekSearchEnvelope>(
         `${this.baseURL}/search?${searchParams(query, this.apiKey, options, start)}`,
+        undefined,
+        options?.signal,
       );
       const response = successfulResponse(envelope);
       return {

@@ -101,7 +101,12 @@ class ExaProvider extends Provider {
     try {
       const url = `${this.baseURL}/search`;
       const headers = { "x-api-key": this.apiKey };
-      const response = await this.client.postJSON<ExaSearchResponse>(url, body, headers);
+      const response = await this.client.postJSON<ExaSearchResponse>(
+        url,
+        body,
+        headers,
+        searchOptions.signal,
+      );
       return response.results.map(mapResult);
     } catch (error) {
       throw normalizeError(error, "exa");

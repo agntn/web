@@ -246,7 +246,7 @@ If automatic selection cannot return after one or more eligible failures, `searc
 
 ### Batch operations
 
-`searchBatch` and `readBatch` run up to 10 independent operations in parallel. Input order is preserved, and one failure does not discard the other outcomes. Detailed automatic outcomes add the effective `provider`, ordered `attempts`, and failed-provider messages in `failures`. Without an explicit search provider, each query tries the remaining configured providers after eligible transient failures:
+`searchBatch` and `readBatch` accept up to 10 inputs and run three independent operations concurrently by default. Set `concurrency` from 1 to 10 to change that bound. Input order is preserved, and one failure does not discard the other outcomes. Detailed automatic outcomes add the effective `provider`, ordered `attempts`, and failed-provider messages in `failures`. Without an explicit search provider, each query tries the remaining configured providers after eligible transient failures:
 
 ```typescript
 import { readBatch, searchBatch } from "@agntn/web";
@@ -505,10 +505,22 @@ interface ReadResult {
 }
 ```
 
+Every network operation accepts the same execution controls:
+
+```typescript
+interface ExecutionOptions {
+  signal?: AbortSignal;
+  deadline?: number; // absolute Unix timestamp in milliseconds
+  concurrency?: number; // batch and fan-out only; default 3, maximum 10
+}
+```
+
+`signal` cancels in-flight provider requests. `deadline` is shared by the whole operation, including fallback, batch, and provider fan-out, so waiting for earlier work does not reset the budget. Batch and fan-out helpers stop launching queued requests after cancellation or deadline expiry. A batch with `provider: "all"` shares one scheduler across its outer queries and inner provider fan-out, keeping total request concurrency within the selected limit. Execution controls do not change continuation fingerprints.
+
 Search request options you can pass to `.search()` or the detailed core helpers:
 
 ```typescript
-interface SearchRequestOptions {
+interface SearchRequestOptions extends ExecutionOptions {
   readonly maxResults?: number;
   highlights?: boolean;
   summary?: boolean;
@@ -550,7 +562,7 @@ Firecrawl uses the plural array filters from its API: `sources` selects result g
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 
 ```typescript
-interface ReadUrlOptions {
+interface ReadUrlOptions extends ExecutionOptions {
   provider?: string;
   format?: "markdown" | "text" | "html";
   maxTokens?: number;
