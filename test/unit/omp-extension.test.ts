@@ -59,6 +59,12 @@ afterEach(() => {
 });
 
 describe("OMP extension", () => {
+  it("types against checkout source instead of the self package", () => {
+    expect(
+      readFileSync(new URL("../../packages/omp/extensions/web.ts", import.meta.url), "utf8"),
+    ).not.toMatch(/(?:from|import\()\s*["']@agntn\/web["']/u);
+  });
+
   it("ships the extension manifest and registers the complete read surface", () => {
     const manifest = JSON.parse(
       readFileSync(new URL("../../package.json", import.meta.url), "utf8"),

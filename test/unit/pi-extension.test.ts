@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import stringWidth from "string-width";
@@ -24,10 +25,13 @@ type CapturedTool = Readonly<
 type CapturedCommand = Parameters<ExtensionAPI["registerCommand"]>[1];
 
 describe("Pi extension", () => {
-  it("loads current source instead of a potentially stale ignored build", () => {
+  it("loads and types against current source instead of a stale build", () => {
     expect(fileURLToPath(resolveWebModuleUrl())).toBe(
       fileURLToPath(new URL("../../src/index.ts", import.meta.url)),
     );
+    expect(
+      readFileSync(new URL("../../packages/pi/extensions/web.ts", import.meta.url), "utf8"),
+    ).not.toMatch(/(?:from|import\()\s*["']@agntn\/web["']/u);
   });
 
   it("registers reverse image search as a separate tool", () => {

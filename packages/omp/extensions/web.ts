@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { AgentToolResult, ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
-import type { ReadOptions, SearchRequestOptions } from "@agntn/web";
+import type { ReadOptions, SearchRequestOptions } from "../../../src/index.ts";
 
 import {
   createViewportText,

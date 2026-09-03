@@ -8,4 +8,5 @@ OMP-facing adapters for `@agntn/web`. The library under `src/` owns provider beh
 - Return host-neutral width-aware components; do not import OMP TUI modules directly.
 - Mark every web tool with `approval: "read"`.
 - Keep execution behavior aligned with Pi and MCP, and guard schema drift in tests.
+- Local extensions import library types from `../../../src/index.ts`, never through the self package name.
 - Every changed path needs extension typecheck, tests, build, and an OMP plugin smoke.

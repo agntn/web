@@ -28,7 +28,7 @@ import type {
   SearchProviderMetadata,
   SearchRequestOptions,
   SearchResult,
-} from "@agntn/web";
+} from "../../../src/index.ts";
 
 type SearchSingleDetails = {
   readonly mode: "single";
@@ -92,7 +92,7 @@ type ReadDetails =
       readonly outcomes: readonly ReadBatchDetailedItem[];
     };
 
-type WebModule = typeof import("@agntn/web");
+type WebModule = typeof import("../../../src/index.ts");
 
 const sourceModuleUrl = new URL("../../../src/index.ts", import.meta.url);
 const distributionModuleUrl = new URL("../../../dist/index.mjs", import.meta.url);
