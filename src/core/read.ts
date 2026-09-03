@@ -16,6 +16,13 @@ import {
 import { createReadProvider, has, readProviders } from "./registry.ts";
 import { isProviderConfigured } from "./resolve.ts";
 import {
+  DEFAULT_CONCURRENCY,
+  MAX_CONCURRENCY,
+  providerRequestOptions,
+  throwIfAborted,
+  withExecutionBudget,
+} from "./execution.ts";
+import {
   MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH,
   MAX_SEARCH_CONTINUATION_LENGTH,
 } from "./search-continuation.ts";
@@ -31,6 +38,16 @@ export const MAX_AGENT_READ_CHARS = 200_000;
 
 /** Package guarantees that apply after every provider returns. */
 export const packageCapabilities = {
+  execution: {
+    cancellation: { option: "signal" },
+    deadline: { option: "deadline", unit: "unix-ms" },
+    concurrency: {
+      option: "concurrency",
+      default: DEFAULT_CONCURRENCY,
+      maximum: MAX_CONCURRENCY,
+      scope: "batch-and-fanout",
+    },
+  },
   search: {
     continuation: {
       option: "continuation",
@@ -123,22 +140,30 @@ export async function readUrlDetailed(
     ...readOptions
   } = options ?? {};
   const maxChars = readMaxChars(maxCharsInput);
+  const effectiveReadOptions = withExecutionBudget(readOptions);
+  throwIfAborted(effectiveReadOptions.signal);
   const requestedProviderName = requestedProviderInput?.trim();
   const requestedProvider = requestedProviderName || "auto";
 
   if (continuation !== undefined) {
-    return continueRead(trimmedUrl, requestedProvider, readOptions, maxChars, continuation);
+    return continueRead(
+      trimmedUrl,
+      requestedProvider,
+      effectiveReadOptions,
+      maxChars,
+      continuation,
+    );
   }
 
   const response = requestedProviderName
-    ? await readExplicitly(trimmedUrl, readOptions, requestedProviderName)
-    : await readAutomatically(trimmedUrl, readOptions);
+    ? await readExplicitly(trimmedUrl, effectiveReadOptions, requestedProviderName)
+    : await readAutomatically(trimmedUrl, effectiveReadOptions);
   if (maxChars === undefined) return response;
   return {
     ...response,
     result: pageReadResult(response.result, {
       url: trimmedUrl,
-      readOptions,
+      readOptions: effectiveReadOptions,
       maxChars,
       offset: 0,
       provider: response.provider,
@@ -241,12 +266,21 @@ async function readAutomatically(
   throw new ProviderFallbackError("read", failures, lastError);
 }
 
-function readFromProvider(
+async function readFromProvider(
   url: string,
   options: Readonly<ReadOptions>,
   providerName: string,
 ): Promise<ReadResult> {
-  return createReadProvider(providerName).read(url, options);
+  throwIfAborted(options.signal);
+  let result: ReadResult;
+  try {
+    result = await createReadProvider(providerName).read(url, providerRequestOptions(options));
+  } catch (error) {
+    throwIfAborted(options.signal);
+    throw error;
+  }
+  throwIfAborted(options.signal);
+  return result;
 }
 
 function configuredReadProviders(initialProvider: string): string[] {

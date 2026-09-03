@@ -319,7 +319,7 @@ export default function webExtension(pi: ExtensionAPI) {
     ],
     parameters: searchParameters,
     ...statusRenderers("web_search"),
-    async execute(_toolCallId, params): Promise<AgentToolResult<SearchDetails>> {
+    async execute(_toolCallId, params, signal): Promise<AgentToolResult<SearchDetails>> {
       const web = await loadWeb();
       const providerName = normalizeSearchProviderInput(params.provider, web.searchProviders());
       const searchOptions: SearchPageOptions = stripUndefined({
@@ -336,11 +336,12 @@ export default function webExtension(pi: ExtensionAPI) {
         startPublishedDate: params.startPublishedDate,
         endPublishedDate: params.endPublishedDate,
       });
+      const executionOptions = { ...searchOptions, signal };
 
       if (Array.isArray(params.query)) {
         const outcomes = await web.searchBatch(params.query, {
           provider: providerName,
-          ...searchOptions,
+          ...executionOptions,
         });
         return {
           content: [{ type: "text", text: formatSearchBatch(outcomes) }],
@@ -359,7 +360,7 @@ export default function webExtension(pi: ExtensionAPI) {
         throw new Error("Query cannot be empty");
       }
       if (providerName === "all") {
-        const response = await web.searchAllDetailed(query, searchOptions);
+        const response = await web.searchAllDetailed(query, executionOptions);
         const results = response.results;
         const header = buildHeader({
           mode: "all",
@@ -406,7 +407,7 @@ export default function webExtension(pi: ExtensionAPI) {
       }
 
       if (providerName !== undefined) {
-        const response = await web.searchProviderDetailed(providerName, query, searchOptions);
+        const response = await web.searchProviderDetailed(providerName, query, executionOptions);
         const header = buildHeader({
           mode: "single",
           provider: providerName,
@@ -441,7 +442,7 @@ export default function webExtension(pi: ExtensionAPI) {
         };
       }
 
-      const response = await web.searchWithFallback(query, searchOptions);
+      const response = await web.searchWithFallback(query, executionOptions);
       const header = buildHeader({
         mode: "single",
         provider: response.provider,
@@ -490,7 +491,7 @@ export default function webExtension(pi: ExtensionAPI) {
     ],
     parameters: imageSearchParameters,
     ...statusRenderers("web_search_image"),
-    async execute(_toolCallId, params): Promise<AgentToolResult<ImageSearchDetails>> {
+    async execute(_toolCallId, params, signal): Promise<AgentToolResult<ImageSearchDetails>> {
       const web = await loadWeb();
       const provider = normalizeImageSearchProviderInput(
         params.provider,
@@ -501,6 +502,7 @@ export default function webExtension(pi: ExtensionAPI) {
       const results = await web.searchByImage(url, {
         provider,
         maxResults: params.maxResults,
+        signal,
       });
       const header = `[provider=${provider}] ${results.length} image match(es) for ${truncateSingleLine(url, 200)}`;
       return {
@@ -523,7 +525,7 @@ export default function webExtension(pi: ExtensionAPI) {
     ],
     parameters: readParameters,
     ...statusRenderers("web_read"),
-    async execute(_toolCallId, params): Promise<AgentToolResult<ReadDetails>> {
+    async execute(_toolCallId, params, signal): Promise<AgentToolResult<ReadDetails>> {
       const web = await loadWeb();
       const readProvider = normalizeReadProviderInput(params.provider, web.readProviders());
       const readProviderLabel = readProvider ?? "auto";
@@ -546,6 +548,7 @@ export default function webExtension(pi: ExtensionAPI) {
         const outcomes = await web.readBatchDetailed(params.url, {
           provider: readProvider,
           ...readOptions,
+          signal,
         });
         return {
           content: [{ type: "text", text: formatReadBatch(outcomes) }],
@@ -566,6 +569,7 @@ export default function webExtension(pi: ExtensionAPI) {
       const response = await web.readUrlDetailed(url, {
         provider: readProvider,
         ...readOptions,
+        signal,
       });
       const header = `[provider=${response.provider} requested=${response.requestedProvider}] read ${truncateSingleLine(response.result.url, 200)}`;
       return {
@@ -598,6 +602,7 @@ export default function webExtension(pi: ExtensionAPI) {
     async execute(
       _toolCallId: string,
       _params: EmptyParams,
+      signal: Readonly<AbortSignal> | undefined,
     ): Promise<
       AgentToolResult<{
         readonly runtime: RuntimeInfo;
@@ -606,7 +611,7 @@ export default function webExtension(pi: ExtensionAPI) {
       }>
     > {
       const web = await loadWeb();
-      const statuses = await web.listProvidersAsync();
+      const statuses = await web.listProvidersAsync({ signal });
       const lines = statuses.map((s) => formatProviderStatus(s));
       const runtimeLine = `web ${web.runtimeInfo.version} build ${web.runtimeInfo.buildId}, started ${web.runtimeInfo.processStartedAt}`;
       const readLimit = web.packageCapabilities.read.outputLimit;

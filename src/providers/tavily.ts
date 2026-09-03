@@ -80,7 +80,12 @@ class TavilyProvider extends Provider {
 
     try {
       const url = `${this.baseURL}/search`;
-      const response = await this.client.postJSON<TavilySearchResponse>(url, body);
+      const response = await this.client.postJSON<TavilySearchResponse>(
+        url,
+        body,
+        undefined,
+        options?.signal,
+      );
       return {
         results: response.results.map(mapResult),
         ...(response.answer === undefined ? {} : { metadata: { answer: response.answer } }),

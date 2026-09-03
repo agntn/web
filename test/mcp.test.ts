@@ -66,6 +66,50 @@ afterEach(async () => {
 });
 
 describe("web MCP server", () => {
+  it("forwards request cancellation through the MCP server handler", async () => {
+    const providerName = `mcp-signal-${Math.random().toString(36).slice(2)}`;
+    let providerSignal: AbortSignal | undefined;
+    let markStarted: (() => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    class SignalProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://signal.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, SignalProvider);
+      }
+
+      async search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        providerSignal = options?.signal;
+        markStarted?.();
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    customProviderCleanups.push(register(SignalProvider));
+    const client = await connectTestClient();
+    const controller = new AbortController();
+
+    const pending = client.callTool(
+      { name: "web_search", arguments: { query: "test", provider: providerName } },
+      undefined,
+      { signal: controller.signal },
+    );
+    await started;
+    controller.abort();
+
+    await expect(pending).rejects.toThrow();
+    await vi.waitFor(() => expect(providerSignal?.aborted).toBe(true));
+  });
+
   it("advertises the four capability tools as read-only", async () => {
     const client = await connectTestClient();
 
@@ -734,6 +778,26 @@ describe("web MCP executors", () => {
     await expect(
       executeSearch({ query: "test", provider: "exa", summary: "true" }),
     ).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("forwards MCP cancellation through every executor", async () => {
+    vi.stubEnv("EXA_API_KEY", "test-exa");
+    vi.stubEnv("SERPAPI_API_KEY", "test-serpapi");
+    mockPostJSON.mockResolvedValue({ requestId: "request", results: [] });
+    mockGetJSON.mockResolvedValueOnce({ visual_matches: [] }).mockResolvedValueOnce({
+      code: 200,
+      status: 20_000,
+      data: { url: "https://example.com", content: "page" },
+    });
+    const signal = new AbortController().signal;
+
+    await executeSearch({ query: "test", provider: "exa" }, signal);
+    await executeImageSearch({ url: "https://example.com/image.jpg", provider: "serpapi" }, signal);
+    await executeRead({ url: "https://example.com", provider: "jina" }, signal);
+
+    expect(mockPostJSON.mock.calls[0]?.[3]).toBe(signal);
+    expect(mockGetJSON.mock.calls[0]?.[2]).toBe(signal);
+    expect(mockGetJSON.mock.calls[1]?.[2]).toBe(signal);
   });
 
   it("guards the empty-query contract when a host skips validation", async () => {

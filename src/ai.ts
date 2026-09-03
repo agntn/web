@@ -78,22 +78,25 @@ export const searchTool = tool({
       .optional()
       .describe("Filter results published before this date (ISO 8601)"),
   }),
-  execute: async ({
-    query,
-    provider: providerName,
-    maxResults,
-    continuation,
-    highlights,
-    summary,
-    fullText,
-    includeDomains,
-    excludeDomains,
-    sources,
-    categories,
-    category,
-    startPublishedDate,
-    endPublishedDate,
-  }) => {
+  execute: async (
+    {
+      query,
+      provider: providerName,
+      maxResults,
+      continuation,
+      highlights,
+      summary,
+      fullText,
+      includeDomains,
+      excludeDomains,
+      sources,
+      categories,
+      category,
+      startPublishedDate,
+      endPublishedDate,
+    },
+    { abortSignal },
+  ) => {
     const normalizedProvider = providerName === "auto" ? undefined : providerName;
     const searchOptions = {
       maxResults,
@@ -108,6 +111,7 @@ export const searchTool = tool({
       category,
       startPublishedDate,
       endPublishedDate,
+      signal: abortSignal,
     };
 
     if (Array.isArray(query)) {
@@ -153,7 +157,8 @@ export const searchImageTool = tool({
       .optional()
       .describe("Maximum matches to return. Defaults to 10."),
   }),
-  execute: async ({ url, provider, maxResults }) => searchByImage(url, { provider, maxResults }),
+  execute: async ({ url, provider, maxResults }, { abortSignal }) =>
+    searchByImage(url, { provider, maxResults, signal: abortSignal }),
 });
 
 export const readTool = tool({
@@ -206,18 +211,21 @@ export const readTool = tool({
       .describe("Provider timeout in seconds when supported."),
     noCache: z.boolean().optional().describe("Bypass provider cache when supported."),
   }),
-  execute: async ({
-    url,
-    provider,
-    format,
-    maxTokens,
-    maxChars,
-    continuation,
-    targetSelector,
-    removeSelector,
-    timeout,
-    noCache,
-  }) => {
+  execute: async (
+    {
+      url,
+      provider,
+      format,
+      maxTokens,
+      maxChars,
+      continuation,
+      targetSelector,
+      removeSelector,
+      timeout,
+      noCache,
+    },
+    { abortSignal },
+  ) => {
     if (Array.isArray(url) && continuation !== undefined) {
       throw new TypeError("continuation is only supported for a single URL");
     }
@@ -232,6 +240,7 @@ export const readTool = tool({
       removeSelector,
       timeout,
       noCache,
+      signal: abortSignal,
     };
     if (Array.isArray(url)) {
       return readBatchDetailed(url, readOptions);

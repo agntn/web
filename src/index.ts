@@ -8,6 +8,7 @@ export { builtinProviders, type WebSearchProviderName } from "./core/providers.t
 export type {
   SearchResult,
   SearchResponse,
+  ExecutionOptions,
   SearchOptions,
   SearchRequestOptions,
   SearchPageOptions,
@@ -136,6 +137,7 @@ export {
 } from "./core/read.ts";
 export type { ReadProviderName, ReadUrlOptions, ReadUrlDetailedResult } from "./core/read.ts";
 
+export { DEFAULT_CONCURRENCY, MAX_CONCURRENCY } from "./core/execution.ts";
 export { MAX_BATCH_ITEMS, searchBatch, readBatch, readBatchDetailed } from "./core/batch.ts";
 export type {
   SearchBatchOptions,

@@ -83,8 +83,44 @@ describe("Client", () => {
 
       const result = await client.getJSON(testUrl, undefined, signal);
 
-      expect(mockFetch).toHaveBeenCalledWith(testUrl, { headers: undefined, signal });
+      expect(mockFetch).toHaveBeenCalledWith(testUrl, {
+        headers: undefined,
+        signal,
+        retry: false,
+      });
       expect(result).toEqual(testData);
+    });
+
+    it("should retry eligible failures while a caller signal remains active", async () => {
+      const client = new Client({ maxRetries: 1, baseDelay: 0 });
+      const error = new FetchError("Server error");
+      error.statusCode = 500;
+      mockFetch.mockRejectedValueOnce(error).mockResolvedValueOnce({ result: "success" });
+
+      await expect(
+        client.getJSON("https://api.example.com/data", undefined, new AbortController().signal),
+      ).resolves.toEqual({ result: "success" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("should stop before a retry when the caller aborts during backoff", async () => {
+      const client = new Client({ maxRetries: 2, baseDelay: 10_000 });
+      const signalController = new AbortController();
+      const reason = new DOMException("cancelled during backoff", "AbortError");
+      const error = new FetchError("Server error");
+      error.statusCode = 500;
+      mockFetch.mockRejectedValue(error);
+
+      const pending = client.getJSON(
+        "https://api.example.com/data",
+        undefined,
+        signalController.signal,
+      );
+      await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+      signalController.abort(reason);
+
+      await expect(pending).rejects.toBe(reason);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it("should call fetch without signal when not provided", async () => {
@@ -176,6 +212,7 @@ describe("Client", () => {
         body: testBody,
         headers: undefined,
         signal,
+        retry: false,
       });
       expect(result).toEqual(testResponse);
     });

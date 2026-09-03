@@ -91,6 +91,7 @@ class ContextProvider extends Provider {
         `${this.baseURL}/web/search`,
         searchBody(query, options),
         this.authHeaders(),
+        options?.signal,
       );
       return response.results.slice(0, resultLimit(options?.maxResults)).map(mapSearchResult);
     } catch (error) {
@@ -103,6 +104,7 @@ class ContextProvider extends Provider {
       const response = await this.readClient.getJSON<ContextScrapeResponse>(
         `${this.baseURL}/web/scrape/markdown?${scrapeParams(url, options)}`,
         this.authHeaders(),
+        options?.signal,
       );
       return mapReadResult(response, options?.format);
     } catch (error) {

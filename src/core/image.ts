@@ -5,6 +5,7 @@ import {
   InvalidImageUrlError,
 } from "./errors.ts";
 import { createImageSearchProvider, has, searchImageProviders } from "./registry.ts";
+import { providerRequestOptions, throwIfAborted, withExecutionBudget } from "./execution.ts";
 import type { ImageSearchOptions, ImageSearchResult } from "./types.ts";
 
 /** Built-in providers that accept an image URL as a search input. */
@@ -36,13 +37,26 @@ export async function searchByImage(
 
   const { provider = DEFAULT_IMAGE_SEARCH_PROVIDER, ...searchOptions } = options ?? {};
   assertMaxResults(searchOptions.maxResults);
+  const effectiveSearchOptions = withExecutionBudget(searchOptions);
+  throwIfAborted(effectiveSearchOptions.signal);
   const providerName = provider.trim();
   const registeredOrBuiltin =
     has(providerName) || (builtinProviders as readonly string[]).includes(providerName);
   if (registeredOrBuiltin && !searchImageProviders().includes(providerName)) {
     throw new ImageSearchNotSupportedError(providerName);
   }
-  return createImageSearchProvider(providerName).searchByImage(trimmedUrl, searchOptions);
+  let results: ImageSearchResult[];
+  try {
+    results = await createImageSearchProvider(providerName).searchByImage(
+      trimmedUrl,
+      providerRequestOptions(effectiveSearchOptions),
+    );
+  } catch (error) {
+    throwIfAborted(effectiveSearchOptions.signal);
+    throw error;
+  }
+  throwIfAborted(effectiveSearchOptions.signal);
+  return results;
 }
 
 function assertMaxResults(maxResults: number | undefined): void {

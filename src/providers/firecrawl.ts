@@ -114,6 +114,7 @@ class FirecrawlProvider extends Provider {
         `${this.baseURL}/v2/search`,
         searchBody(query, options),
         this.authHeaders(),
+        options?.signal,
       );
       return mapSearchResponse(response, options?.maxResults);
     } catch (error) {
@@ -131,6 +132,7 @@ class FirecrawlProvider extends Provider {
         `${this.baseURL}/v2/scrape`,
         scrapeBody(url, options),
         this.authHeaders(),
+        options?.signal,
       );
       return mapScrapeResponse(url, response);
     } catch (error) {

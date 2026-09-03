@@ -100,7 +100,11 @@ class SerpApiProvider extends Provider {
     try {
       const start = serpApiStart(continuation);
       const url = `${this.baseURL}/search?engine=google&q=${encodeURIComponent(query)}&api_key=${this.apiKey}&num=${options?.maxResults ?? 10}${start === undefined ? "" : `&start=${start}`}`;
-      const response = await this.client.getJSON<SerpApiSearchResponse>(url);
+      const response = await this.client.getJSON<SerpApiSearchResponse>(
+        url,
+        undefined,
+        options?.signal,
+      );
       return {
         results: (response.organic_results ?? []).map(mapResult),
         ...serpApiContinuation(response.serpapi_pagination?.next),
@@ -120,7 +124,11 @@ class SerpApiProvider extends Provider {
       url.searchParams.set("type", "visual_matches");
       url.searchParams.set("url", imageUrl);
       url.searchParams.set("api_key", this.apiKey);
-      const response = await this.client.getJSON<SerpApiImageSearchResponse>(url.href);
+      const response = await this.client.getJSON<SerpApiImageSearchResponse>(
+        url.href,
+        undefined,
+        options?.signal,
+      );
       if (response.error) throw new Error(response.error);
       return (response.visual_matches ?? [])
         .flatMap(mapImageResult)

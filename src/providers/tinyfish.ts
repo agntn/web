@@ -132,6 +132,7 @@ class TinyfishProvider extends Provider {
       const response = await this.client.getJSON<TinyfishSearchResponse>(
         `${this.baseURL}?${searchParams(query, options, page)}`,
         this.authHeaders(),
+        options?.signal,
       );
       const providerResults = response.results ?? [];
       return {
@@ -153,6 +154,7 @@ class TinyfishProvider extends Provider {
         this.readBaseURL,
         fetchBody(url, options),
         this.authHeaders(),
+        options?.signal,
       );
       const result = response.results?.[0];
       if (result) return mapReadResult(result);

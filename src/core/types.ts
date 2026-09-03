@@ -30,7 +30,17 @@ export type SearchPagination =
   | { readonly status: "end" }
   | { readonly status: "unsupported" };
 
-export interface SearchOptions {
+/** Controls shared by every network-backed operation. */
+export interface ExecutionOptions {
+  /** Cancels in-flight provider requests. */
+  readonly signal?: Readonly<AbortSignal>;
+  /** Absolute Unix timestamp in milliseconds at which the operation is cancelled. */
+  readonly deadline?: number;
+  /** Maximum requests started concurrently by fan-out and batch helpers. */
+  readonly concurrency?: number;
+}
+
+export interface SearchOptions extends ExecutionOptions {
   maxResults?: number;
   highlights?: boolean;
   summary?: boolean;
@@ -93,7 +103,7 @@ export interface ImageSearchResult {
 }
 
 /** Options shared by reverse image search providers. */
-export interface ImageSearchOptions {
+export interface ImageSearchOptions extends ExecutionOptions {
   maxResults?: number;
 }
 
@@ -116,7 +126,7 @@ export interface ReadResult {
   continuation?: string;
 }
 
-export interface ReadOptions {
+export interface ReadOptions extends ExecutionOptions {
   format?: "markdown" | "text" | "html";
   maxTokens?: number;
   targetSelector?: string;

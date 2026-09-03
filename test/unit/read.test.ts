@@ -82,6 +82,30 @@ describe("readUrl", () => {
     expect(readFromContext).toHaveBeenCalledWith("https://example.com", { format: "text" });
   });
 
+  it("does not renew the deadline between reader fallbacks", async () => {
+    const started: string[] = [];
+    registerReader("jina", async (_url, options) => {
+      started.push("jina");
+      return new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener(
+          "abort",
+          () => reject(new HTTPError(503, "https://reader.example.com", "Unavailable")),
+          { once: true },
+        );
+      });
+    });
+    registerReader("context", async (url) => {
+      started.push("context");
+      return { url, content: "late fallback" };
+    });
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    await expect(
+      readUrl("https://example.com", { deadline: Date.now() + 25 }),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(started).toEqual(["jina"]);
+  });
+
   it("reports the effective reader, ordered attempts, and failures after fallback", async () => {
     const readFromContext = vi
       .fn()
@@ -306,6 +330,17 @@ describe("readUrl", () => {
     expect(readFromContext).not.toHaveBeenCalled();
   });
 
+  it("does not start a reader after the operation deadline", async () => {
+    const providerName = `deadline-reader-${Math.random().toString(36).slice(2)}`;
+    const read = vi.fn(async (url: string) => ({ url, content: "page" }));
+    registerReader(providerName, read);
+
+    await expect(
+      readUrl("https://example.com", { provider: providerName, deadline: Date.now() - 1 }),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it("passes explicit provider and read options through", async () => {
     const providerName = `reader-${Math.random().toString(36).slice(2)}`;
     const read = vi
@@ -363,6 +398,8 @@ describe("readUrl", () => {
       provider: providerName,
       maxTokens: 50,
       maxChars: 3,
+      deadline: Date.now() + 60_000,
+      concurrency: 1,
     });
     expect(first).toMatchObject({ content: "ab😀", truncated: true });
     expect(first.continuation).toBeTypeOf("string");
@@ -372,9 +409,15 @@ describe("readUrl", () => {
       maxTokens: 50,
       maxChars: 2,
       continuation: first.continuation,
+      signal: new AbortController().signal,
+      deadline: Date.now() + 120_000,
+      concurrency: 3,
     });
     expect(second).toMatchObject({ content: "cd", truncated: true });
-    expect(read).toHaveBeenLastCalledWith("https://example.com", { maxTokens: 50 });
+    expect(read.mock.lastCall?.[0]).toBe("https://example.com");
+    expect(read.mock.lastCall?.[1]?.maxTokens).toBe(50);
+    expect(read.mock.lastCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
+    expect(Reflect.ownKeys(read.mock.lastCall?.[1] ?? {})).toEqual(["maxTokens", "signal"]);
 
     content = "ab😀changed";
     await expect(
@@ -445,6 +488,54 @@ describe("readUrl", () => {
         continuation: first.continuation,
       }),
     ).rejects.toThrow(InvalidReadContinuationError);
+  });
+
+  it("stops launching queued reads after cancellation", async () => {
+    const providerName = `batch-cancel-reader-${Math.random().toString(36).slice(2)}`;
+    const controller = new AbortController();
+    const started: string[] = [];
+    registerReader(providerName, async (url, options) => {
+      started.push(url);
+      controller.abort(new DOMException("Cancelled reads", "AbortError"));
+      options?.signal?.throwIfAborted();
+      return { url, content: "page" };
+    });
+
+    const outcomes = await readBatchDetailed(
+      ["https://example.com/one", "https://example.com/two"],
+      { provider: providerName, concurrency: 1, signal: controller.signal },
+    );
+
+    expect(started).toEqual(["https://example.com/one"]);
+    expect(outcomes).toEqual([
+      { url: "https://example.com/one", error: "Cancelled reads" },
+      { url: "https://example.com/two", error: "Cancelled reads" },
+    ]);
+  });
+
+  it("bounds concurrent reads in a batch", async () => {
+    const providerName = `batch-reader-${Math.random().toString(36).slice(2)}`;
+    let active = 0;
+    let maximumActive = 0;
+    registerReader(providerName, async (url) => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      active -= 1;
+      return { url, content: "page" };
+    });
+
+    await readBatchDetailed(
+      [
+        "https://example.com/one",
+        "https://example.com/two",
+        "https://example.com/three",
+        "https://example.com/four",
+      ],
+      { provider: providerName, concurrency: 2 },
+    );
+
+    expect(maximumActive).toBe(2);
   });
 
   it("rejects continuation tokens at both core batch boundaries", async () => {

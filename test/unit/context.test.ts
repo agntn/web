@@ -1,15 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockReadGetJSON =
-  vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();
+  vi.fn<
+    (
+      url: string,
+      headers?: Readonly<Record<string, string>>,
+      signal?: Readonly<AbortSignal>,
+    ) => Promise<unknown>
+  >();
 const mockDefaultGetJSON =
-  vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();
+  vi.fn<
+    (
+      url: string,
+      headers?: Readonly<Record<string, string>>,
+      signal?: Readonly<AbortSignal>,
+    ) => Promise<unknown>
+  >();
 const mockPostJSON =
   vi.fn<
     (
       url: string,
       body: Readonly<Record<string, unknown>>,
       headers?: Readonly<Record<string, string>>,
+      signal?: Readonly<AbortSignal>,
     ) => Promise<unknown>
   >();
 
@@ -142,6 +155,7 @@ describe("context provider", () => {
         excludeDomains: ["social.example"],
       },
       { Authorization: "Bearer ctxt_secret_test" },
+      undefined,
     );
     expect(results).toEqual([
       {

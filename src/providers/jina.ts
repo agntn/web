@@ -88,10 +88,14 @@ class JinaProvider extends Provider {
     const apiKey = requireApiKey(this.apiKey);
     try {
       const url = `${this.searchBaseURL}/search?${searchParams(query, options)}`;
-      const response = await this.client.getJSON<JinaSearchResponse>(url, {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: "application/json",
-      });
+      const response = await this.client.getJSON<JinaSearchResponse>(
+        url,
+        {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: "application/json",
+        },
+        options?.signal,
+      );
       assertJinaSuccess(response, url);
       return (response.data ?? []).map(mapSearchResult);
     } catch (error) {
@@ -105,6 +109,7 @@ class JinaProvider extends Provider {
       const response = await this.client.getJSON<JinaReadResponse>(
         requestUrl,
         readHeaders(this.apiKey, options),
+        options?.signal,
       );
       assertJinaSuccess(response, requestUrl);
       return mapReadResult(response.data ?? { url, content: "" });

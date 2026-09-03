@@ -111,7 +111,12 @@ class SerpBaseProvider extends Provider {
     try {
       const url = `${this.baseURL}${endpoint}`;
       const headers = { "X-API-Key": this.apiKey };
-      const response = await this.client.postJSON<SerpBaseSearchResponse>(url, body, headers);
+      const response = await this.client.postJSON<SerpBaseSearchResponse>(
+        url,
+        body,
+        headers,
+        options?.signal,
+      );
       assertSerpBaseSuccess(response);
       const providerResults = resultsForResponse(response);
       return {

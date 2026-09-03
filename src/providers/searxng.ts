@@ -55,19 +55,25 @@ class SearXNGProvider extends Provider {
    * of throwing so {@link searchAll} can skip an unreachable instance silently.
    * Treats any HTTP response (even 4xx) as reachable — the host is up.
    * Uses a <=2s timeout so a dead endpoint does not stall fan-out.
+   * @param signal - Caller cancellation shared with provider discovery.
    * @returns {Promise<boolean>} Whether the endpoint responds.
    */
-  async isAvailable(): Promise<boolean> {
+  async isAvailable(signal?: Readonly<AbortSignal>): Promise<boolean> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), SEARXNG_PROBE_TIMEOUT_MS);
+    const timer = setTimeout(
+      () => controller.abort(new DOMException("SearXNG probe timed out", "TimeoutError")),
+      SEARXNG_PROBE_TIMEOUT_MS,
+    );
+    const probeSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     try {
       const response = await fetch(this.baseURL, {
         method: "GET",
-        signal: controller.signal,
+        signal: probeSignal,
       });
       // Any HTTP status means the host responded; treat as reachable.
       return typeof response.status === "number";
     } catch {
+      signal?.throwIfAborted();
       return false;
     } finally {
       clearTimeout(timer);
@@ -96,7 +102,11 @@ class SearXNGProvider extends Provider {
       }
 
       const url = `${this.baseURL}/search?${params.toString()}`;
-      const response = await this.client.getJSON<SearXNGSearchResponse>(url);
+      const response = await this.client.getJSON<SearXNGSearchResponse>(
+        url,
+        undefined,
+        options?.signal,
+      );
       const results = response.results.map(mapResult);
 
       return {

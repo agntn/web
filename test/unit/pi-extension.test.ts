@@ -138,6 +138,63 @@ describe("Pi extension", () => {
     await expect(execution).rejects.toThrow("continuation is only supported for a single query");
   });
 
+  it("forwards the host cancellation signal through every network tool", async () => {
+    const providerName = `signalprovider${Math.random().toString(36).slice(2)}`;
+    const receivedSignals: Array<AbortSignal | undefined> = [];
+    class SignalProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://signal.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, SignalProvider);
+      }
+
+      async search(_query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+        receivedSignals.push(options?.signal);
+        return [];
+      }
+
+      async searchByImage(
+        _url: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<[]> {
+        receivedSignals.push(options?.signal);
+        return [];
+      }
+
+      async read(
+        url: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<{ url: string; content: string }> {
+        receivedSignals.push(options?.signal);
+        return { url, content: "page" };
+      }
+    }
+    customProviderCleanups.push(register(SignalProvider));
+    const tools = captureTools();
+    const searchTool = tools.get("web_search");
+    const imageTool = tools.get("web_search_image");
+    const readTool = tools.get("web_read");
+    if (!searchTool || !imageTool || !readTool) throw new Error("Web tool was not registered");
+    const signal = new AbortController().signal;
+
+    for (const [tool, params] of [
+      [searchTool, { query: "test", provider: providerName }],
+      [imageTool, { url: "https://example.com/image.jpg", provider: providerName }],
+      [readTool, { url: "https://example.com", provider: providerName }],
+    ] as const) {
+      await Reflect.apply(tool.execute.bind(tool), undefined, [
+        "test-call",
+        params,
+        signal,
+        undefined,
+        undefined,
+      ]);
+    }
+
+    expect(receivedSignals).toEqual([signal, signal, signal]);
+  });
+
   it("executes reverse image search through the live SerpAPI provider", async () => {
     const previousKey = process.env.SERPAPI_API_KEY;
     process.env.SERPAPI_API_KEY = "test-key";
@@ -509,8 +566,13 @@ describe("Pi extension", () => {
   });
 
   it("counts providers whose results were deduplicated from an all search", async () => {
-    const previousExaKey = process.env.EXA_API_KEY;
-    const previousBraveKey = process.env.BRAVE_API_KEY;
+    const previousEnv = new Map<string, string | undefined>();
+    for (const provider of builtinProviders) {
+      const envVar = providerApiKeyEnvVar(provider);
+      if (!envVar) continue;
+      previousEnv.set(envVar, process.env[envVar]);
+      delete process.env[envVar];
+    }
     process.env.EXA_API_KEY = "test-exa";
     process.env.BRAVE_API_KEY = "test-brave";
     const fetchMock = vi.fn(async (input: unknown) => {
@@ -610,10 +672,10 @@ describe("Pi extension", () => {
         ),
       );
     } finally {
-      if (previousExaKey === undefined) delete process.env.EXA_API_KEY;
-      else process.env.EXA_API_KEY = previousExaKey;
-      if (previousBraveKey === undefined) delete process.env.BRAVE_API_KEY;
-      else process.env.BRAVE_API_KEY = previousBraveKey;
+      for (const [envVar, value] of previousEnv) {
+        if (value === undefined) delete process.env[envVar];
+        else process.env[envVar] = value;
+      }
       vi.unstubAllGlobals();
       resetDefaultClientForTests();
     }
