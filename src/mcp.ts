@@ -45,9 +45,15 @@ const searchResultProperties = {
   metadata: Type.Optional(unknownRecordSchema),
 };
 const searchResultSchema = strictObject(searchResultProperties);
+const searchAllEvidenceSchema = strictObject({
+  ...searchResultProperties,
+  provider: Type.String(),
+});
 const searchAllResultSchema = strictObject({
   ...searchResultProperties,
   provider: Type.String(),
+  providers: Type.Array(Type.String()),
+  evidence: Type.Array(searchAllEvidenceSchema),
 });
 const searchFilterReportSchema = strictObject({
   provider: Type.String(),

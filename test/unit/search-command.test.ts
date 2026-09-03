@@ -229,7 +229,14 @@ describe("search command", () => {
     expect(stdoutSpy).toHaveBeenCalledWith(
       `${JSON.stringify(
         {
-          results: [{ ...results[0], provider: "exa" }],
+          results: [
+            {
+              ...results[0],
+              provider: "exa",
+              providers: ["exa"],
+              evidence: [{ ...results[0], provider: "exa" }],
+            },
+          ],
           successfulProviders: ["exa"],
           errors: [{ provider: "brave", error: "Brave unavailable" }],
           filterReports: [],

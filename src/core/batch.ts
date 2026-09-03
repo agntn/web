@@ -3,6 +3,8 @@ import {
   prepareSearchWithFallback,
   searchAllDetailed,
   searchProviderDetailed,
+  type SearchAllEvidence,
+  type SearchAllResult,
   type SearchProviderMetadata,
   type SearchProviderResult,
 } from "./all.ts";
@@ -29,7 +31,7 @@ export type SearchBatchItem =
   | {
       readonly query: string;
       readonly provider: string;
-      readonly results: readonly SearchResult[];
+      readonly results: readonly (SearchResult | SearchAllResult)[];
       readonly filterReports: readonly SearchFilterReport[];
       readonly providerMetadata?: readonly SearchProviderMetadata[];
       readonly attempts?: readonly string[];
@@ -157,9 +159,15 @@ type BatchOutcome<TResult> =
       readonly failures?: readonly ProviderFailure[];
     };
 
+type ReadonlySearchAllEvidence = ReadonlySearchResult & { readonly provider: string };
+type ReadonlySearchAllResult = ReadonlySearchAllEvidence & {
+  readonly providers: readonly string[];
+  readonly evidence: readonly ReadonlySearchAllEvidence[];
+};
+
 interface BatchSearchResult {
   readonly provider: string;
-  readonly results: readonly ReadonlySearchResult[];
+  readonly results: readonly (ReadonlySearchResult | ReadonlySearchAllResult)[];
   readonly filterReports: readonly SearchFilterReport[];
   readonly providerMetadata?: readonly SearchProviderMetadata[];
   readonly attempts?: readonly string[];
@@ -231,7 +239,16 @@ function mapSearchOutcomes(
       ? {
           query: outcome.input,
           provider: outcome.value.provider,
-          results: outcome.value.results.map(mutableSearchResult),
+          results: outcome.value.results.map((result) =>
+            isSearchAllResult(result)
+              ? {
+                  ...mutableSearchResult(result),
+                  provider: result.provider,
+                  providers: [...result.providers],
+                  evidence: result.evidence.map(mutableSearchEvidence),
+                }
+              : mutableSearchResult(result),
+          ),
           filterReports: outcome.value.filterReports,
           ...(outcome.value.providerMetadata === undefined
             ? {}
@@ -255,6 +272,16 @@ function mutableSearchResult(result: ReadonlySearchResult): SearchResult {
     ...(highlights ? { highlights: [...highlights] } : {}),
     ...(metadata ? { metadata: { ...metadata } } : {}),
   };
+}
+
+function mutableSearchEvidence(evidence: ReadonlySearchAllEvidence): SearchAllEvidence {
+  return { ...mutableSearchResult(evidence), provider: evidence.provider };
+}
+
+function isSearchAllResult(
+  result: ReadonlySearchResult | ReadonlySearchAllResult,
+): result is ReadonlySearchAllResult {
+  return "providers" in result && "evidence" in result;
 }
 
 function validateBatch(

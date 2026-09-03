@@ -90,11 +90,11 @@ import { searchAll } from "@agntn/web";
 const results = await searchAll("latest node.js release");
 
 for (const result of results) {
-  console.log(`[${result.provider}]`, result.title, result.url);
+  console.log(`[${result.providers.join(", ")}]`, result.title, result.url);
 }
 ```
 
-`searchAll` uses `Promise.allSettled` internally, so if one provider fails, the others still return. Results are deduplicated by URL (normalized, UTM params stripped), then `maxResults` caps the final list. It defaults to 10. When duplicates exist, the result with the higher score wins.
+`searchAll` uses `Promise.allSettled` internally, so if one provider fails, the others still return. Results are deduplicated by URL (normalized, UTM params stripped), then `maxResults` caps the final list. It defaults to 10. The first provider in the requested order supplies the representative result. `providers` lists every source that returned the URL, while `evidence` keeps each complete provider record without comparing unrelated score scales.
 
 You can also specify which providers to query:
 
@@ -203,7 +203,7 @@ const { text } = await generateText({
 });
 ```
 
-`searchTool` accepts one query or an array of queries. Explicit scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, metadata? }`; automatic searches also include `attempts` and `failures`. `provider="all"` returns `{ results, errors, filterReports, providerMetadata? }`. Batch search items retain the same diagnostics. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts, failures }`; successful batch items keep the same reader provenance beside `url`, while exhausted automatic failures keep `attempts` and `failures` beside the error:
+`searchTool` accepts one query or an array of queries. Explicit scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, metadata? }`; automatic searches also include `attempts` and `failures`. `provider="all"` returns `{ results, successfulProviders, errors, filterReports, providerMetadata? }`, with `providers` and `evidence` on every deduplicated result. Batch search items retain the same diagnostics. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts, failures }`; successful batch items keep the same reader provenance beside `url`, while exhausted automatic failures keep `attempts` and `failures` beside the error:
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
@@ -365,6 +365,15 @@ interface SearchResult {
   summary?: string;
   metadata?: Record<string, unknown>;
 }
+
+interface SearchAllEvidence extends SearchResult {
+  provider: string;
+}
+
+interface SearchAllResult extends SearchAllEvidence {
+  providers: string[];
+  evidence: SearchAllEvidence[];
+}
 ```
 
 Optional fields depend on what the provider returns. Firecrawl uses page passages relevant to the query for `snippet` by default. Exa provides `score`, `text`, and `highlights`. TinyFish provides publisher and research metadata. Jina provides result `text` and metadata when available. Mojeek provides ranking, date, image, and crawl metadata. Brave provides `favicon`. Not all providers populate all fields.
@@ -440,7 +449,7 @@ interface SearchOptions {
 
 Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
-`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional response-level `metadata`. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Response-level metadata is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the filter matrix as `searchFilters` and optional `searchCategories`.
+`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional metadata for the whole response. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Each deduplicated result keeps a stable representative, ordered `providers`, and complete `evidence` for each provider. Metadata for the whole response is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the filter matrix as `searchFilters` and optional `searchCategories`.
 
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 

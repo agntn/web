@@ -232,7 +232,14 @@ describe("web MCP server", () => {
     expect(response.isError).toBeUndefined();
     expect(response.structuredContent).toMatchObject({
       result: {
-        results: [expect.objectContaining({ provider: "exa", url: "https://example.com" })],
+        results: [
+          expect.objectContaining({
+            provider: "exa",
+            providers: ["exa"],
+            evidence: [expect.objectContaining({ provider: "exa", url: "https://example.com" })],
+            url: "https://example.com",
+          }),
+        ],
         successfulProviders: ["exa"],
         errors: [],
       },
@@ -260,7 +267,14 @@ describe("web MCP server", () => {
         {
           query: "test query",
           provider: "all",
-          results: [expect.objectContaining({ provider: "exa", url: "https://example.com" })],
+          results: [
+            expect.objectContaining({
+              provider: "exa",
+              providers: ["exa"],
+              evidence: [expect.objectContaining({ provider: "exa", url: "https://example.com" })],
+              url: "https://example.com",
+            }),
+          ],
         },
       ],
     });

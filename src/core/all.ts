@@ -34,8 +34,15 @@ export type SearchAllOptions = SearchRequestOptions & {
   readonly providers?: readonly string[];
 };
 
-export interface SearchAllResult extends SearchResult {
+/** One provider record retained as evidence for a deduplicated result. */
+export interface SearchAllEvidence extends SearchResult {
   provider: string;
+}
+
+/** Stable representative plus every provider record for one normalized URL. */
+export interface SearchAllResult extends SearchAllEvidence {
+  providers: string[];
+  evidence: SearchAllEvidence[];
 }
 
 export interface ProviderError {
@@ -261,7 +268,7 @@ function collectProviderResults(
   settled: readonly ProviderSearchOutcome[],
   maxResults?: number,
 ): SearchAllResponse {
-  const results: SearchAllResult[] = [];
+  const results: SearchAllEvidence[] = [];
   const successfulProviders = new Set<string>();
   const errors: ProviderError[] = [];
   const filterReports: SearchFilterReport[] = [];
@@ -305,7 +312,7 @@ function collectProviderResults(
 function mutableResultWithProvider(
   result: ReadonlySearchResult,
   provider: string,
-): SearchAllResult {
+): SearchAllEvidence {
   const { highlights, metadata, ...rest } = result;
   return {
     ...rest,
@@ -315,26 +322,28 @@ function mutableResultWithProvider(
   };
 }
 
-function deduplicateByUrl<T extends { readonly url: string; readonly score?: number }>(
-  results: readonly T[],
-): T[] {
-  const seen = new Map<string, T>();
+type ReadonlySearchAllEvidence = ReadonlySearchResult & { readonly provider: string };
+
+function deduplicateByUrl(results: readonly ReadonlySearchAllEvidence[]): SearchAllResult[] {
+  const seen = new Map<string, SearchAllResult>();
 
   for (const result of results) {
     const normalized = normalizeUrl(result.url);
     const existing = seen.get(normalized);
 
     if (!existing) {
-      seen.set(normalized, result);
-    } else {
-      if (
-        result.score !== null &&
-        result.score !== undefined &&
-        (existing.score === null || existing.score === undefined || result.score > existing.score)
-      ) {
-        seen.set(normalized, result);
-      }
+      seen.set(normalized, {
+        ...mutableResultWithProvider(result, result.provider),
+        providers: [result.provider],
+        evidence: [mutableResultWithProvider(result, result.provider)],
+      });
+      continue;
     }
+
+    if (!existing.providers.includes(result.provider)) {
+      existing.providers.push(result.provider);
+    }
+    existing.evidence.push(mutableResultWithProvider(result, result.provider));
   }
 
   return Array.from(seen.values());

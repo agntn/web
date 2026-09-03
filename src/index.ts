@@ -79,6 +79,7 @@ export {
 } from "./core/all.ts";
 export type {
   SearchAllOptions,
+  SearchAllEvidence,
   SearchAllResult,
   SearchAllResponse,
   SearchProviderMetadata,

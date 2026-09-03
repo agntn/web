@@ -117,8 +117,18 @@ describe("searchAll", () => {
     const results = await searchAll("test", { providers: ["exa", "brave"] });
 
     expect(results).toHaveLength(2);
-    expect(results.map((r) => r.provider)).toContain("exa");
-    expect(results.map((r) => r.provider)).toContain("brave");
+    expect(results).toEqual([
+      expect.objectContaining({
+        provider: "exa",
+        providers: ["exa"],
+        evidence: [expect.objectContaining({ provider: "exa", url: "https://a.com" })],
+      }),
+      expect.objectContaining({
+        provider: "brave",
+        providers: ["brave"],
+        evidence: [expect.objectContaining({ provider: "brave", url: "https://b.com" })],
+      }),
+    ]);
   });
 
   it("caps deduplicated fanout results globally", async () => {
@@ -164,43 +174,60 @@ describe("searchAll", () => {
     expect(results.map(({ url }) => url)).toEqual(["https://shared.com", "https://b.com"]);
   });
 
-  it("deduplicates by URL keeping higher score", async () => {
-    process.env.EXA_API_KEY = "test-exa";
+  it("keeps the first provider as representative and retains every duplicate", async () => {
     process.env.BRAVE_API_KEY = "test-brave";
+    process.env.MOJEEK_API_KEY = "test-mojeek";
 
-    mockPostJSON.mockResolvedValue({
-      requestId: "test-req",
-      results: [
+    mockGetJSON.mockImplementation(async (url) =>
+      url.includes("api.search.brave.com")
+        ? {
+            web: {
+              results: [
+                {
+                  url: "https://example.com",
+                  title: "From Brave",
+                  description: "Brave snippet",
+                  extra_snippets: [],
+                  meta_url: { favicon: "" },
+                },
+              ],
+            },
+          }
+        : {
+            response: {
+              status: "OK",
+              results: [
+                {
+                  url: "https://example.com",
+                  title: "From Mojeek",
+                  desc: "Mojeek snippet",
+                  score: 20.36,
+                  cfs: 47,
+                },
+              ],
+            },
+          },
+    );
+
+    const results = await searchAll("test", { providers: ["brave", "mojeek"] });
+
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      provider: "brave",
+      providers: ["brave", "mojeek"],
+      title: "From Brave",
+      evidence: [
+        { provider: "brave", title: "From Brave", snippet: "Brave snippet" },
         {
-          id: "1",
-          url: "https://example.com",
-          title: "From Exa",
-          score: 0.9,
-          text: "text",
-          highlights: ["highlight"],
+          provider: "mojeek",
+          title: "From Mojeek",
+          score: 20.36,
+          snippet: "Mojeek snippet",
+          metadata: { confidence: 47 },
         },
       ],
     });
-
-    mockGetJSON.mockResolvedValue({
-      web: {
-        results: [
-          {
-            url: "https://example.com",
-            title: "From Brave",
-            description: "desc",
-            extra_snippets: [],
-            meta_url: { favicon: "" },
-          },
-        ],
-      },
-    });
-
-    const results = await searchAll("test", { providers: ["exa", "brave"] });
-
-    expect(results).toHaveLength(1);
-    expect(results[0].provider).toBe("exa");
-    expect(results[0].score).toBe(0.9);
+    expect(results[0].score).toBeUndefined();
   });
 
   it("handles provider failures gracefully", async () => {
@@ -377,7 +404,7 @@ describe("searchAll", () => {
     expect(results).toHaveLength(2);
   });
 
-  it("keeps scored result over unscored duplicate", async () => {
+  it("retains evidence when normalized query order collapses URLs", async () => {
     process.env.EXA_API_KEY = "test-exa";
     process.env.BRAVE_API_KEY = "test-brave";
 
@@ -412,8 +439,16 @@ describe("searchAll", () => {
     const results = await searchAll("test", { providers: ["exa", "brave"] });
 
     expect(results).toHaveLength(1);
-    expect(results[0].provider).toBe("exa");
-    expect(results[0].score).toBe(0.7);
+    expect(results[0]).toMatchObject({
+      provider: "exa",
+      providers: ["exa", "brave"],
+      score: 0.7,
+      evidence: [
+        { provider: "exa", title: "Exa result", score: 0.7 },
+        { provider: "brave", title: "Brave result", snippet: "desc" },
+      ],
+    });
+    expect(results[0].highlights).not.toBe(results[0].evidence[0].highlights);
   });
 
   it("keeps first provider result when duplicate URLs have no scores", async () => {

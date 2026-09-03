@@ -113,8 +113,13 @@ type ReadonlySearchProviderResult = Readonly<Omit<SearchProviderResult, "results
   readonly results: readonly ReadonlySearchResult[];
 };
 
-type ReadonlySearchAllResult = ReadonlySearchResult & {
+type ReadonlySearchAllEvidence = ReadonlySearchResult & {
   readonly provider: SearchAllResult["provider"];
+};
+
+type ReadonlySearchAllResult = ReadonlySearchAllEvidence & {
+  readonly providers: readonly string[];
+  readonly evidence: readonly ReadonlySearchAllEvidence[];
 };
 
 type ReadonlySearchAllResponse = {
