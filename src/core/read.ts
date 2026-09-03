@@ -1,6 +1,12 @@
 import type { ReadOptions, ReadResult } from "./types.ts";
 import { builtinProviders } from "./providers.ts";
-import { EmptyUrlError, HTTPError, ReadNotSupportedError } from "./errors.ts";
+import { EmptyUrlError, ReadNotSupportedError } from "./errors.ts";
+import {
+  isFallbackEligible,
+  providerFailure,
+  ProviderFallbackError,
+  type ProviderFailure,
+} from "./fallback.ts";
 import { createReadProvider } from "./registry.ts";
 import { detectAvailableProviders } from "./resolve.ts";
 
@@ -11,12 +17,13 @@ export interface ReadUrlOptions extends ReadOptions {
   readonly provider?: string;
 }
 
-/** Read result with requested mode, effective provider, and every provider tried. */
+/** Read result with requested mode, effective provider, and provider-attempt diagnostics. */
 export interface ReadUrlDetailedResult {
   readonly result: Readonly<ReadResult>;
   readonly requestedProvider: string;
   readonly provider: string;
   readonly attempts: readonly string[];
+  readonly failures: readonly ProviderFailure[];
 }
 
 const DEFAULT_READ_PROVIDER: ReadProviderName = "jina";
@@ -38,7 +45,7 @@ export async function readUrl(
  * Reads a URL and reports the effective provider after automatic fallback.
  * @param url - URL to read.
  * @param options - Provider and read options.
- * @returns {Promise<ReadUrlDetailedResult>} Result, selection, provider, and attempts.
+ * @returns {Promise<ReadUrlDetailedResult>} Result, provider, attempts, and failures.
  */
 export async function readUrlDetailed(
   url: string,
@@ -51,68 +58,66 @@ export async function readUrlDetailed(
 
   const { provider: requestedProvider, ...readOptions } = options ?? {};
   const requestedProviderName = requestedProvider?.trim();
-  const requestedProviderLabel = requestedProviderName || "auto";
-  const providerName = resolveReadProviderName(requestedProviderName);
-  const attempts = [providerName];
-  try {
-    return await readFromProvider(
-      trimmedUrl,
-      readOptions,
-      requestedProviderLabel,
-      providerName,
-      attempts,
-    );
-  } catch (error) {
-    if (!shouldFallback(requestedProviderName, providerName, error)) throw error;
-    return readFromConfiguredFallbacks(
-      trimmedUrl,
-      readOptions,
-      requestedProviderLabel,
-      providerName,
-      error,
-      attempts,
-    );
+  if (requestedProviderName) {
+    const providerName = resolveReadProviderName(requestedProviderName);
+    return {
+      result: await readFromProvider(trimmedUrl, readOptions, providerName),
+      requestedProvider: providerName,
+      provider: providerName,
+      attempts: [providerName],
+      failures: [],
+    };
   }
+
+  return readAutomatically(trimmedUrl, readOptions);
 }
 
-function resolveReadProviderName(requestedProvider?: string): string {
-  const providerName = requestedProvider || DEFAULT_READ_PROVIDER;
+function resolveReadProviderName(providerName: string): string {
   if (isBuiltinProvider(providerName) && !isReadProviderName(providerName)) {
     throw new ReadNotSupportedError(providerName);
   }
   return providerName;
 }
 
-async function readFromConfiguredFallbacks(
+async function readAutomatically(
   url: string,
   options: Readonly<ReadOptions>,
-  requestedProvider: string,
-  initialProvider: string,
-  initialError: unknown,
-  initialAttempts: readonly string[],
 ): Promise<ReadUrlDetailedResult> {
-  let lastError = initialError;
-  let attempts = initialAttempts;
-  for (const providerName of configuredReadProviders(initialProvider)) {
-    attempts = [...attempts, providerName];
+  const providerNames = [DEFAULT_READ_PROVIDER, ...configuredReadProviders(DEFAULT_READ_PROVIDER)];
+  const attempts: string[] = [];
+  const failures: ProviderFailure[] = [];
+  let lastError: unknown;
+
+  for (const providerName of providerNames) {
+    attempts.push(providerName);
     try {
-      return await readFromProvider(url, options, requestedProvider, providerName, attempts);
+      return {
+        result: await readFromProvider(url, options, providerName),
+        requestedProvider: "auto",
+        provider: providerName,
+        attempts,
+        failures,
+      };
     } catch (error) {
+      const failure = providerFailure(providerName, error);
+      if (!isFallbackEligible(error, providerName, "read")) {
+        if (failures.length === 0) throw error;
+        failures.push(failure);
+        throw new ProviderFallbackError("read", failures, error);
+      }
+      failures.push(failure);
       lastError = error;
     }
   }
-  throw lastError;
+  throw new ProviderFallbackError("read", failures, lastError);
 }
 
-async function readFromProvider(
+function readFromProvider(
   url: string,
   options: Readonly<ReadOptions>,
-  requestedProvider: string,
   providerName: string,
-  attempts: readonly string[],
-): Promise<ReadUrlDetailedResult> {
-  const result = await createReadProvider(providerName).read(url, options);
-  return { result, requestedProvider, provider: providerName, attempts };
+): Promise<ReadResult> {
+  return createReadProvider(providerName).read(url, options);
 }
 
 function configuredReadProviders(initialProvider: string): ReadProviderName[] {
@@ -120,22 +125,6 @@ function configuredReadProviders(initialProvider: string): ReadProviderName[] {
   return readProviderNames.filter(
     (name) => name !== initialProvider && configuredProviders.includes(name),
   );
-}
-
-function shouldFallback(
-  requestedProvider: string | undefined,
-  initialProvider: string,
-  error: unknown,
-): boolean {
-  return !requestedProvider && (isPaymentRequired(error) || isJinaConflict(initialProvider, error));
-}
-
-function isPaymentRequired(error: unknown): error is HTTPError {
-  return error instanceof HTTPError && error.statusCode === 402;
-}
-
-function isJinaConflict(provider: string, error: unknown): error is HTTPError {
-  return provider === "jina" && error instanceof HTTPError && error.statusCode === 409;
 }
 
 function isBuiltinProvider(name: string): boolean {

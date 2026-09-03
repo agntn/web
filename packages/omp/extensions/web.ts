@@ -82,7 +82,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     provider: Type.Optional(
       Type.String({
         description:
-          'Provider to use. "auto" (or omit) tries configured providers in order after HTTP 402. Use "all" to query every configured provider in parallel.',
+          'Provider to use. "auto" (or omit) tries configured providers in order after payment, rate-limit, timeout, or server failures. Use "all" to query every configured provider in parallel.',
       }),
     ),
     maxResults: Type.Optional(
@@ -149,7 +149,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     provider: Type.Optional(
       Type.String({
         description:
-          'Read provider to use. "auto" (or omit) starts with Jina and falls back to other configured readers after HTTP 402 or 409. Validated against web.readProviderNames at execution time.',
+          'Read provider to use. "auto" (or omit) starts with Jina and falls back after eligible payment, conflict, rate-limit, timeout, or server failures. Validated against web.readProviderNames at execution time.',
       }),
     ),
     format: Type.Optional(
@@ -285,6 +285,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         provider: providerLabel,
         effectiveProvider: response.provider,
         attempts: response.attempts,
+        failures: response.failures,
         result: response.result,
       });
     },

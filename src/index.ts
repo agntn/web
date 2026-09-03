@@ -87,6 +87,8 @@ export type {
   ProviderError,
 } from "./core/all.ts";
 export type { SearchFilterReport } from "./core/search-filters.ts";
+export { ProviderFallbackError } from "./core/fallback.ts";
+export type { FallbackOperation, ProviderFailure } from "./core/fallback.ts";
 
 export { imageSearchProviderNames, searchByImage } from "./core/image.ts";
 export type { ImageSearchProviderName, ImageSearchByUrlOptions } from "./core/image.ts";

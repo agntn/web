@@ -16,6 +16,7 @@ import {
 import type {
   ImageSearchProviderName,
   ImageSearchResult,
+  ProviderFailure,
   ProviderStatus,
   ReadBatchDetailedItem,
   ReadOptions,
@@ -42,6 +43,8 @@ type SearchSingleDetails = {
   readonly ignoredFilters: readonly SearchFilterName[];
   readonly undeclaredFilters: readonly SearchFilterName[];
   readonly metadata?: Readonly<Record<string, unknown>>;
+  readonly attempts?: readonly string[];
+  readonly failures?: readonly ProviderFailure[];
 };
 
 type SearchAllDetails = {
@@ -80,6 +83,7 @@ type ReadDetails =
       readonly provider: "auto" | ReadProviderName;
       readonly effectiveProvider: string;
       readonly attempts: readonly string[];
+      readonly failures: readonly ProviderFailure[];
       readonly options: ReadOptions;
       readonly result: ReadResult;
     }
@@ -125,11 +129,11 @@ const PROVIDERS = [
   "tavily",
   "tinyfish",
 ] as const;
-const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) tries configured providers in order after HTTP 402. Use "all" to query every configured provider in parallel.`;
+const PROVIDER_HINT = `Provider to use. One of: ${PROVIDERS.join(", ")}. "auto" (or omit) tries configured providers in order after payment, rate-limit, timeout, or server failures. Use "all" to query every configured provider in parallel.`;
 const IMAGE_SEARCH_PROVIDER_HINT =
   "Reverse image search provider. Defaults to SerpAPI Google Lens and is validated against web.imageSearchProviderNames at execution time.";
 const READ_PROVIDER_HINT =
-  'Read provider to use. "auto" (or omit) starts with Jina and falls back to other configured readers after HTTP 402 or 409. Validated against web.readProviderNames at execution time.';
+  'Read provider to use. "auto" (or omit) starts with Jina and falls back after eligible payment, conflict, rate-limit, timeout, or server failures. Validated against web.readProviderNames at execution time.';
 
 const MAX_RESULTS_HARD_CAP = 20;
 const MAX_BATCH_ITEMS_HARD_CAP = 10;
@@ -421,6 +425,8 @@ export default function webExtension(pi: ExtensionAPI) {
           results: response.results,
           ignoredFilters: response.ignoredFilters,
           undeclaredFilters: response.undeclaredFilters,
+          attempts: response.attempts,
+          failures: response.failures,
           ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
         },
       };
@@ -462,7 +468,7 @@ export default function webExtension(pi: ExtensionAPI) {
     name: "web_read",
     label: "Web Read",
     description:
-      "Read-only/open-world network fetch: read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item has its own result or error. Automatic reads start with Jina, try configured readers after HTTP 402 or 409, and report the effective provider.",
+      "Read-only/open-world network fetch: read one URL or a batch of URLs into normalized content using a read-capable provider. Each batch item has its own result or error. Automatic reads start with Jina, fall back after eligible transient failures, and report every attempt and failure.",
     promptSnippet:
       "Read one URL with web_read, or pass a URL array when several pages are needed independently.",
     promptGuidelines: [
@@ -519,6 +525,7 @@ export default function webExtension(pi: ExtensionAPI) {
           provider: readProviderLabel,
           effectiveProvider: response.provider,
           attempts: response.attempts,
+          failures: response.failures,
           options: readOptions,
           result: response.result,
         },

@@ -35,7 +35,10 @@ import {
   EmptyQueryError,
   HTTPError,
   InvalidDateFilterError,
+  RateLimitError,
 } from "../../src/core/errors.ts";
+import { ProviderFallbackError } from "../../src/core/fallback.ts";
+import { searchBatch } from "../../src/core/batch.ts";
 
 import "../../src/providers/index.ts";
 
@@ -723,12 +726,14 @@ describe("searchAllDetailed", () => {
 describe("searchWithFallback", () => {
   const savedExaApiKey = process.env.EXA_API_KEY;
   const savedBraveApiKey = process.env.BRAVE_API_KEY;
+  const savedFirecrawlApiKey = process.env.FIRECRAWL_API_KEY;
 
   beforeEach(() => {
     mockPostJSON.mockReset();
     mockGetJSON.mockReset();
     delete process.env.EXA_API_KEY;
     delete process.env.BRAVE_API_KEY;
+    delete process.env.FIRECRAWL_API_KEY;
   });
 
   afterEach(() => {
@@ -736,14 +741,15 @@ describe("searchWithFallback", () => {
     else process.env.EXA_API_KEY = savedExaApiKey;
     if (savedBraveApiKey === undefined) delete process.env.BRAVE_API_KEY;
     else process.env.BRAVE_API_KEY = savedBraveApiKey;
+    if (savedFirecrawlApiKey === undefined) delete process.env.FIRECRAWL_API_KEY;
+    else process.env.FIRECRAWL_API_KEY = savedFirecrawlApiKey;
   });
 
-  it("returns the provider that succeeds after an automatic 402", async () => {
+  it("returns the provider and diagnostics after an automatic 402", async () => {
     process.env.EXA_API_KEY = "test-exa";
     process.env.BRAVE_API_KEY = "test-brave";
-    mockPostJSON.mockRejectedValue(
-      new HTTPError(402, "https://api.exa.ai/search", "Payment required"),
-    );
+    const failure = new HTTPError(402, "https://api.exa.ai/search", "Payment required");
+    mockPostJSON.mockRejectedValue(failure);
     mockGetJSON.mockResolvedValue(braveResponse);
 
     await expect(
@@ -753,6 +759,8 @@ describe("searchWithFallback", () => {
       results: [expect.objectContaining({ url: "https://b.com" })],
       ignoredFilters: ["startPublishedDate"],
       undeclaredFilters: [],
+      attempts: ["exa", "brave"],
+      failures: [{ provider: "exa", error: failure.message }],
     });
   });
 
@@ -773,14 +781,107 @@ describe("searchWithFallback", () => {
     });
   });
 
-  it("does not hide a non-payment failure from the first provider", async () => {
+  it("falls back after network and rate-limit failures", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.FIRECRAWL_API_KEY = "test-firecrawl";
+    process.env.BRAVE_API_KEY = "test-brave";
+    const networkFailure = new HTTPError(0, "https://api.exa.ai/search", "Network error");
+    const rateLimitFailure = new RateLimitError(30);
+    mockPostJSON.mockRejectedValueOnce(networkFailure).mockResolvedValueOnce(firecrawlResponse);
+    mockGetJSON.mockRejectedValueOnce(rateLimitFailure);
+
+    await expect(searchWithFallback("test")).resolves.toMatchObject({
+      provider: "firecrawl",
+      attempts: ["exa", "brave", "firecrawl"],
+      failures: [
+        { provider: "exa", error: networkFailure.message },
+        { provider: "brave", error: rateLimitFailure.message },
+      ],
+    });
+  });
+
+  it("retains every failure when automatic search exhausts its providers", async () => {
     process.env.EXA_API_KEY = "test-exa";
     process.env.BRAVE_API_KEY = "test-brave";
-    const failure = new HTTPError(500, "https://api.exa.ai/search", "Server error");
+    const serverFailure = new HTTPError(503, "https://api.exa.ai/search", "Unavailable");
+    const rateLimitFailure = new RateLimitError(30);
+    mockPostJSON.mockRejectedValue(serverFailure);
+    mockGetJSON.mockRejectedValue(rateLimitFailure);
+
+    const failure = await searchWithFallback("test").catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProviderFallbackError);
+    expect(failure).toMatchObject({
+      attempts: ["exa", "brave"],
+      failures: [
+        { provider: "exa", error: serverFailure.message },
+        { provider: "brave", error: rateLimitFailure.message },
+      ],
+      cause: rateLimitFailure,
+    });
+    await expect(searchBatch(["test"])).resolves.toEqual([
+      {
+        query: "test",
+        error: (failure as Error).message,
+        attempts: ["exa", "brave"],
+        failures: [
+          { provider: "exa", error: serverFailure.message },
+          { provider: "brave", error: rateLimitFailure.message },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps invalid requests strict in automatic mode", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    const failure = new HTTPError(400, "https://api.exa.ai/search", "Invalid request");
     mockPostJSON.mockRejectedValue(failure);
     mockGetJSON.mockResolvedValue(braveResponse);
 
     await expect(searchWithFallback("test")).rejects.toBe(failure);
+    expect(mockGetJSON).not.toHaveBeenCalled();
+  });
+
+  it("retains earlier diagnostics when a later invalid request stops fallback", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    const transientFailure = new HTTPError(503, "https://api.exa.ai/search", "Unavailable");
+    const strictFailure = new HTTPError(400, "https://api.search.brave.com", "Invalid request");
+    mockPostJSON.mockRejectedValue(transientFailure);
+    mockGetJSON.mockRejectedValue(strictFailure);
+
+    const failure = await searchWithFallback("test").catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      attempts: ["exa", "brave"],
+      failures: [
+        { provider: "exa", error: transientFailure.message },
+        { provider: "brave", error: strictFailure.message },
+      ],
+      cause: strictFailure,
+    });
+    await expect(searchBatch(["test"])).resolves.toEqual([
+      {
+        query: "test",
+        error: (failure as Error).message,
+        attempts: ["exa", "brave"],
+        failures: [
+          { provider: "exa", error: transientFailure.message },
+          { provider: "brave", error: strictFailure.message },
+        ],
+      },
+    ]);
+  });
+
+  it("keeps transient failures strict for explicit providers", async () => {
+    process.env.EXA_API_KEY = "test-exa";
+    process.env.BRAVE_API_KEY = "test-brave";
+    const failure = new HTTPError(503, "https://api.exa.ai/search", "Unavailable");
+    mockPostJSON.mockRejectedValue(failure);
+    mockGetJSON.mockResolvedValue(braveResponse);
+
+    await expect(searchProviderDetailed("exa", "test")).rejects.toBe(failure);
     expect(mockGetJSON).not.toHaveBeenCalled();
   });
 });

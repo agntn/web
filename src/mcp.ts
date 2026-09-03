@@ -58,12 +58,18 @@ const searchProviderMetadataSchema = strictObject({
   provider: Type.String(),
   metadata: unknownRecordSchema,
 });
+const providerFailureSchema = strictObject({
+  provider: Type.String(),
+  error: Type.String(),
+});
 const searchProviderResultSchema = strictObject({
   provider: Type.String(),
   results: Type.Array(searchResultSchema),
   ignoredFilters: Type.Array(searchFilterSchema),
   undeclaredFilters: Type.Array(searchFilterSchema),
   metadata: Type.Optional(unknownRecordSchema),
+  attempts: Type.Optional(Type.Array(Type.String())),
+  failures: Type.Optional(Type.Array(providerFailureSchema)),
 });
 const searchAllResponseSchema = strictObject({
   results: Type.Array(searchAllResultSchema),
@@ -79,6 +85,8 @@ const searchBatchItemSchema = Type.Union([
     results: Type.Array(searchResultSchema),
     filterReports: Type.Array(searchFilterReportSchema),
     providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
+    attempts: Type.Optional(Type.Array(Type.String())),
+    failures: Type.Optional(Type.Array(providerFailureSchema)),
   }),
   strictObject({
     query: Type.String(),
@@ -87,7 +95,12 @@ const searchBatchItemSchema = Type.Union([
     filterReports: Type.Array(searchFilterReportSchema),
     providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
   }),
-  strictObject({ query: Type.String(), error: Type.String() }),
+  strictObject({
+    query: Type.String(),
+    error: Type.String(),
+    attempts: Type.Optional(Type.Array(Type.String())),
+    failures: Type.Optional(Type.Array(providerFailureSchema)),
+  }),
 ]);
 const searchOutputSchema = strictObject({
   result: Type.Union([
@@ -129,6 +142,7 @@ const readDetailedResultSchema = strictObject({
   requestedProvider: Type.String(),
   provider: Type.String(),
   attempts: Type.Array(Type.String()),
+  failures: Type.Array(providerFailureSchema),
 });
 const readBatchItemSchema = Type.Union([
   strictObject({
@@ -137,8 +151,14 @@ const readBatchItemSchema = Type.Union([
     requestedProvider: Type.String(),
     provider: Type.String(),
     attempts: Type.Array(Type.String()),
+    failures: Type.Array(providerFailureSchema),
   }),
-  strictObject({ url: Type.String(), error: Type.String() }),
+  strictObject({
+    url: Type.String(),
+    error: Type.String(),
+    attempts: Type.Optional(Type.Array(Type.String())),
+    failures: Type.Optional(Type.Array(providerFailureSchema)),
+  }),
 ]);
 const readOutputSchema = strictObject({
   result: Type.Union([readDetailedResultSchema, Type.Array(readBatchItemSchema)]),
@@ -195,7 +215,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
             providerNames.map((name) => Type.Literal(name)),
             {
               description:
-                'Provider to use. Automatic selection tries other configured providers after HTTP 402. Use "all" for parallel search.',
+                'Provider to use. Automatic selection tries other configured providers after payment, rate-limit, timeout, or server failures. Use "all" for parallel search.',
             },
           ),
         ),
@@ -296,7 +316,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_read",
       title: webToolTitle("web_read"),
       description:
-        "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, or TinyFish. Automatic reads report the effective provider after fallback.",
+        "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, or TinyFish. Automatic reads report every provider attempt and failure after fallback.",
       inputSchema: Type.Object({
         url: Type.Union(
           [
@@ -313,7 +333,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
             [Type.Literal("auto"), ...readProviderNames.map((name) => Type.Literal(name))],
             {
               description:
-                'Read provider to use. "auto" starts with Jina and falls back to other configured readers after HTTP 402 or 409.',
+                'Read provider to use. "auto" starts with Jina and falls back after eligible payment, conflict, rate-limit, timeout, or server failures.',
             },
           ),
         ),

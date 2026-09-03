@@ -154,22 +154,24 @@ const page = await readUrl("https://example.com/article", {
 console.log(page.title, page.content);
 ```
 
-Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Context.dev, Firecrawl, and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`. Without an explicit provider, `readUrl` starts with Jina and tries configured readers if Jina returns HTTP 402 or 409. Explicit provider selection stays strict.
+Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Context.dev, Firecrawl, and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`. Without an explicit provider, `readUrl` starts with Jina and tries configured readers after payment, rate-limit, timeout, or server failures, plus Jina HTTP 409 conflicts. Authentication, invalid requests, and explicit provider selection stay strict.
 
-Use `readUrlDetailed` when provider identity matters. `requestedProvider` records explicit selection or `auto`, `provider` is the reader that returned the page, and `attempts` keeps the ordered fallback path:
+Use `readUrlDetailed` when provider identity matters. `requestedProvider` records explicit selection or `auto`, `provider` is the reader that returned the page, `attempts` keeps the ordered provider path, and `failures` retains the message from each failed attempt:
 
 ```typescript
 import { readUrlDetailed } from "@agntn/web";
 
-const { result, requestedProvider, provider, attempts } = await readUrlDetailed(
+const { result, requestedProvider, provider, attempts, failures } = await readUrlDetailed(
   "https://example.com/article",
 );
-console.log(requestedProvider, provider, attempts, result.content);
+console.log(requestedProvider, provider, attempts, failures, result.content);
 ```
+
+If automatic selection cannot return after one or more eligible failures, `searchWithFallback` and `readUrlDetailed` throw `ProviderFallbackError`. Its `attempts` and `failures` retain the full attempted chain, and `cause` is the terminal provider error. A later authentication or invalid-request failure still stops selection immediately; providers after it are not attempted.
 
 ### Batch operations
 
-`searchBatch` and `readBatch` run up to 10 independent operations in parallel. Input order is preserved, and one failure does not discard the other outcomes. `readBatchDetailed` adds the effective `provider` and `attempts` to each successful read. Without an explicit search provider, each query tries the remaining configured providers after HTTP 402:
+`searchBatch` and `readBatch` run up to 10 independent operations in parallel. Input order is preserved, and one failure does not discard the other outcomes. Detailed automatic outcomes add the effective `provider`, ordered `attempts`, and failed-provider messages in `failures`. Without an explicit search provider, each query tries the remaining configured providers after eligible transient failures:
 
 ```typescript
 import { readBatch, searchBatch } from "@agntn/web";
@@ -180,7 +182,7 @@ const searches = await searchBatch(["TypeScript 7", "Node.js releases"], {
 const pages = await readBatch(["https://example.com/one", "https://example.com/two"]);
 ```
 
-Each successful search outcome is `{ query, provider, results, filterReports, providerMetadata? }`; failures are `{ query, error }`. `providerMetadata` is present only when a provider returned response-level metadata. Each read outcome is `{ url, result }` or `{ url, error }`.
+Each successful search outcome is `{ query, provider, results, filterReports, providerMetadata?, attempts?, failures? }`; exhausted automatic failures are `{ query, error, attempts, failures }`. `attempts` and `failures` are present for automatic selection, while `providerMetadata` is present only when a provider returned response-level metadata. Each basic read outcome is `{ url, result }` or `{ url, error }`.
 
 ### AI SDK tool
 
@@ -201,7 +203,7 @@ const { text } = await generateText({
 });
 ```
 
-`searchTool` accepts one query or an array of queries. Explicit and automatic scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, metadata? }`; `provider="all"` returns `{ results, errors, filterReports, providerMetadata? }`. Successful batch search items use the same `providerMetadata` list. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts }`; successful batch items keep the same reader provenance beside `url`, while failures stay `{ url, error }`:
+`searchTool` accepts one query or an array of queries. Explicit scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, metadata? }`; automatic searches also include `attempts` and `failures`. `provider="all"` returns `{ results, errors, filterReports, providerMetadata? }`. Batch search items retain the same diagnostics. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts, failures }`; successful batch items keep the same reader provenance beside `url`, while exhausted automatic failures keep `attempts` and `failures` beside the error:
 
 ```typescript
 // The AI can choose: a specific provider, or "all" for parallel search
@@ -211,7 +213,7 @@ tools: { web_search: searchTool, web_search_image: searchImageTool, web_read: re
 // readTool input: { url: string | string[], provider?: "jina" | "context" | "firecrawl" | "tinyfish", format?: "markdown" | "text" | "html" }
 ```
 
-Without an explicit provider, `searchTool` starts with the first reachable provider from the environment and tries the remaining configured providers after HTTP 402. `readTool` starts with Jina Reader and tries other configured readers after HTTP 402 or 409.
+Without an explicit provider, `searchTool` starts with the first reachable provider from the environment and tries the remaining configured providers after payment, rate-limit, timeout, or server failures. `readTool` starts with Jina Reader and follows the same policy, with Jina HTTP 409 conflicts also eligible for fallback.
 
 ## CLI
 
@@ -237,7 +239,7 @@ web providers
 | `web providers`          | List built-in providers                       |
 | `web mcp`                | Run the MCP server over stdio                 |
 
-Search commands accept domain, source, and category lists separated by commas. Search JSON uses the same detailed envelopes as the library and agent tools, including provider errors during `--provider all`; each batch item keeps its own result or error. Read commands use automatic selection unless `--provider` is set. Scalar read JSON is `{ result, requestedProvider, provider, attempts }`; batch successes add `url` to that shape. Any failed read batch item makes the command exit 1 without discarding successes.
+Search commands accept domain, source, and category lists separated by commas. Search JSON uses the same detailed envelopes as the library and agent tools, including provider errors during `--provider all`; each batch item keeps its own result or error. Read commands use automatic selection unless `--provider` is set. Scalar read JSON is `{ result, requestedProvider, provider, attempts, failures }`; batch successes add `url` to that shape, and exhausted automatic failures retain the same diagnostics. Any failed read batch item makes the command exit 1 without discarding successes.
 
 ### MCP server
 
@@ -438,7 +440,7 @@ interface SearchOptions {
 
 Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
-`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional response-level `metadata`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Response-level metadata is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the filter matrix as `searchFilters` and optional `searchCategories`.
+`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional response-level `metadata`. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Response-level metadata is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the filter matrix as `searchFilters` and optional `searchCategories`.
 
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 
