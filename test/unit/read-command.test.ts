@@ -56,6 +56,8 @@ type ReadRunArgs = {
   readonly provider?: string;
   readonly format?: string;
   readonly "max-tokens"?: string;
+  readonly "max-chars"?: string;
+  readonly continuation?: string;
   readonly json: boolean;
   [key: string]: string | number | boolean | readonly string[] | undefined;
 };
@@ -123,15 +125,24 @@ describe("read command", () => {
     expect(mockReadUrlDetailed).toHaveBeenCalledWith("https://example.com", {
       format: undefined,
       maxTokens: undefined,
+      maxChars: undefined,
+      continuation: undefined,
     });
   });
 
-  it("passes format and max tokens", async () => {
-    await runRead({ format: "text", "max-tokens": "500" });
+  it("passes native and portable read limits", async () => {
+    await runRead({
+      format: "text",
+      "max-tokens": "500",
+      "max-chars": "2000",
+      continuation: "next-page",
+    });
 
     expect(mockReadUrlDetailed).toHaveBeenCalledWith("https://example.com", {
       format: "text",
       maxTokens: 500,
+      maxChars: 2000,
+      continuation: "next-page",
     });
   });
 
@@ -198,6 +209,8 @@ describe("read command", () => {
     expect(mockReadBatchDetailed).toHaveBeenCalledWith(urls, {
       format: undefined,
       maxTokens: undefined,
+      maxChars: undefined,
+      continuation: undefined,
     });
     expect(writeSpy).toHaveBeenCalledOnce();
     expect(JSON.parse(String(writeSpy.mock.calls[0][0]))).toEqual(outcomes);
@@ -289,6 +302,15 @@ describe("read command", () => {
 
     expect(mockError).toHaveBeenCalledWith(
       "Invalid --max-tokens value. Expected a positive integer.",
+    );
+    expect(mockReadUrlDetailed).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unsafe portable limit", async () => {
+    await expect(runRead({ "max-chars": "9007199254740992" })).rejects.toThrow("__EXIT__");
+
+    expect(mockError).toHaveBeenCalledWith(
+      "Invalid --max-chars value. Expected a positive integer.",
     );
     expect(mockReadUrlDetailed).not.toHaveBeenCalled();
   });

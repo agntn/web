@@ -3,7 +3,13 @@ import { z } from "zod";
 import { builtinProviders } from "./core/providers.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
 import { imageSearchProviderNames, searchByImage } from "./core/image.ts";
-import { readProviderNames, readUrlDetailed } from "./core/read.ts";
+import {
+  DEFAULT_AGENT_READ_MAX_CHARS,
+  MAX_AGENT_READ_CHARS,
+  packageCapabilities,
+  readProviderNames,
+  readUrlDetailed,
+} from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
 import { listProviders } from "./core/resolve.ts";
@@ -159,6 +165,20 @@ export const readTool = tool({
       .min(1)
       .optional()
       .describe("Maximum tokens to return when supported by the provider."),
+    maxChars: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_AGENT_READ_CHARS)
+      .optional()
+      .describe(
+        `Maximum page content characters to return. Defaults to ${DEFAULT_AGENT_READ_MAX_CHARS}.`,
+      ),
+    continuation: z
+      .string()
+      .max(1024)
+      .optional()
+      .describe("Opaque token returned by a truncated read."),
     targetSelector: z
       .string()
       .optional()
@@ -180,16 +200,23 @@ export const readTool = tool({
     provider,
     format,
     maxTokens,
+    maxChars,
+    continuation,
     targetSelector,
     removeSelector,
     timeout,
     noCache,
   }) => {
+    if (Array.isArray(url) && continuation !== undefined) {
+      throw new TypeError("continuation is only supported for a single URL");
+    }
     const normalizedProvider = provider === "auto" ? undefined : provider;
     const readOptions = {
       provider: normalizedProvider,
       format,
       maxTokens,
+      maxChars: maxChars ?? DEFAULT_AGENT_READ_MAX_CHARS,
+      continuation,
       targetSelector,
       removeSelector,
       timeout,
@@ -210,5 +237,9 @@ export const providersTool = tool({
   description:
     "List registered web providers, their complete operation capabilities, configuration, and the running build.",
   inputSchema: z.object({}),
-  execute: async () => ({ runtime: runtimeInfo, providers: listProviders() }),
+  execute: async () => ({
+    runtime: runtimeInfo,
+    packageCapabilities,
+    providers: listProviders(),
+  }),
 });

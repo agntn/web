@@ -195,13 +195,15 @@ import { readUrl } from "@agntn/web";
 const page = await readUrl("https://example.com/article", {
   provider: "jina",
   format: "markdown",
-  maxTokens: 4000,
+  maxChars: 20_000,
 });
 
-console.log(page.title, page.content);
+console.log(page.title, page.content, page.truncated, page.continuation);
 ```
 
-Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Context.dev, Firecrawl, and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`. Without an explicit provider, `readUrl` starts with Jina and tries configured readers after payment, rate-limit, timeout, or server failures, plus Jina HTTP 409 conflicts. Authentication, invalid requests, and explicit provider selection stay strict.
+`maxChars` is an exact, provider-independent output bound measured in Unicode code points. When more content remains, the result has `truncated: true` and an opaque `continuation`; pass that token back with the same URL and native read options to fetch the next page. Continuations stay pinned to the effective provider and fail if the source content changed. Paginated results omit provider-supplied `text` and `html` duplicates so they cannot bypass the requested bound. The core library and CLI remain unbounded unless `maxChars` is requested; AI SDK, MCP, Pi, and OMP reads default to 20,000 characters and accept at most 200,000.
+
+`maxTokens` remains a provider-native request option, not an approximation of the portable character bound. Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Context.dev, Firecrawl, and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`. Without an explicit provider, `readUrl` starts with Jina and tries configured readers after payment, rate-limit, timeout, or server failures, plus Jina HTTP 409 conflicts. Authentication, invalid requests, and explicit provider selection stay strict.
 
 Use `readUrlDetailed` when provider identity matters. `requestedProvider` records explicit selection or `auto`, `provider` is the reader that returned the page, `attempts` keeps the ordered provider path, and `failures` retains the message from each failed attempt:
 
@@ -280,7 +282,8 @@ web search "your query" --provider firecrawl --sources web,news --categories res
 web search "your query" --provider exa --summary --full-text
 web search "your query" --include-domains github.com,stackoverflow.com --start-published-date 2026-01-01
 web search-image https://example.com/image.jpg --max-results 5 --json
-web read https://example.com --format markdown --json
+web read https://example.com --format markdown --max-chars 20000 --json
+web read https://example.com --max-chars 20000 --continuation <opaque-token> --json
 web read https://example.com/one https://example.com/two --json
 web providers
 ```
@@ -330,7 +333,9 @@ The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`
 | `--start-published-date <ISO date>` | Earliest publication date                                                                        |
 | `--end-published-date <ISO date>`   | Latest publication date                                                                          |
 | `--format <markdown\|text\|html>`   | Preferred read format                                                                            |
-| `--max-tokens <n>`                  | Maximum read tokens when supported                                                               |
+| `--max-tokens <n>`                  | Provider-native maximum read tokens when supported                                               |
+| `--max-chars <n>`                   | Portable maximum page-content characters                                                         |
+| `--continuation <token>`            | Continue a truncated single-URL read                                                             |
 | `--json`                            | Output as JSON                                                                                   |
 
 ## Providers
@@ -508,7 +513,7 @@ interface SearchOptions {
 
 Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
-`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional metadata for the whole response. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Each deduplicated result keeps a stable representative, ordered `providers`, and complete `evidence` for each provider. Metadata for the whole response is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the complete registered matrix under `capabilities`; the legacy `searchFilters` and `searchCategories` fields remain available for compatibility.
+`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional metadata for the whole response. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Each deduplicated result keeps a stable representative, ordered `providers`, and complete `evidence` for each provider. Metadata for the whole response is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes native provider support under `providers[].capabilities` and provider-independent guarantees under `packageCapabilities`; the legacy `searchFilters` and `searchCategories` fields remain available for compatibility.
 
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 
@@ -517,6 +522,8 @@ interface ReadUrlOptions {
   provider?: string;
   format?: "markdown" | "text" | "html";
   maxTokens?: number;
+  maxChars?: number;
+  continuation?: string;
   targetSelector?: string;
   removeSelector?: string;
   timeout?: number;
@@ -524,7 +531,7 @@ interface ReadUrlOptions {
 }
 ```
 
-The built in read providers are `jina`, `context`, `firecrawl`, and `tinyfish`. Custom registered providers work in explicit agent calls and join automatic fallback when configured. Firecrawl supports `targetSelector` and `removeSelector` as CSS filters but rejects `maxTokens` instead of silently ignoring it.
+The built in read providers are `jina`, `context`, `firecrawl`, and `tinyfish`. Custom registered providers work in explicit agent calls and join automatic fallback when configured. `maxChars` and `continuation` are package options removed before calling any provider. Firecrawl supports `targetSelector` and `removeSelector` as CSS filters but rejects the native `maxTokens` option instead of silently ignoring it.
 
 ## Development
 

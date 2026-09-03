@@ -5,7 +5,9 @@ import { providerApiKeyEnvVar } from "../core/providers.ts";
 import {
   AuthError,
   EmptyUrlError,
+  InvalidReadContinuationError,
   ReadNotSupportedError,
+  StaleReadContinuationError,
   UnknownProviderError,
 } from "../core/errors.ts";
 
@@ -30,7 +32,15 @@ export default defineCommand({
     },
     "max-tokens": {
       type: "string",
-      description: "Maximum tokens to return",
+      description: "Maximum tokens to return when the provider supports it",
+    },
+    "max-chars": {
+      type: "string",
+      description: "Maximum page content characters to return",
+    },
+    continuation: {
+      type: "string",
+      description: "Opaque token returned by a truncated read",
     },
     json: {
       type: "boolean",
@@ -65,6 +75,8 @@ type ReadCommandArgs = {
   readonly provider?: string;
   readonly format?: string;
   readonly "max-tokens"?: string;
+  readonly "max-chars"?: string;
+  readonly continuation?: string;
   readonly json: boolean;
 };
 
@@ -74,6 +86,8 @@ type ParsedReadArguments = {
     readonly provider?: string;
     readonly format?: "markdown" | "text" | "html";
     readonly maxTokens?: number;
+    readonly maxChars?: number;
+    readonly continuation?: string;
   };
 };
 
@@ -83,16 +97,23 @@ function parseReadArguments(args: ReadCommandArgs, maxBatchItems: number): Parse
   if (urls.length > maxBatchItems) {
     return exitWithError(`Cannot read more than ${maxBatchItems} URLs at once.`);
   }
+  if (urls.length > 1 && args.continuation !== undefined) {
+    return exitWithError("--continuation is only supported for a single URL.");
+  }
   const format = parseFormat(args.format);
   if (!format.ok) return exitWithError(format.message);
   const maxTokens = parseOptionalPositiveInt(args["max-tokens"], "--max-tokens");
   if (!maxTokens.ok) return exitWithError(maxTokens.message);
+  const maxChars = parseOptionalPositiveInt(args["max-chars"], "--max-chars");
+  if (!maxChars.ok) return exitWithError(maxChars.message);
   return {
     urls,
     options: {
       ...parseProviderOption(args.provider),
       format: format.value,
       maxTokens: maxTokens.value,
+      maxChars: maxChars.value,
+      continuation: args.continuation,
     },
   };
 }
@@ -104,7 +125,10 @@ function parseProviderOption(input: string | undefined): { readonly provider?: s
 
 type ReadDetailedResultView = {
   readonly result: Readonly<
-    Pick<import("../core/types.ts").ReadResult, "url" | "title" | "description" | "content">
+    Pick<
+      import("../core/types.ts").ReadResult,
+      "url" | "title" | "description" | "content" | "truncated" | "continuation"
+    >
   >;
   readonly requestedProvider: string;
   readonly provider: string;
@@ -124,7 +148,10 @@ function writeReadDetailedResult(response: ReadDetailedResultView, json: boolean
 
 function writeReadResult(
   result: Readonly<
-    Pick<import("../core/types.ts").ReadResult, "url" | "title" | "description" | "content">
+    Pick<
+      import("../core/types.ts").ReadResult,
+      "url" | "title" | "description" | "content" | "truncated" | "continuation"
+    >
   >,
   json: boolean,
 ): void {
@@ -140,6 +167,10 @@ function writeReadResult(
   }
   consola.log("");
   consola.log(sanitizeTerminalContent(result.content));
+  if (result.truncated && result.continuation) {
+    consola.log("");
+    consola.log(`[truncated; continuation=${sanitizeHeaderText(result.continuation)}]`);
+  }
 }
 
 type ReadBatchItemView =
@@ -150,7 +181,10 @@ type ReadBatchItemView =
       readonly provider: string;
       readonly attempts: readonly string[];
       readonly result: Readonly<
-        Pick<import("../core/types.ts").ReadResult, "url" | "title" | "description" | "content">
+        Pick<
+          import("../core/types.ts").ReadResult,
+          "url" | "title" | "description" | "content" | "truncated" | "continuation"
+        >
       >;
     };
 
@@ -185,7 +219,13 @@ function handleReadError(error: unknown, readProviderNames: readonly string[]): 
     consola.info(`Read-capable providers: ${readProviderNames.join(", ")}`);
     return exitWithError(`Unknown provider: ${error.provider}`);
   }
-  if (error instanceof ReadNotSupportedError) return exitWithError(error.message);
+  if (
+    error instanceof ReadNotSupportedError ||
+    error instanceof InvalidReadContinuationError ||
+    error instanceof StaleReadContinuationError
+  ) {
+    return exitWithError(error.message);
+  }
   throw error;
 }
 
@@ -213,7 +253,7 @@ function parseOptionalPositiveInt(
     return { ok: false, message: `Invalid ${flagName} value. Expected a positive integer.` };
   }
   const value = Number.parseInt(input, 10);
-  if (value < 1) {
+  if (!Number.isSafeInteger(value) || value < 1) {
     return { ok: false, message: `Invalid ${flagName} value. Expected a positive integer.` };
   }
   return { ok: true, value };

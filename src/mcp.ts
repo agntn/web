@@ -12,7 +12,13 @@ import { builtinProviders } from "./core/providers.ts";
 import { searchProviders, searchImageProviders, readProviders } from "./core/registry.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
 import { imageSearchProviderNames, searchByImage } from "./core/image.ts";
-import { readProviderNames, readUrlDetailed } from "./core/read.ts";
+import {
+  DEFAULT_AGENT_READ_MAX_CHARS,
+  MAX_AGENT_READ_CHARS,
+  packageCapabilities,
+  readProviderNames,
+  readUrlDetailed,
+} from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
@@ -140,6 +146,8 @@ const readResultSchema = strictObject({
   links: Type.Optional(Type.Array(Type.String())),
   images: Type.Optional(Type.Array(Type.String())),
   metadata: Type.Optional(unknownRecordSchema),
+  truncated: Type.Optional(Type.Boolean()),
+  continuation: Type.Optional(Type.String()),
 });
 const readDetailedResultSchema = strictObject({
   result: readResultSchema,
@@ -202,6 +210,21 @@ const providerStatusSchema = strictObject({
   searchCategories: Type.Optional(Type.Array(Type.String())),
   capabilities: providerCapabilitiesSchema,
 });
+const packageCapabilitiesSchema = strictObject({
+  read: strictObject({
+    outputLimit: strictObject({
+      option: Type.Literal("maxChars"),
+      unit: Type.Literal("unicode-code-points"),
+      minimum: Type.Number(),
+      agentDefault: Type.Number(),
+      agentMaximum: Type.Number(),
+    }),
+    continuation: strictObject({
+      option: Type.Literal("continuation"),
+      opaque: Type.Boolean(),
+    }),
+  }),
+});
 const providersOutputSchema = strictObject({
   result: strictObject({
     runtime: strictObject({
@@ -209,6 +232,7 @@ const providersOutputSchema = strictObject({
       buildId: Type.String(),
       processStartedAt: Type.String(),
     }),
+    packageCapabilities: packageCapabilitiesSchema,
     providers: Type.Array(providerStatusSchema),
   }),
 });
@@ -379,6 +403,19 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
             minimum: 1,
           }),
         ),
+        maxChars: Type.Optional(
+          Type.Integer({
+            description: `Maximum page content characters to return. Defaults to ${DEFAULT_AGENT_READ_MAX_CHARS}.`,
+            minimum: 1,
+            maximum: MAX_AGENT_READ_CHARS,
+          }),
+        ),
+        continuation: Type.Optional(
+          Type.String({
+            description: "Opaque token returned by a truncated read.",
+            maxLength: 1024,
+          }),
+        ),
         targetSelector: Type.Optional(
           Type.String({ description: "CSS selector to target when supported by the provider." }),
         ),
@@ -416,7 +453,11 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         idempotentHint: true,
         openWorldHint: false,
       },
-      execute: async () => ({ runtime: runtimeInfo, providers: await listProvidersAsync() }),
+      execute: async () => ({
+        runtime: runtimeInfo,
+        packageCapabilities,
+        providers: await listProvidersAsync(),
+      }),
     },
   ].map((tool) => [tool.name, tool]),
 );
@@ -509,10 +550,14 @@ export async function executeRead(args: Readonly<Record<string, unknown>>): Prom
     throw new TypeError("format must be one of: markdown, text, html");
   }
 
+  const continuation = stringArg("continuation", args.continuation);
+  rejectBatchContinuation(urls, continuation);
   const readOptions = {
     provider: readProviderArg(args.provider),
     format: format as "markdown" | "text" | "html" | undefined,
     maxTokens: intArg("maxTokens", args.maxTokens),
+    maxChars: readMaxCharsArg(args.maxChars),
+    continuation,
     targetSelector: stringArg("targetSelector", args.targetSelector),
     removeSelector: stringArg("removeSelector", args.removeSelector),
     timeout: intArg("timeout", args.timeout),
@@ -585,6 +630,23 @@ function intArg(name: string, value: unknown): number | undefined {
     throw new TypeError(`${name} must be an integer >= 1`);
   }
   return value;
+}
+
+function rejectBatchContinuation(
+  urls: readonly string[] | undefined,
+  continuation: string | undefined,
+): void {
+  if (urls !== undefined && continuation !== undefined) {
+    throw new TypeError("continuation is only supported for a single URL");
+  }
+}
+
+function readMaxCharsArg(value: unknown): number {
+  const maxChars = intArg("maxChars", value) ?? DEFAULT_AGENT_READ_MAX_CHARS;
+  if (maxChars > MAX_AGENT_READ_CHARS) {
+    throw new TypeError(`maxChars must be at most ${MAX_AGENT_READ_CHARS}`);
+  }
+  return maxChars;
 }
 
 function boolArg(name: string, value: unknown): boolean | undefined {

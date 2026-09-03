@@ -29,7 +29,7 @@ import { EmptyQueryError, EmptyUrlError, HTTPError } from "../../src/core/errors
 import { Provider } from "../../src/core/provider.ts";
 import { register } from "../../src/core/registry.ts";
 import type { ProviderStatus } from "../../src/core/resolve.ts";
-import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
+import type { ProviderConfig, ReadResult, SearchResult } from "../../src/core/types.ts";
 import { runtimeInfo } from "../../src/version.ts";
 
 const customProviderCleanups: Array<() => void> = [];
@@ -736,9 +736,21 @@ describe("providersTool", () => {
     const result = (await providersTool.execute!(
       {},
       { toolCallId: "providers-call", messages: [] },
-    )) as { readonly runtime: typeof runtimeInfo; readonly providers: readonly ProviderStatus[] };
+    )) as {
+      readonly runtime: typeof runtimeInfo;
+      readonly packageCapabilities: typeof import("../../src/index.ts").packageCapabilities;
+      readonly providers: readonly ProviderStatus[];
+    };
 
-    expect(result).toMatchObject({ runtime: runtimeInfo });
+    expect(result).toMatchObject({
+      runtime: runtimeInfo,
+      packageCapabilities: {
+        read: {
+          outputLimit: { option: "maxChars", agentDefault: 20_000, agentMaximum: 200_000 },
+          continuation: { option: "continuation", opaque: true },
+        },
+      },
+    });
     const exa = result.providers.find((provider) => provider.name === "exa");
     expect(exa).toMatchObject({
       name: "exa",
@@ -792,12 +804,45 @@ describe("readTool", () => {
     await expect(validate({ url: "https://example.com", maxTokens: 500.5 })).resolves.toMatchObject(
       { success: false },
     );
+    await expect(
+      validate({ url: "https://example.com", maxChars: 200_000 }),
+    ).resolves.toMatchObject({ success: true });
+    await expect(
+      validate({ url: "https://example.com", maxChars: 200_001 }),
+    ).resolves.toMatchObject({ success: false });
     await expect(validate({ url: "https://example.com", timeout: 30 })).resolves.toMatchObject({
       success: true,
     });
     await expect(validate({ url: "https://example.com", timeout: 30.5 })).resolves.toMatchObject({
       success: false,
     });
+  });
+
+  it("bounds read content independently of the provider", async () => {
+    mockGetJSON.mockResolvedValueOnce({
+      code: 200,
+      status: 20000,
+      data: {
+        url: "https://example.com/",
+        content: "abcdef",
+        text: "abcdef",
+      },
+    });
+
+    const response = await readTool.execute!(
+      { url: "https://example.com", maxChars: 3 },
+      { toolCallId: "read-bounded", messages: [] },
+    );
+
+    expect(response).toMatchObject({
+      result: {
+        content: "abc",
+        truncated: true,
+      },
+    });
+    expect((response as { readonly result: ReadResult }).result.continuation).toBeTypeOf("string");
+    expect(response).not.toHaveProperty("result.text");
+    expect(mockGetJSON.mock.calls[0]?.[1]).not.toHaveProperty("maxChars");
   });
 
   it("reads a URL with Jina by default", async () => {

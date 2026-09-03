@@ -66,6 +66,8 @@ export {
   EmptyImageUrlError,
   InvalidImageUrlError,
   EmptyUrlError,
+  InvalidReadContinuationError,
+  StaleReadContinuationError,
   ReadNotSupportedError,
   InvalidDateFilterError,
   normalizeError,
@@ -113,7 +115,14 @@ export type { FallbackOperation, ProviderFailure } from "./core/fallback.ts";
 export { imageSearchProviderNames, searchByImage } from "./core/image.ts";
 export type { ImageSearchProviderName, ImageSearchByUrlOptions } from "./core/image.ts";
 
-export { readProviderNames, readUrl, readUrlDetailed } from "./core/read.ts";
+export {
+  readProviderNames,
+  readUrl,
+  readUrlDetailed,
+  DEFAULT_AGENT_READ_MAX_CHARS,
+  MAX_AGENT_READ_CHARS,
+  packageCapabilities,
+} from "./core/read.ts";
 export type { ReadProviderName, ReadUrlOptions, ReadUrlDetailedResult } from "./core/read.ts";
 
 export { MAX_BATCH_ITEMS, searchBatch, readBatch, readBatchDetailed } from "./core/batch.ts";

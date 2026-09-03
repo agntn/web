@@ -136,6 +136,9 @@ export async function readBatchDetailed(
   options?: Readonly<ReadUrlOptions>,
 ): Promise<readonly ReadBatchDetailedItem[]> {
   validateBatch(urls, "URL", EmptyUrlError);
+  if (options?.continuation !== undefined) {
+    throw new TypeError("continuation is only supported for a single URL");
+  }
   const outcomes = await settleBatch(urls, (url) => readUrlDetailed(url, options));
   return outcomes.map((outcome): ReadBatchDetailedItem =>
     outcome.ok

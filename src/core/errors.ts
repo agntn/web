@@ -111,6 +111,22 @@ export class EmptyUrlError extends WebError {
   }
 }
 
+/** Thrown when a read continuation token is malformed or belongs to another request. */
+export class InvalidReadContinuationError extends WebError {
+  constructor() {
+    super("Invalid read continuation token");
+    this.name = "InvalidReadContinuationError";
+  }
+}
+
+/** Thrown when the page changed before a continued read. */
+export class StaleReadContinuationError extends WebError {
+  constructor() {
+    super("Read content changed since the continuation token was issued");
+    this.name = "StaleReadContinuationError";
+  }
+}
+
 export class InvalidProviderUrlError extends WebError {
   readonly provider: string;
 
