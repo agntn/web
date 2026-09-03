@@ -24,12 +24,12 @@ Provided tools:
 - `web_search` - search one query or a batch of queries with a single provider, or use `provider="all"` for provider fan-out
 - `web_search_image` - find pages containing or resembling an image available by public URL
 - `web_read` - read one URL or a batch of URLs and report the effective reader after fallback
-- `web_providers` - show the running build and process start, then list configuration, reachability, and search filter support
+- `web_providers` - show the running build and process start, then list configuration, reachability, operations, read options, result limits, filters, and rich search fields
 
 Provided slash commands:
 
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
-- `/web-providers` - show provider configuration and reachability status
+- `/web-providers` - show provider configuration, reachability, and capability details
 
 Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Pi sends rich search fields with a cap for each result and includes provider metadata without expanding the TUI. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
 
@@ -90,6 +90,7 @@ import {
   searchProviders,
   searchImageProviders,
   readProviders,
+  type ProviderCapabilityDetails,
   type ProviderConfig,
   type SearchResult,
 } from "@agntn/web";
@@ -98,6 +99,13 @@ class InternalSearch extends Provider {
   static readonly providerName = "internal-search";
   static readonly defaultBaseURL = "https://search.example.com";
   static readonly apiKeyEnvVar = null;
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultLimit: { default: 10, maximum: 50 },
+      resultFields: [],
+    },
+  } as const satisfies ProviderCapabilityDetails;
 
   constructor(config: Readonly<ProviderConfig>) {
     super(config, InternalSearch);
@@ -114,7 +122,9 @@ console.log(searchImageProviders());
 console.log(readProviders());
 ```
 
-Provider names use lowercase ASCII letters, digits, and single internal hyphens. Set `apiKeyEnvVar` to `null` when registration is enough to configure the provider. Otherwise automatic selection expects a derived variable such as `INTERNAL_SEARCH_API_KEY`; explicit `create()` calls can still pass `apiKey`. For class field methods, declare any of `"search"`, `"searchImage"`, and `"read"` in a static `capabilities` array. Agent tool schemas advertise the built in names but accept strings, then validate the selected name against the live capability list at execution time.
+Provider names use lowercase ASCII letters, digits, and single internal hyphens. Set `apiKeyEnvVar` to `null` when registration is enough to configure the provider. Otherwise automatic selection expects a derived variable such as `INTERNAL_SEARCH_API_KEY`; explicit `create()` calls can still pass `apiKey`. For class field methods, declare any of `"search"`, `"searchImage"`, and `"read"` in a static `capabilities` array. Declare static `capabilityDetails` when discovery should also report content controls, result limits, rich search fields, or read options. Agent tool schemas advertise the built in names but accept strings, then validate the selected name against the live capability list at execution time.
+
+`getProviderCapabilities(name)` reads one registered provider's matrix. `listProviders()` and `listProvidersAsync()` include the same matrix under `capabilities`, alongside configuration and optional reachability state. Unsupported operations are explicit (`{ supported: false }`); details omitted by a backward-compatible custom provider remain unknown instead of being guessed.
 
 ### Search all providers
 
@@ -293,7 +303,7 @@ Search commands accept domain, source, and category lists separated by commas. S
 - `web_search` - search one query or a batch, or use `provider="all"` for provider fan-out
 - `web_search_image` - find matching pages and images from a public image URL
 - `web_read` - read one URL or a batch and return effective provider provenance
-- `web_providers` - show the running build and process start, then list configuration and search filter support
+- `web_providers` - show the running build and process start, then list configuration, reachability, and the complete provider capability matrix
 
 Each tool advertises an output schema and returns its result under `structuredContent.result`. Compact JSON stays in `content` for clients that only render text.
 
@@ -498,7 +508,7 @@ interface SearchOptions {
 
 Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
-`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional metadata for the whole response. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Each deduplicated result keeps a stable representative, ordered `providers`, and complete `evidence` for each provider. Metadata for the whole response is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the filter matrix as `searchFilters` and optional `searchCategories`.
+`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, and optional metadata for the whole response. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Each deduplicated result keeps a stable representative, ordered `providers`, and complete `evidence` for each provider. Metadata for the whole response is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes the complete registered matrix under `capabilities`; the legacy `searchFilters` and `searchCategories` fields remain available for compatibility.
 
 Read options you can pass to `readUrl` or `readUrlDetailed`:
 

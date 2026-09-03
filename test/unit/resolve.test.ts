@@ -189,5 +189,162 @@ describe("resolve", () => {
         searxng: { filters: ["category"] },
       });
     });
+
+    it("should expose complete registered capability metadata", () => {
+      const matrix = Object.fromEntries(
+        listProviders().map(({ name, capabilities }) => [name, capabilities]),
+      );
+
+      expect(matrix.brave).toEqual({
+        search: {
+          supported: true,
+          filters: [],
+          contentOptions: [],
+          resultLimit: { default: 10, maximum: 20 },
+          resultFields: ["favicon", "text"],
+        },
+        searchImage: { supported: false },
+        read: { supported: false },
+      });
+      expect(matrix.context).toEqual({
+        search: {
+          supported: true,
+          filters: ["includeDomains", "excludeDomains"],
+          contentOptions: [],
+          resultLimit: { default: 10, maximum: 100 },
+          resultFields: ["text", "metadata"],
+        },
+        searchImage: { supported: false },
+        read: {
+          supported: true,
+          options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+          formats: ["markdown", "html"],
+        },
+      });
+      expect(matrix.exa).toEqual({
+        search: {
+          supported: true,
+          filters: [
+            "includeDomains",
+            "excludeDomains",
+            "category",
+            "startPublishedDate",
+            "endPublishedDate",
+          ],
+          contentOptions: ["highlights", "summary", "fullText"],
+          resultLimit: { default: 10, maximum: 100 },
+          resultFields: [
+            "score",
+            "publishedDate",
+            "author",
+            "image",
+            "favicon",
+            "text",
+            "highlights",
+            "summary",
+          ],
+        },
+        searchImage: { supported: false },
+        read: { supported: false },
+      });
+      expect(matrix.firecrawl).toEqual({
+        search: {
+          supported: true,
+          filters: ["includeDomains", "excludeDomains", "sources", "categories"],
+          contentOptions: ["highlights"],
+          resultLimit: { default: 10, maximum: 100 },
+          resultFields: ["image", "text", "metadata"],
+        },
+        searchImage: { supported: false },
+        read: {
+          supported: true,
+          options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+          formats: ["markdown", "html"],
+        },
+      });
+      expect(matrix.jina).toEqual({
+        search: {
+          supported: true,
+          filters: ["includeDomains", "category"],
+          categories: ["web", "images", "news"],
+          contentOptions: [],
+          resultLimit: { default: 10, maximum: 20 },
+          resultFields: ["publishedDate", "image", "text", "metadata"],
+        },
+        searchImage: { supported: false },
+        read: {
+          supported: true,
+          options: [
+            "format",
+            "maxTokens",
+            "targetSelector",
+            "removeSelector",
+            "timeout",
+            "noCache",
+          ],
+          formats: ["markdown", "text", "html"],
+        },
+      });
+      expect(matrix.mojeek).toMatchObject({
+        search: {
+          supported: true,
+          contentOptions: [],
+          resultLimit: { default: 10 },
+          resultFields: ["score", "publishedDate", "image", "metadata"],
+        },
+        searchImage: { supported: false },
+        read: { supported: false },
+      });
+      expect(matrix.serpapi).toEqual({
+        search: {
+          supported: true,
+          filters: [],
+          contentOptions: [],
+          resultLimit: { default: 10 },
+          resultFields: ["publishedDate", "image", "favicon", "metadata"],
+        },
+        searchImage: {
+          supported: true,
+          resultLimit: { default: 10 },
+        },
+        read: { supported: false },
+      });
+      expect(matrix.serpbase).toMatchObject({
+        search: {
+          supported: true,
+          contentOptions: [],
+          resultLimit: { default: 10, maximum: 20 },
+          resultFields: ["publishedDate", "image", "favicon", "metadata"],
+        },
+      });
+      expect(matrix.tavily).toMatchObject({
+        search: {
+          supported: true,
+          contentOptions: ["summary", "fullText"],
+          resultLimit: { default: 10, maximum: 20 },
+          resultFields: ["score", "publishedDate", "text"],
+        },
+      });
+      expect(matrix.tinyfish).toMatchObject({
+        search: {
+          supported: true,
+          contentOptions: [],
+          resultLimit: { default: 10 },
+          resultFields: ["publishedDate", "author", "metadata"],
+        },
+        read: {
+          supported: true,
+          options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+          formats: ["markdown", "html"],
+        },
+      });
+      expect(matrix.searxng).toMatchObject({
+        search: {
+          supported: true,
+          contentOptions: [],
+          resultFields: ["score", "publishedDate", "image", "metadata"],
+        },
+      });
+    });
   });
 });

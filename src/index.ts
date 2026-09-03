@@ -29,8 +29,21 @@ export {
   isAvailabilityProvider,
 } from "./core/provider.ts";
 export type {
+  ProviderCapabilities,
   ProviderCapability,
+  ProviderCapabilityDetails,
   ProviderConstructor,
+  ProviderImageSearchCapabilities,
+  ProviderReadCapabilities,
+  ProviderResultLimit,
+  ProviderSearchCapabilities,
+  SearchCapabilityDetails,
+  SearchContentOptionName,
+  SearchResultField,
+  ImageSearchCapabilityDetails,
+  ReadCapabilityDetails,
+  ReadFormat,
+  ReadOptionName,
   SearchProvider,
   DetailedSearchProvider,
   ImageSearchProvider,
@@ -73,6 +86,7 @@ export {
   readProviders,
   has,
   getProviderApiKeyEnvVar,
+  getProviderCapabilities,
   getSearchFilterCapabilities,
 } from "./core/registry.ts";
 

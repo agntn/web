@@ -6,7 +6,7 @@ import type {
   SearchRequestOptions,
   SearchResult,
 } from "../core/types.ts";
-import { Provider } from "../core/provider.ts";
+import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { AuthError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -56,6 +56,16 @@ interface SerpApiImageSearchResponse {
 class SerpApiProvider extends Provider {
   static readonly providerName = "serpapi";
   static readonly defaultBaseURL = "https://serpapi.com";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultLimit: { default: 10 },
+      resultFields: ["publishedDate", "image", "favicon", "metadata"],
+    },
+    searchImage: {
+      resultLimit: { default: 10 },
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: [],
   } as const satisfies SearchFilterCapabilities;

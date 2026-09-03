@@ -4,7 +4,7 @@ import type {
   SearchRequestOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider } from "../core/provider.ts";
+import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { WebError, AuthError, RateLimitError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -57,6 +57,13 @@ const SERPBASE_SEARCH_CATEGORIES = ["images", "image", "news", "videos", "video"
 class SerpBaseProvider extends Provider {
   static readonly providerName = "serpbase";
   static readonly defaultBaseURL = "https://api.serpbase.dev";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultLimit: { default: 10, maximum: SERPBASE_MAX_RESULTS },
+      resultFields: ["publishedDate", "image", "favicon", "metadata"],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: ["category"],
     categories: SERPBASE_SEARCH_CATEGORIES,

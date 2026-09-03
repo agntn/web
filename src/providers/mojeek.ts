@@ -4,7 +4,7 @@ import type {
   SearchRequestOptions,
   SearchResult,
 } from "../core/types.ts";
-import { Provider } from "../core/provider.ts";
+import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import {
   AuthError,
   DEFAULT_RETRY_AFTER,
@@ -44,6 +44,13 @@ interface MojeekResult {
 class MojeekProvider extends Provider {
   static readonly providerName = "mojeek";
   static readonly defaultBaseURL = "https://api.mojeek.com";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultLimit: { default: 10 },
+      resultFields: ["score", "publishedDate", "image", "metadata"],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: ["includeDomains", "excludeDomains", "startPublishedDate", "endPublishedDate"],
   } as const satisfies SearchFilterCapabilities;

@@ -7,7 +7,7 @@ import type {
   ReadOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider } from "../core/provider.ts";
+import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { AuthError, WebError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -73,6 +73,17 @@ function clampMaxResults(max?: number): number {
 class FirecrawlProvider extends Provider {
   static readonly providerName = "firecrawl";
   static readonly defaultBaseURL = "https://api.firecrawl.dev";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: ["highlights"],
+      resultLimit: { default: 10, maximum: FIRECRAWL_MAX_RESULTS },
+      resultFields: ["image", "text", "metadata"],
+    },
+    read: {
+      options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+      formats: ["markdown", "html"],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: ["includeDomains", "excludeDomains", "sources", "categories"],
   } as const satisfies SearchFilterCapabilities;

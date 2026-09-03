@@ -6,8 +6,12 @@ import {
   isReadProvider,
   isSearchProvider,
   type ImageSearchProvider,
+  type ProviderCapabilities,
   type ProviderCapability,
   type ProviderConstructor,
+  type ProviderImageSearchCapabilities,
+  type ProviderReadCapabilities,
+  type ProviderSearchCapabilities,
   type ReadProvider,
   type SearchProvider,
 } from "./provider.ts";
@@ -152,17 +156,73 @@ export function getSearchFilterCapabilities(name: string): SearchFilterCapabilit
   return providerClasses.get(name)?.searchFilterCapabilities;
 }
 
+/**
+ * Return the complete operation matrix declared by and inferred from a registered provider.
+ * Optional details stay absent for backward-compatible custom providers that only implement methods.
+ * @param name - Registered provider name.
+ * @returns {ProviderCapabilities | undefined} Capability metadata, or undefined when the provider is not registered.
+ */
+export function getProviderCapabilities(name: string): ProviderCapabilities | undefined {
+  const ProviderClass = providerClasses.get(name);
+  if (!ProviderClass) return undefined;
+
+  return {
+    search: searchCapabilityStatus(ProviderClass),
+    searchImage: imageSearchCapabilityStatus(ProviderClass),
+    read: readCapabilityStatus(ProviderClass),
+  };
+}
+
+function searchCapabilityStatus(ProviderClass: ProviderConstructor): ProviderSearchCapabilities {
+  if (!providerSupportsCapability(ProviderClass, "search", isSearchProvider)) {
+    return { supported: false };
+  }
+  return {
+    supported: true,
+    ...ProviderClass.searchFilterCapabilities,
+    ...ProviderClass.capabilityDetails?.search,
+  };
+}
+
+function imageSearchCapabilityStatus(
+  ProviderClass: ProviderConstructor,
+): ProviderImageSearchCapabilities {
+  if (!providerSupportsCapability(ProviderClass, "searchImage", isImageSearchProvider)) {
+    return { supported: false };
+  }
+  return {
+    supported: true,
+    ...ProviderClass.capabilityDetails?.searchImage,
+  };
+}
+
+function readCapabilityStatus(ProviderClass: ProviderConstructor): ProviderReadCapabilities {
+  if (!providerSupportsCapability(ProviderClass, "read", isReadProvider)) {
+    return { supported: false };
+  }
+  return {
+    supported: true,
+    ...ProviderClass.capabilityDetails?.read,
+  };
+}
+
 function providerNamesWithCapability(
   capability: ProviderCapability,
   predicate: (provider: object) => boolean,
 ): string[] {
   return Array.from(providerClasses.entries())
-    .filter(
-      ([, ProviderClass]) =>
-        ProviderClass.capabilities?.includes(capability) === true ||
-        predicate(ProviderClass.prototype),
-    )
+    .filter(([, ProviderClass]) => providerSupportsCapability(ProviderClass, capability, predicate))
     .map(([name]) => name);
+}
+
+function providerSupportsCapability(
+  ProviderClass: ProviderConstructor,
+  capability: ProviderCapability,
+  predicate: (provider: object) => boolean,
+): boolean {
+  return (
+    ProviderClass.capabilities?.includes(capability) === true || predicate(ProviderClass.prototype)
+  );
 }
 
 function removeRegistration(name: string, registration: Readonly<ProviderRegistration>): void {

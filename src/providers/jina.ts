@@ -6,7 +6,11 @@ import type {
   ReadOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider, assertProviderBaseURL } from "../core/provider.ts";
+import {
+  Provider,
+  assertProviderBaseURL,
+  type ProviderCapabilityDetails,
+} from "../core/provider.ts";
 import { AuthError, HTTPError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -49,6 +53,17 @@ const JINA_SEARCH_CATEGORIES = ["web", "images", "news"] as const;
 class JinaProvider extends Provider {
   static readonly providerName = "jina";
   static readonly defaultBaseURL = "https://s.jina.ai";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultLimit: { default: 10, maximum: JINA_MAX_RESULTS },
+      resultFields: ["publishedDate", "image", "text", "metadata"],
+    },
+    read: {
+      options: ["format", "maxTokens", "targetSelector", "removeSelector", "timeout", "noCache"],
+      formats: ["markdown", "text", "html"],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: ["includeDomains", "category"],
     categories: JINA_SEARCH_CATEGORIES,

@@ -6,6 +6,7 @@ import type {
   ReadOptions,
   ReadResult,
   SearchFilterCapabilities,
+  SearchFilterName,
   SearchRequestOptions,
   SearchResponse,
   SearchResult,
@@ -13,12 +14,77 @@ import type {
 import { InvalidProviderUrlError } from "./errors.ts";
 
 export type ProviderCapability = "search" | "searchImage" | "read";
+export type SearchResultField = Exclude<keyof SearchResult, "url" | "title" | "snippet">;
+export type SearchContentOptionName = "highlights" | "summary" | "fullText";
+export type ReadOptionName = keyof ReadOptions;
+export type ReadFormat = NonNullable<ReadOptions["format"]>;
+
+/** Known result count behavior exposed by one provider adapter. */
+export type ProviderResultLimit =
+  | { readonly default: number; readonly maximum?: number }
+  | { readonly default?: never; readonly maximum: number };
+
+/** Static search metadata that cannot be inferred from method presence. */
+export interface SearchCapabilityDetails {
+  readonly contentOptions: readonly SearchContentOptionName[];
+  readonly resultLimit?: ProviderResultLimit;
+  readonly resultFields: readonly SearchResultField[];
+}
+
+/** Static reverse image search metadata that cannot be inferred from method presence. */
+export interface ImageSearchCapabilityDetails {
+  readonly resultLimit: ProviderResultLimit;
+}
+
+/** Static URL reader metadata that cannot be inferred from method presence. */
+export interface ReadCapabilityDetails {
+  readonly options: readonly ReadOptionName[];
+  readonly formats: readonly ReadFormat[];
+}
+
+/** Optional details declared by a provider class for each implemented operation. */
+export interface ProviderCapabilityDetails {
+  readonly search?: SearchCapabilityDetails;
+  readonly searchImage?: ImageSearchCapabilityDetails;
+  readonly read?: ReadCapabilityDetails;
+}
+
+/** Machine-readable search capability reported by provider discovery. */
+export interface ProviderSearchCapabilities {
+  readonly supported: boolean;
+  readonly filters?: readonly SearchFilterName[];
+  readonly categories?: readonly string[];
+  readonly contentOptions?: readonly SearchContentOptionName[];
+  readonly resultLimit?: ProviderResultLimit;
+  readonly resultFields?: readonly SearchResultField[];
+}
+
+/** Machine-readable reverse image search capability reported by provider discovery. */
+export interface ProviderImageSearchCapabilities {
+  readonly supported: boolean;
+  readonly resultLimit?: ProviderResultLimit;
+}
+
+/** Machine-readable URL reader capability reported by provider discovery. */
+export interface ProviderReadCapabilities {
+  readonly supported: boolean;
+  readonly options?: readonly ReadOptionName[];
+  readonly formats?: readonly ReadFormat[];
+}
+
+/** Complete operation matrix for one registered provider. */
+export interface ProviderCapabilities {
+  readonly search: ProviderSearchCapabilities;
+  readonly searchImage: ProviderImageSearchCapabilities;
+  readonly read: ProviderReadCapabilities;
+}
 
 export interface ProviderConstructor {
   readonly providerName: string;
   readonly defaultBaseURL: string;
   readonly apiKeyEnvVar?: string | null;
   readonly capabilities?: readonly ProviderCapability[];
+  readonly capabilityDetails?: ProviderCapabilityDetails;
   readonly searchFilterCapabilities?: SearchFilterCapabilities;
   readonly prototype: Readonly<Provider>;
   new (config: Readonly<ProviderConfig>): Provider;

@@ -208,7 +208,7 @@ export const readTool = tool({
 
 export const providersTool = tool({
   description:
-    "List available web search providers, their configuration and filter support, and the running build.",
+    "List registered web providers, their complete operation capabilities, configuration, and the running build.",
   inputSchema: z.object({}),
   execute: async () => ({ runtime: runtimeInfo, providers: listProviders() }),
 });

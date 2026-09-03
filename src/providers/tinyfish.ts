@@ -7,7 +7,11 @@ import type {
   SearchResult,
 } from "../core/types.ts";
 import { Client } from "../core/client.ts";
-import { Provider, assertProviderBaseURL } from "../core/provider.ts";
+import {
+  Provider,
+  assertProviderBaseURL,
+  type ProviderCapabilityDetails,
+} from "../core/provider.ts";
 import { AuthError, HTTPError, WebError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
@@ -69,6 +73,17 @@ const TINYFISH_SEARCH_CATEGORIES = ["news", "research_paper"] as const;
 class TinyfishProvider extends Provider {
   static readonly providerName = "tinyfish";
   static readonly defaultBaseURL = "https://api.search.tinyfish.ai";
+  static readonly capabilityDetails = {
+    search: {
+      contentOptions: [],
+      resultLimit: { default: 10 },
+      resultFields: ["publishedDate", "author", "metadata"],
+    },
+    read: {
+      options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+      formats: ["markdown", "html"],
+    },
+  } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
     filters: [
       "includeDomains",

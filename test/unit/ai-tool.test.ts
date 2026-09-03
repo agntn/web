@@ -28,6 +28,7 @@ import { providersTool, readTool, searchImageTool, searchTool } from "../../src/
 import { EmptyQueryError, EmptyUrlError, HTTPError } from "../../src/core/errors.ts";
 import { Provider } from "../../src/core/provider.ts";
 import { register } from "../../src/core/registry.ts";
+import type { ProviderStatus } from "../../src/core/resolve.ts";
 import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 import { runtimeInfo } from "../../src/version.ts";
 
@@ -732,23 +733,32 @@ describe("searchImageTool", () => {
 
 describe("providersTool", () => {
   it("returns the loaded runtime identity with provider status", async () => {
-    const result = await providersTool.execute!({}, { toolCallId: "providers-call", messages: [] });
+    const result = (await providersTool.execute!(
+      {},
+      { toolCallId: "providers-call", messages: [] },
+    )) as { readonly runtime: typeof runtimeInfo; readonly providers: readonly ProviderStatus[] };
 
     expect(result).toMatchObject({ runtime: runtimeInfo });
-    expect(result.providers).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          name: "exa",
-          searchFilters: [
-            "includeDomains",
-            "excludeDomains",
-            "category",
-            "startPublishedDate",
-            "endPublishedDate",
-          ],
-        }),
-      ]),
+    const exa = result.providers.find((provider) => provider.name === "exa");
+    expect(exa).toMatchObject({
+      name: "exa",
+      searchFilters: [
+        "includeDomains",
+        "excludeDomains",
+        "category",
+        "startPublishedDate",
+        "endPublishedDate",
+      ],
+    });
+    expect(exa?.capabilities.search).toMatchObject({
+      supported: true,
+      contentOptions: ["highlights", "summary", "fullText"],
+    });
+    expect(exa?.capabilities.search.resultFields).toEqual(
+      expect.arrayContaining(["highlights", "summary", "text"]),
     );
+    expect(exa?.capabilities.searchImage).toEqual({ supported: false });
+    expect(exa?.capabilities.read).toEqual({ supported: false });
   });
 });
 

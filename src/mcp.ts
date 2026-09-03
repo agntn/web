@@ -167,6 +167,32 @@ const readBatchItemSchema = Type.Union([
 const readOutputSchema = strictObject({
   result: Type.Union([readDetailedResultSchema, Type.Array(readBatchItemSchema)]),
 });
+const providerResultLimitSchema = Type.Union([
+  strictObject({
+    default: Type.Number(),
+    maximum: Type.Optional(Type.Number()),
+  }),
+  strictObject({ maximum: Type.Number() }),
+]);
+const providerCapabilitiesSchema = strictObject({
+  search: strictObject({
+    supported: Type.Boolean(),
+    filters: Type.Optional(Type.Array(searchFilterSchema)),
+    categories: Type.Optional(Type.Array(Type.String())),
+    contentOptions: Type.Optional(Type.Array(Type.String())),
+    resultLimit: Type.Optional(providerResultLimitSchema),
+    resultFields: Type.Optional(Type.Array(Type.String())),
+  }),
+  searchImage: strictObject({
+    supported: Type.Boolean(),
+    resultLimit: Type.Optional(providerResultLimitSchema),
+  }),
+  read: strictObject({
+    supported: Type.Boolean(),
+    options: Type.Optional(Type.Array(Type.String())),
+    formats: Type.Optional(Type.Array(Type.String())),
+  }),
+});
 const providerStatusSchema = strictObject({
   name: Type.String(),
   configured: Type.Boolean(),
@@ -174,6 +200,7 @@ const providerStatusSchema = strictObject({
   reachable: Type.Optional(Type.Boolean()),
   searchFilters: Type.Optional(Type.Array(searchFilterSchema)),
   searchCategories: Type.Optional(Type.Array(Type.String())),
+  capabilities: providerCapabilitiesSchema,
 });
 const providersOutputSchema = strictObject({
   result: strictObject({
@@ -379,7 +406,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_providers",
       title: webToolTitle("web_providers"),
       description:
-        "List available web search providers, their configuration and filter support, and the running build.",
+        "List registered web providers, their complete operation capabilities, configuration and reachability, and the running build.",
       inputSchema: Type.Object({}),
       outputSchema: providersOutputSchema,
       annotations: {

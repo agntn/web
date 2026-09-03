@@ -2,6 +2,9 @@ import { stripVTControlCharacters } from "node:util";
 
 import stringWidth from "string-width";
 
+import type { ProviderCapabilities, ProviderResultLimit } from "./core/provider.ts";
+import type { ProviderStatus } from "./core/resolve.ts";
+
 /** Web tools with dedicated Pi and OMP presentation. */
 export type WebToolName = "web_search" | "web_search_image" | "web_read" | "web_providers";
 
@@ -114,6 +117,58 @@ export function sanitizeTerminalText(value: unknown, max = FIELD_WIDTH): string 
  */
 export function sanitizeTerminalContent(value: unknown): string {
   return cleanTerminalText(String(value).replaceAll(/\r\n?/g, "\n"), true);
+}
+
+/**
+ * Format one provider's machine-readable capability matrix for terminal and model text.
+ * @param status - Provider status fields carrying capability metadata.
+ * @returns {string} Compact capability labels.
+ */
+export function formatProviderCapabilities(
+  status: Readonly<Pick<ProviderStatus, "capabilities" | "searchFilters" | "searchCategories">>,
+): string {
+  const { capabilities } = status;
+  return [
+    `operations=${supportedOperations(capabilities) || "none"}`,
+    `filters=${joinCapabilityValues(status.searchFilters) || "none"}`,
+    optionalCapabilityList("categories", status.searchCategories),
+    optionalCapabilityList("contentOptions", capabilities.search.contentOptions),
+    formatResultLimit("searchLimit", capabilities.search.resultLimit),
+    formatResultLimit("imageLimit", capabilities.searchImage.resultLimit),
+    optionalCapabilityList("resultFields", capabilities.search.resultFields),
+    optionalCapabilityList("readOptions", capabilities.read.options),
+    optionalCapabilityList("formats", capabilities.read.formats),
+  ]
+    .filter((label): label is string => label !== undefined)
+    .join(" ");
+}
+
+function supportedOperations(capabilities: Readonly<ProviderCapabilities>): string {
+  return (["search", "searchImage", "read"] as const)
+    .filter((operation) => capabilities[operation].supported)
+    .join(",");
+}
+
+function joinCapabilityValues(values: readonly string[] | undefined): string {
+  return values?.map((value) => sanitizeTerminalText(value)).join(",") ?? "";
+}
+
+function optionalCapabilityList(
+  name: string,
+  values: readonly string[] | undefined,
+): string | undefined {
+  const joined = joinCapabilityValues(values);
+  return joined ? `${name}=${joined}` : undefined;
+}
+
+function formatResultLimit(
+  name: string,
+  limit: Readonly<ProviderResultLimit> | undefined,
+): string | undefined {
+  if (!limit) return undefined;
+  if (limit.default === undefined) return `${name}=max:${limit.maximum}`;
+  const maximum = limit.maximum === undefined ? "" : `..${limit.maximum}`;
+  return `${name}=${limit.default}${maximum}`;
 }
 
 function paint(theme: Readonly<StatusTheme>, color: StatusColor, text: string): string {
