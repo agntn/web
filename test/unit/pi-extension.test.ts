@@ -9,6 +9,7 @@ import {
   Provider,
   register,
   type ProviderConfig,
+  type SearchRequestOptions,
   type SearchResult,
 } from "../../src/index.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
@@ -374,6 +375,7 @@ describe("Pi extension", () => {
 
   it("accepts registered custom providers for each implemented capability", async () => {
     const providerName = `liveprovider${Math.random().toString(36).slice(2)}`;
+    let receivedSearchOptions: SearchRequestOptions | undefined;
     class LiveProvider extends Provider {
       static readonly providerName = providerName;
       static readonly defaultBaseURL = "https://live.example.com";
@@ -382,7 +384,8 @@ describe("Pi extension", () => {
         super(config, LiveProvider);
       }
 
-      async search(): Promise<SearchResult[]> {
+      async search(_query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+        receivedSearchOptions = options;
         return [{ url: "https://example.com", title: "Custom", snippet: "Search result" }];
       }
 
@@ -410,7 +413,7 @@ describe("Pi extension", () => {
 
     const searchResult: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
       "search-call",
-      { query: "custom query", provider: providerName },
+      { query: "custom query", provider: providerName, summary: true, fullText: true },
       undefined,
       undefined,
       undefined,
@@ -431,8 +434,13 @@ describe("Pi extension", () => {
     ]);
 
     await expect(searchResult).resolves.toMatchObject({
-      details: { provider: providerName, results: [{ title: "Custom" }] },
+      details: {
+        provider: providerName,
+        options: { summary: true, fullText: true },
+        results: [{ title: "Custom" }],
+      },
     });
+    expect(receivedSearchOptions).toMatchObject({ summary: true, fullText: true });
     await expect(imageResult).resolves.toMatchObject({
       details: { provider: providerName, results: [{ title: "Custom image" }] },
     });

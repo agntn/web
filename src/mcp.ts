@@ -231,6 +231,17 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
             description: "Return passages relevant to the query when supported. Defaults to true.",
           }),
         ),
+        summary: Type.Optional(
+          Type.Boolean({
+            description:
+              "Request generated summaries or answers when supported. Defaults to false.",
+          }),
+        ),
+        fullText: Type.Optional(
+          Type.Boolean({
+            description: "Request full page text when supported. Defaults to false.",
+          }),
+        ),
         includeDomains: Type.Optional(
           Type.Array(Type.String(), {
             description:
@@ -401,6 +412,8 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
   const searchOptions = {
     maxResults,
     highlights: boolArg("highlights", args.highlights),
+    summary: boolArg("summary", args.summary),
+    fullText: boolArg("fullText", args.fullText),
     includeDomains: stringArrayArg("includeDomains", args.includeDomains),
     excludeDomains: stringArrayArg("excludeDomains", args.excludeDomains),
     sources: stringArrayArg("sources", args.sources),

@@ -30,6 +30,14 @@ export const searchTool = tool({
       .boolean()
       .optional()
       .describe("Return passages relevant to the query when supported. Defaults to true."),
+    summary: z
+      .boolean()
+      .optional()
+      .describe("Request generated summaries or answers when supported. Defaults to false."),
+    fullText: z
+      .boolean()
+      .optional()
+      .describe("Request full page text when supported. Defaults to false."),
     includeDomains: z
       .array(z.string())
       .optional()
@@ -63,6 +71,8 @@ export const searchTool = tool({
     provider: providerName,
     maxResults,
     highlights,
+    summary,
+    fullText,
     includeDomains,
     excludeDomains,
     sources,
@@ -75,6 +85,8 @@ export const searchTool = tool({
     const searchOptions = {
       maxResults,
       highlights,
+      summary,
+      fullText,
       includeDomains,
       excludeDomains,
       sources,

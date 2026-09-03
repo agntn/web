@@ -617,17 +617,23 @@ describe("web MCP executors", () => {
     });
   });
 
-  it("passes highlights through and validates the boolean at the boundary", async () => {
+  it("passes content preferences through and validates booleans at the boundary", async () => {
     vi.stubEnv("EXA_API_KEY", "test-exa");
     mockPostJSON.mockResolvedValue({ requestId: "request", results: [] });
 
-    await executeSearch({ query: "test", provider: "exa", highlights: false });
+    await executeSearch({
+      query: "test",
+      provider: "exa",
+      highlights: false,
+      summary: true,
+      fullText: true,
+    });
 
     expect(mockPostJSON.mock.calls[0]?.[1]).toMatchObject({
-      contents: { text: true, highlights: false },
+      contents: { text: true, highlights: false, summary: true },
     });
     await expect(
-      executeSearch({ query: "test", provider: "exa", highlights: "false" }),
+      executeSearch({ query: "test", provider: "exa", summary: "true" }),
     ).rejects.toBeInstanceOf(TypeError);
   });
 

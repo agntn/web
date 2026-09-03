@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import webOmpExtension from "../../packages/omp/extensions/web.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { Provider, register } from "../../src/index.ts";
-import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
+import type { ProviderConfig, SearchRequestOptions, SearchResult } from "../../src/core/types.ts";
 
 type OmpTool = {
   readonly name: ToolDefinition["name"];
@@ -256,6 +256,7 @@ describe("OMP extension", () => {
 
   it("accepts registered custom providers for each implemented capability", async () => {
     const providerName = `ompprovider${Math.random().toString(36).slice(2)}`;
+    let receivedSearchOptions: SearchRequestOptions | undefined;
     class OmpProvider extends Provider {
       static readonly providerName = providerName;
       static readonly defaultBaseURL = "https://omp.example.com";
@@ -264,7 +265,8 @@ describe("OMP extension", () => {
         super(config, OmpProvider);
       }
 
-      async search(): Promise<SearchResult[]> {
+      async search(_query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
+        receivedSearchOptions = options;
         return [{ url: "https://example.com", title: "Custom", snippet: "Search result" }];
       }
 
@@ -288,7 +290,7 @@ describe("OMP extension", () => {
 
     const searchResult = await requiredTool(tools, "web_search").execute(
       "search-call",
-      { query: "custom query", provider: providerName },
+      { query: "custom query", provider: providerName, summary: true, fullText: true },
       undefined,
       undefined,
       {} as never,
@@ -312,6 +314,7 @@ describe("OMP extension", () => {
       provider: providerName,
       results: [{ title: "Custom" }],
     });
+    expect(receivedSearchOptions).toMatchObject({ summary: true, fullText: true });
     expect(imageResult.details).toMatchObject({
       provider: providerName,
       results: [{ title: "Custom image" }],

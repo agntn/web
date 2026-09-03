@@ -26,6 +26,8 @@ export interface SearchResponse {
 export interface SearchOptions {
   maxResults?: number;
   highlights?: boolean;
+  summary?: boolean;
+  fullText?: boolean;
   includeDomains?: string[];
   excludeDomains?: string[];
   sources?: string[];

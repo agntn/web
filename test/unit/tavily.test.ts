@@ -23,6 +23,7 @@ vi.mock("../../src/core/client.ts", () => ({
 
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import { AuthError } from "../../src/core/errors.ts";
+import { isDetailedSearchProvider } from "../../src/core/provider.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
 // Triggers self-registration of tavily provider
@@ -36,11 +37,20 @@ const tavilyResponse = {
       content: "Tavily search result content",
       score: 0.92,
       published_date: "2024-06-15",
+    },
+  ],
+  query: "test query",
+};
+
+const richTavilyResponse = {
+  ...tavilyResponse,
+  results: [
+    {
+      ...tavilyResponse.results[0],
       raw_content: "Full raw content from the page",
     },
   ],
   answer: "A direct answer from Tavily",
-  query: "test query",
 };
 
 describe("tavily provider", () => {
@@ -91,8 +101,9 @@ describe("tavily provider", () => {
     });
 
     it("maps result fields correctly", async () => {
+      mockPostJSON.mockResolvedValueOnce(richTavilyResponse);
       const provider = createSearchProvider("tavily", { apiKey: "test-key" });
-      const results: SearchResult[] = await provider.search("test query");
+      const results: SearchResult[] = await provider.search("test query", { fullText: true });
 
       expect(results).toHaveLength(1);
       const result = results[0];
@@ -104,38 +115,18 @@ describe("tavily provider", () => {
       expect(result.text).toBe("Full raw content from the page");
     });
 
-    it("puts response.answer into first result summary field", async () => {
+    it("keeps the generated answer in response metadata", async () => {
+      mockPostJSON.mockResolvedValueOnce(richTavilyResponse);
       const provider = createSearchProvider("tavily", { apiKey: "test-key" });
-      const results: SearchResult[] = await provider.search("test query");
+      expect(isDetailedSearchProvider(provider)).toBe(true);
+      if (!isDetailedSearchProvider(provider)) {
+        throw new Error("Tavily provider must support detailed search responses");
+      }
 
-      expect(results[0].summary).toBe("A direct answer from Tavily");
-    });
+      const response = await provider.searchDetailed("test query", { summary: true });
 
-    it("does NOT put answer into non-first results summary", async () => {
-      mockPostJSON.mockResolvedValueOnce({
-        results: [
-          {
-            title: "First Result",
-            url: "https://example.com/1",
-            content: "First content",
-            score: 0.95,
-          },
-          {
-            title: "Second Result",
-            url: "https://example.com/2",
-            content: "Second content",
-            score: 0.85,
-          },
-        ],
-        answer: "A direct answer from Tavily",
-        query: "test query",
-      });
-
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
-      const results: SearchResult[] = await provider.search("test query");
-
-      expect(results[0].summary).toBe("A direct answer from Tavily");
-      expect(results[1].summary).toBeUndefined();
+      expect(response.metadata).toEqual({ answer: "A direct answer from Tavily" });
+      expect(response.results[0].summary).toBeUndefined();
     });
 
     it("maps maxResults to max_results in body", async () => {
@@ -144,6 +135,15 @@ describe("tavily provider", () => {
 
       const [, body] = mockPostJSON.mock.calls[0];
       expect(body.max_results).toBe(5);
+    });
+
+    it("passes explicit content preferences", async () => {
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      await provider.search("test query", { summary: true, fullText: true });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.include_answer).toBe(true);
+      expect(body.include_raw_content).toBe(true);
     });
 
     it("passes includeDomains to include_domains in body", async () => {
