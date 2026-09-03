@@ -1,7 +1,15 @@
 import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
 import { readUrl, readUrlDetailed } from "../../src/core/read.ts";
+import { readBatchDetailed } from "../../src/core/batch.ts";
 import { register } from "../../src/core/registry.ts";
-import { EmptyUrlError, HTTPError, ReadNotSupportedError } from "../../src/core/errors.ts";
+import {
+  AuthError,
+  EmptyUrlError,
+  HTTPError,
+  RateLimitError,
+  ReadNotSupportedError,
+} from "../../src/core/errors.ts";
+import { ProviderFallbackError } from "../../src/core/fallback.ts";
 import { Provider } from "../../src/core/provider.ts";
 import type { ProviderConfig, ReadOptions, ReadResult } from "../../src/core/types.ts";
 
@@ -29,8 +37,13 @@ const paymentRequired = async (): Promise<ReadResult> => {
   throw new HTTPError(402, "https://r.jina.ai/https%3A%2F%2Fexample.com", "Payment required");
 };
 
+const jinaConflictFailure = new HTTPError(
+  409,
+  "https://r.jina.ai/https%3A%2F%2Fexample.com",
+  "Conflict",
+);
 const jinaConflict = async (): Promise<ReadResult> => {
-  throw new HTTPError(409, "https://r.jina.ai/https%3A%2F%2Fexample.com", "Conflict");
+  throw jinaConflictFailure;
 };
 
 describe("readUrl", () => {
@@ -64,11 +77,18 @@ describe("readUrl", () => {
     expect(readFromContext).toHaveBeenCalledWith("https://example.com", { format: "text" });
   });
 
-  it("reports the effective reader and ordered attempts after fallback", async () => {
+  it("reports the effective reader, ordered attempts, and failures after fallback", async () => {
     const readFromContext = vi
       .fn()
       .mockResolvedValue({ url: "https://example.com", content: "ok" });
-    registerReader("jina", paymentRequired);
+    const failure = new HTTPError(
+      402,
+      "https://r.jina.ai/https%3A%2F%2Fexample.com",
+      "Payment required",
+    );
+    registerReader("jina", async () => {
+      throw failure;
+    });
     registerReader("context", readFromContext);
     process.env.CONTEXT_DEV_API_KEY = "test-key";
 
@@ -77,6 +97,7 @@ describe("readUrl", () => {
       requestedProvider: "auto",
       provider: "context",
       attempts: ["jina", "context"],
+      failures: [{ provider: "jina", error: failure.message }],
     });
   });
 
@@ -102,17 +123,36 @@ describe("readUrl", () => {
     });
   });
 
-  it("returns the last configured reader error after Jina 409", async () => {
+  it("retains every failure when automatic reads exhaust configured readers", async () => {
+    const contextFailure = new HTTPError(503, "https://context.example.com", "Unavailable");
     registerReader("jina", jinaConflict);
     registerReader("context", async () => {
-      throw new HTTPError(503, "https://context.example.com", "Unavailable");
+      throw contextFailure;
     });
     process.env.CONTEXT_DEV_API_KEY = "test-key";
 
-    await expect(readUrl("https://example.com")).rejects.toMatchObject({
-      statusCode: 503,
-      url: "https://context.example.com",
+    const failure = await readUrlDetailed("https://example.com").catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(ProviderFallbackError);
+    expect(failure).toMatchObject({
+      attempts: ["jina", "context"],
+      failures: [
+        { provider: "jina", error: jinaConflictFailure.message },
+        { provider: "context", error: contextFailure.message },
+      ],
+      cause: contextFailure,
     });
+    await expect(readBatchDetailed(["https://example.com"])).resolves.toEqual([
+      {
+        url: "https://example.com",
+        error: (failure as Error).message,
+        attempts: ["jina", "context"],
+        failures: [
+          { provider: "jina", error: jinaConflictFailure.message },
+          { provider: "context", error: contextFailure.message },
+        ],
+      },
+    ]);
   });
 
   it("keeps trying configured readers until one succeeds", async () => {
@@ -120,11 +160,11 @@ describe("readUrl", () => {
     registerReader("jina", paymentRequired);
     registerReader("context", async () => {
       attempts.push("context");
-      throw new Error("Context unavailable");
+      throw new HTTPError(503, "https://context.example.com", "Context unavailable");
     });
     registerReader("firecrawl", async () => {
       attempts.push("firecrawl");
-      throw new Error("Firecrawl unavailable");
+      throw new HTTPError(504, "https://firecrawl.example.com", "Firecrawl unavailable");
     });
     registerReader("tinyfish", async () => {
       attempts.push("tinyfish");
@@ -149,6 +189,88 @@ describe("readUrl", () => {
     await expect(readUrl("https://example.com", { provider: "   " })).resolves.toMatchObject({
       content: "ok",
     });
+  });
+
+  it("falls back after timeout and rate-limit failures", async () => {
+    const timeoutFailure = new HTTPError(408, "https://r.jina.ai", "Request timeout");
+    const rateLimitFailure = new RateLimitError(30);
+    registerReader("jina", async () => {
+      throw timeoutFailure;
+    });
+    registerReader("context", async () => {
+      throw rateLimitFailure;
+    });
+    registerReader("firecrawl", async () => ({
+      url: "https://example.com",
+      content: "ok",
+    }));
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+    process.env.FIRECRAWL_API_KEY = "test-key";
+
+    await expect(readUrlDetailed("https://example.com")).resolves.toMatchObject({
+      provider: "firecrawl",
+      attempts: ["jina", "context", "firecrawl"],
+      failures: [
+        { provider: "jina", error: timeoutFailure.message },
+        { provider: "context", error: rateLimitFailure.message },
+      ],
+    });
+  });
+
+  it("keeps authentication failures strict in automatic mode", async () => {
+    const readFromContext = vi
+      .fn()
+      .mockResolvedValue({ url: "https://example.com", content: "ok" });
+    const failure = new AuthError("Invalid API key", "jina");
+    registerReader("jina", async () => {
+      throw failure;
+    });
+    registerReader("context", readFromContext);
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    await expect(readUrl("https://example.com")).rejects.toBe(failure);
+    expect(readFromContext).not.toHaveBeenCalled();
+  });
+
+  it("keeps a later invalid request strict and retains earlier diagnostics", async () => {
+    const readFromFirecrawl = vi
+      .fn()
+      .mockResolvedValue({ url: "https://example.com", content: "ok" });
+    const transientFailure = new HTTPError(402, "https://r.jina.ai", "Payment required");
+    const strictFailure = new HTTPError(400, "https://context.example.com", "Invalid request");
+    registerReader("jina", async () => {
+      throw transientFailure;
+    });
+    registerReader("context", async () => {
+      throw strictFailure;
+    });
+    registerReader("firecrawl", readFromFirecrawl);
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+    process.env.FIRECRAWL_API_KEY = "test-key";
+
+    const failure = await readUrl("https://example.com").catch((error: unknown) => error);
+
+    expect(failure).toMatchObject({
+      attempts: ["jina", "context"],
+      failures: [
+        { provider: "jina", error: transientFailure.message },
+        { provider: "context", error: strictFailure.message },
+      ],
+      cause: strictFailure,
+    });
+    expect(readFromFirecrawl).not.toHaveBeenCalled();
+    await expect(readBatchDetailed(["https://example.com"])).resolves.toEqual([
+      {
+        url: "https://example.com",
+        error: (failure as Error).message,
+        attempts: ["jina", "context"],
+        failures: [
+          { provider: "jina", error: transientFailure.message },
+          { provider: "context", error: strictFailure.message },
+        ],
+      },
+    ]);
+    expect(readFromFirecrawl).not.toHaveBeenCalled();
   });
 
   it("does not fall back when Jina is explicitly requested", async () => {

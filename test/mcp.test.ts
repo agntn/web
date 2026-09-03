@@ -355,6 +355,7 @@ describe("web MCP server", () => {
         requestedProvider: "auto",
         provider: "jina",
         attempts: ["jina"],
+        failures: [],
       },
     });
   });
@@ -389,6 +390,7 @@ describe("web MCP server", () => {
         requestedProvider: "auto",
         provider: "jina",
         attempts: ["jina"],
+        failures: [],
       },
       { url: "https://example.com/two", error: "second read failed" },
     ]);
@@ -502,6 +504,13 @@ describe("web MCP executors", () => {
     await expect(executeSearch({ query: "test" })).resolves.toMatchObject({
       provider: "brave",
       results: [expect.objectContaining({ url: "https://brave.example.com" })],
+      attempts: ["exa", "brave"],
+      failures: [
+        {
+          provider: "exa",
+          error: "HTTP 402: https://api.exa.ai/search: Payment required",
+        },
+      ],
     });
   });
 
@@ -572,6 +581,7 @@ describe("web MCP executors", () => {
       requestedProvider: "auto",
       provider: "jina",
       attempts: ["jina"],
+      failures: [],
     });
     await expect(
       executeRead({ url: "https://example.com", provider: "auto" }),

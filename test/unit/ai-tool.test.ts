@@ -276,6 +276,13 @@ describe("searchTool", () => {
         query: "first query",
         provider: "brave",
         results: [expect.objectContaining({ url: "https://brave.example.com" })],
+        attempts: ["exa", "brave"],
+        failures: [
+          {
+            provider: "exa",
+            error: "HTTP 402: https://api.exa.ai/search: Payment required",
+          },
+        ],
         filterReports: [
           {
             provider: "brave",
@@ -288,6 +295,13 @@ describe("searchTool", () => {
         query: "second query",
         provider: "brave",
         results: [expect.objectContaining({ url: "https://brave.example.com" })],
+        attempts: ["exa", "brave"],
+        failures: [
+          {
+            provider: "exa",
+            error: "HTTP 402: https://api.exa.ai/search: Payment required",
+          },
+        ],
         filterReports: [
           {
             provider: "brave",
@@ -752,6 +766,12 @@ describe("readTool", () => {
       requestedProvider: "auto",
       provider: "firecrawl",
       attempts: ["jina", "firecrawl"],
+      failures: [
+        {
+          provider: "jina",
+          error: "HTTP 402: https://r.jina.ai/https%3A%2F%2Fexample.com: Payment required",
+        },
+      ],
     });
   });
 

@@ -16,9 +16,14 @@ import {
   NoProviderConfiguredError,
   NoProviderAvailableError,
   EmptyQueryError,
-  HTTPError,
   validateDateFilters,
 } from "./errors.ts";
+import {
+  isFallbackEligible,
+  providerFailure,
+  ProviderFallbackError,
+  type ProviderFailure,
+} from "./fallback.ts";
 import { createSearchProvider, has } from "./registry.ts";
 import { isDetailedSearchProvider } from "./provider.ts";
 import { detectAvailableProviders, detectAvailableProvidersAsync } from "./resolve.ts";
@@ -60,9 +65,11 @@ export interface SearchProviderResult {
   readonly metadata?: Readonly<Record<string, unknown>>;
 }
 
-/** Result from automatic search after any payment fallback. */
+/** Result from automatic search with ordered provider-attempt diagnostics. */
 export interface SearchWithFallbackResult extends SearchProviderResult {
   readonly provider: WebSearchProviderName;
+  readonly attempts: readonly WebSearchProviderName[];
+  readonly failures: readonly ProviderFailure[];
 }
 
 /** Automatic search prepared with one snapshot of configured providers. */
@@ -107,10 +114,10 @@ export async function searchAllDetailed(
 }
 
 /**
- * Search through automatic providers in order after the first one requires payment.
+ * Search through automatic providers in order, continuing after eligible transient failures.
  * @param query - Search query.
  * @param options - Search options forwarded to the selected provider.
- * @returns {Promise<SearchWithFallbackResult>} Results and the provider that answered.
+ * @returns {Promise<SearchWithFallbackResult>} Results, provider, and attempt diagnostics.
  */
 export async function searchWithFallback(
   query: string,
@@ -160,16 +167,28 @@ async function searchProviderNamesWithFallback(
   query: string,
   options?: Readonly<SearchRequestOptions>,
 ): Promise<SearchWithFallbackResult> {
+  const attempts: WebSearchProviderName[] = [];
+  const failures: ProviderFailure[] = [];
   let lastError: unknown;
-  for (const [index, providerName] of providerNames.entries()) {
+
+  for (const providerName of providerNames) {
+    attempts.push(providerName);
     try {
-      return await searchProvider(providerName, query, options);
+      const response = await searchProvider(providerName, query, options);
+      return { ...response, attempts, failures };
     } catch (error) {
-      if (index === 0 && !isPaymentRequired(error)) throw error;
+      const failure = providerFailure(providerName, error);
+      if (!isFallbackEligible(error, providerName, "search")) {
+        if (failures.length === 0) throw error;
+        failures.push(failure);
+        throw new ProviderFallbackError("search", failures, error);
+      }
+      failures.push(failure);
       lastError = error;
     }
   }
-  throw lastError ?? new NoProviderAvailableError(providerNames);
+  if (lastError === undefined) throw new NoProviderAvailableError(providerNames);
+  throw new ProviderFallbackError("search", failures, lastError);
 }
 
 function validateSearchInput(query: string, options?: Readonly<SearchRequestOptions>): void {
@@ -219,10 +238,6 @@ async function searchProvider<TProvider extends string>(
     results: response.results,
     ...(response.metadata === undefined ? {} : { metadata: { ...response.metadata } }),
   };
-}
-
-function isPaymentRequired(error: unknown): error is HTTPError {
-  return error instanceof HTTPError && error.statusCode === 402;
 }
 
 type ReadonlySearchProviderResult = Readonly<Omit<SearchProviderResult, "results">> & {

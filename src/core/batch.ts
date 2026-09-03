@@ -7,6 +7,7 @@ import {
   type SearchProviderResult,
 } from "./all.ts";
 import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
+import { ProviderFallbackError, type ProviderFailure } from "./fallback.ts";
 import { hasSearchFilterWarning, type SearchFilterReport } from "./search-filters.ts";
 import type {
   ReadonlySearchResult,
@@ -31,8 +32,15 @@ export type SearchBatchItem =
       readonly results: readonly SearchResult[];
       readonly filterReports: readonly SearchFilterReport[];
       readonly providerMetadata?: readonly SearchProviderMetadata[];
+      readonly attempts?: readonly string[];
+      readonly failures?: readonly ProviderFailure[];
     }
-  | { readonly query: string; readonly error: string };
+  | {
+      readonly query: string;
+      readonly error: string;
+      readonly attempts?: readonly string[];
+      readonly failures?: readonly ProviderFailure[];
+    };
 
 /** One successful or failed URL outcome. */
 export type ReadBatchItem =
@@ -47,8 +55,14 @@ export type ReadBatchDetailedItem =
       readonly requestedProvider: string;
       readonly provider: string;
       readonly attempts: readonly string[];
+      readonly failures: readonly ProviderFailure[];
     }
-  | { readonly url: string; readonly error: string };
+  | {
+      readonly url: string;
+      readonly error: string;
+      readonly attempts?: readonly string[];
+      readonly failures?: readonly ProviderFailure[];
+    };
 
 /**
  * Searches independent queries in parallel while preserving input order and failures.
@@ -124,23 +138,38 @@ export async function readBatchDetailed(
   return outcomes.map((outcome): ReadBatchDetailedItem =>
     outcome.ok
       ? { url: outcome.input, ...outcome.value }
-      : { url: outcome.input, error: outcome.error },
+      : {
+          url: outcome.input,
+          error: outcome.error,
+          ...(outcome.attempts === undefined ? {} : { attempts: outcome.attempts }),
+          ...(outcome.failures === undefined ? {} : { failures: outcome.failures }),
+        },
   );
 }
 
 type BatchOutcome<TResult> =
   | { readonly ok: true; readonly input: string; readonly value: TResult }
-  | { readonly ok: false; readonly input: string; readonly error: string };
+  | {
+      readonly ok: false;
+      readonly input: string;
+      readonly error: string;
+      readonly attempts?: readonly string[];
+      readonly failures?: readonly ProviderFailure[];
+    };
 
 interface BatchSearchResult {
   readonly provider: string;
   readonly results: readonly ReadonlySearchResult[];
   readonly filterReports: readonly SearchFilterReport[];
   readonly providerMetadata?: readonly SearchProviderMetadata[];
+  readonly attempts?: readonly string[];
+  readonly failures?: readonly ProviderFailure[];
 }
 
 type ReadonlySearchProviderResult = Readonly<Omit<SearchProviderResult, "results">> & {
   readonly results: readonly ReadonlySearchResult[];
+  readonly attempts?: readonly string[];
+  readonly failures?: readonly ProviderFailure[];
 };
 
 async function searchAllForBatch(
@@ -174,6 +203,8 @@ function singleBatchResult(response: ReadonlySearchProviderResult): BatchSearchR
     ...(response.metadata === undefined
       ? {}
       : { providerMetadata: [{ provider, metadata: response.metadata }] }),
+    ...(response.attempts === undefined ? {} : { attempts: response.attempts }),
+    ...(response.failures === undefined ? {} : { failures: response.failures }),
   };
 }
 
@@ -186,7 +217,7 @@ async function settleBatch<TResult>(
       try {
         return { ok: true, input, value: await execute(input) };
       } catch (error) {
-        return { ok: false, input, error: errorMessage(error) };
+        return { ok: false, input, ...batchFailure(error) };
       }
     }),
   );
@@ -205,8 +236,15 @@ function mapSearchOutcomes(
           ...(outcome.value.providerMetadata === undefined
             ? {}
             : { providerMetadata: outcome.value.providerMetadata }),
+          ...(outcome.value.attempts === undefined ? {} : { attempts: outcome.value.attempts }),
+          ...(outcome.value.failures === undefined ? {} : { failures: outcome.value.failures }),
         }
-      : { query: outcome.input, error: outcome.error },
+      : {
+          query: outcome.input,
+          error: outcome.error,
+          ...(outcome.attempts === undefined ? {} : { attempts: outcome.attempts }),
+          ...(outcome.failures === undefined ? {} : { failures: outcome.failures }),
+        },
   );
 }
 
@@ -233,6 +271,17 @@ function validateBatch(
   if (inputs.some((input) => !input.trim())) {
     throw new EmptyInputError();
   }
+}
+
+function batchFailure(error: unknown): {
+  readonly error: string;
+  readonly attempts?: readonly string[];
+  readonly failures?: readonly ProviderFailure[];
+} {
+  const message = errorMessage(error);
+  return error instanceof ProviderFallbackError
+    ? { error: message, attempts: error.attempts, failures: error.failures }
+    : { error: message };
 }
 
 function errorMessage(error: unknown): string {

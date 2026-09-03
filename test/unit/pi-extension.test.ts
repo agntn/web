@@ -558,6 +558,11 @@ describe("Pi extension", () => {
       await expect(execution).resolves.toHaveProperty("details.ignoredFilters", [
         "startPublishedDate",
       ]);
+      await expect(execution).resolves.toHaveProperty("details.attempts", ["exa", "brave"]);
+      await expect(execution).resolves.toHaveProperty("details.failures.0", {
+        provider: "exa",
+        error: 'HTTP 402: https://api.exa.ai/search: {"error":"Payment required"}',
+      });
       const searchUrls = requestedUrls.filter((url) => !url.startsWith("http://localhost:8080"));
       expect(searchUrls).toHaveLength(2);
       expect(searchUrls[0]).toBe("https://api.exa.ai/search");
@@ -713,6 +718,13 @@ describe("Pi extension", () => {
           provider: "auto",
           effectiveProvider: "context",
           attempts: ["jina", "context"],
+          failures: [
+            {
+              provider: "jina",
+              error:
+                'HTTP 402: https://r.jina.ai/https%3A%2F%2Fexample.com: {"error":"Payment required"}',
+            },
+          ],
           result: { content: "Fallback content" },
         },
       });

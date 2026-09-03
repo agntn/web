@@ -120,6 +120,13 @@ describe("search command", () => {
           ignoredFilters: [],
           undeclaredFilters: [],
           results,
+          attempts: ["exa", "brave"],
+          failures: [
+            {
+              provider: "exa",
+              error: "HTTP 402: https://api.exa.ai/search: Payment required",
+            },
+          ],
         },
         null,
         2,

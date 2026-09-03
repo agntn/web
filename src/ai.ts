@@ -23,7 +23,7 @@ export const searchTool = tool({
       .enum(providerNames)
       .optional()
       .describe(
-        'Provider to use. Automatic selection tries other configured providers after HTTP 402. Use "all" for parallel search.',
+        'Provider to use. Automatic selection tries other configured providers after payment, rate-limit, timeout, or server failures. Use "all" for parallel search.',
       ),
     maxResults: z.number().int().min(1).max(20).optional().describe("Max results (default: 10)"),
     highlights: z
@@ -135,7 +135,7 @@ export const readTool = tool({
       .enum(readProviderNames)
       .optional()
       .describe(
-        "Read provider to use. Automatic selection starts with Jina and falls back after HTTP 402 or 409.",
+        "Read provider to use. Automatic selection starts with Jina and falls back after eligible payment, conflict, rate-limit, timeout, or server failures.",
       ),
     format: z.enum(["markdown", "text", "html"]).optional().describe("Preferred content format."),
     maxTokens: z
