@@ -454,9 +454,23 @@ describe("Pi extension", () => {
         "content.0.text",
         expect.stringContaining("via 2 provider(s) [exa, brave]"),
       );
+      await expect(execution).resolves.toHaveProperty("details.results.0.providers", [
+        "exa",
+        "brave",
+      ]);
+      await expect(execution).resolves.toHaveProperty("details.results.0.evidence", [
+        expect.objectContaining({ provider: "exa", title: "Exa result" }),
+        expect.objectContaining({
+          provider: "brave",
+          title: "Brave result",
+          snippet: "duplicate",
+        }),
+      ]);
       await expect(execution).resolves.toHaveProperty(
         "content.0.text",
-        expect.stringContaining("Provider: exa"),
+        expect.stringMatching(
+          /Providers: exa, brave[\s\S]*Evidence:[\s\S]*2\. Brave result[\s\S]*Snippet: duplicate[\s\S]*Providers: brave/,
+        ),
       );
 
       const batchExecution: unknown = Reflect.apply(
@@ -473,7 +487,7 @@ describe("Pi extension", () => {
       await expect(batchExecution).resolves.toHaveProperty(
         "content.0.text",
         expect.stringMatching(
-          /\[1\] first query \[provider=all\]\n\n1\. Exa result[\s\S]*Provider: exa[\s\S]*\[2\] second query \[provider=all\]\n\n1\. Exa result[\s\S]*Provider: exa/,
+          /\[1\] first query \[provider=all\]\n\n1\. Exa result[\s\S]*Providers: exa, brave[\s\S]*\[2\] second query \[provider=all\]\n\n1\. Exa result[\s\S]*Providers: exa, brave/,
         ),
       );
     } finally {

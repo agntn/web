@@ -813,7 +813,13 @@ type SearchResultView = Readonly<Omit<SearchResult, "highlights" | "metadata">> 
   readonly highlights?: readonly string[];
   readonly metadata?: Readonly<Record<string, unknown>>;
 };
-type SearchAllResultView = SearchResultView & Readonly<Pick<SearchAllResult, "provider">>;
+type SearchAllEvidenceView = SearchResultView & {
+  readonly provider: SearchAllResult["provider"];
+};
+type SearchAllResultView = SearchAllEvidenceView & {
+  readonly providers: readonly string[];
+  readonly evidence: readonly SearchAllEvidenceView[];
+};
 type SearchBatchItemView =
   | { readonly query: string; readonly error: string }
   | {
@@ -842,14 +848,19 @@ function formatCompactResult(result: SearchResultView, index?: number): string {
   return `${head}${title}\n   ${url}${snippet}`;
 }
 
-function formatModelResult(result: SearchResultView, index: number, provider?: string): string {
+function formatModelResult(
+  result: SearchResultView,
+  index: number,
+  providers?: string,
+  maxCharacters = MODEL_RESULT_MAX_CHARACTERS,
+): string {
   const title = truncateModelValue(result.title || "(no title)", 160);
   const url = truncateModelValue(result.url, 300);
   const lines = [
     `${index + 1}. ${title}`,
     `   ${url}`,
     formatModelField("Snippet", result.snippet),
-    formatModelField("Provider", provider, 80),
+    formatModelField("Providers", providers, 160),
     formatModelField("Score", result.score, 40),
     formatModelField("Published", result.publishedDate, 100),
     formatModelField("Author", result.author, 160),
@@ -862,7 +873,7 @@ function formatModelResult(result: SearchResultView, index: number, provider?: s
       : formatModelField("Metadata", formatMetadataValue(result.metadata), 400),
     formatModelField("Text", result.text, MODEL_TEXT_MAX_CHARACTERS),
   ].filter(Boolean);
-  return truncateModelResult(lines.join("\n"));
+  return truncateCharacters(lines.join("\n"), maxCharacters);
 }
 
 function formatModelField(
@@ -899,12 +910,21 @@ function formatBatchResults(
 ): readonly string[] {
   if (provider !== "all") return formatResults(results);
   return results.map((result, index) =>
-    formatModelResult(result, index, hasResultProvider(result) ? result.provider : undefined),
+    hasResultProvenance(result)
+      ? formatSearchAllModelResult(result, index)
+      : formatModelResult(result, index),
   );
 }
 
-function hasResultProvider(result: SearchResultView): result is SearchAllResultView {
-  return "provider" in result && typeof result.provider === "string";
+function hasResultProvenance(result: SearchResultView): result is SearchAllResultView {
+  return (
+    "provider" in result &&
+    typeof result.provider === "string" &&
+    "providers" in result &&
+    Array.isArray(result.providers) &&
+    "evidence" in result &&
+    Array.isArray(result.evidence)
+  );
 }
 
 function formatSingleResults(
@@ -933,6 +953,30 @@ function formatImageSearchResults(
   });
 }
 
+function formatSearchAllModelResult(result: SearchAllResultView, index: number): string {
+  const header = formatModelResult(
+    result,
+    index,
+    result.providers.join(", "),
+    Math.floor(MODEL_RESULT_MAX_CHARACTERS / 3),
+  );
+  const heading = "\n   Evidence:\n";
+  const separators = Math.max(0, result.evidence.length - 1);
+  const remainingCharacters =
+    MODEL_RESULT_MAX_CHARACTERS -
+    Array.from(header).length -
+    Array.from(heading).length -
+    separators;
+  const evidenceMaxCharacters = Math.max(
+    2,
+    Math.floor(remainingCharacters / Math.max(1, result.evidence.length)),
+  );
+  const evidence = result.evidence.map((record, evidenceIndex) =>
+    formatModelResult(record, evidenceIndex, record.provider, evidenceMaxCharacters),
+  );
+  return truncateModelResult(`${header}${heading}${evidence.join("\n")}`);
+}
+
 function formatAllResults(
   results: readonly SearchAllResultView[],
   errors: readonly ProviderErrorView[],
@@ -942,7 +986,7 @@ function formatAllResults(
   const lines =
     results.length === 0
       ? ["No results."]
-      : results.map((result, index) => formatModelResult(result, index, result.provider));
+      : results.map((result, index) => formatSearchAllModelResult(result, index));
   lines.push(...formatFilterReports(filterReports), ...formatProviderMetadata(providerMetadata));
   if (errors.length > 0) {
     lines.push("", "Provider errors:");
