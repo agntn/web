@@ -10,6 +10,8 @@ const { mockCreateImageSearchProvider, mockSearchByImage } = vi.hoisted(() => {
 
 vi.mock("../../src/core/registry.ts", () => ({
   createImageSearchProvider: mockCreateImageSearchProvider,
+  has: (name: string) => name === "brave" || name === "serpapi",
+  searchImageProviders: () => ["serpapi"],
 }));
 
 import { searchByImage } from "../../src/core/image.ts";

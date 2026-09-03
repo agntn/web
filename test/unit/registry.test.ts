@@ -1,19 +1,38 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { create, createSearchProvider, has, providers, register } from "../../src/core/registry.ts";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import {
+  create,
+  createSearchProvider,
+  getProviderApiKeyEnvVar,
+  has,
+  searchImageProviders,
+  providers,
+  readProviders,
+  register as registerProvider,
+  searchProviders,
+} from "../../src/core/registry.ts";
 import {
   InvalidProviderUrlError,
   SearchNotSupportedError,
   UnknownProviderError,
 } from "../../src/core/errors.ts";
 import { searchProviderDetailed } from "../../src/core/all.ts";
-import { Provider } from "../../src/core/provider.ts";
+import { Provider, type ProviderConstructor } from "../../src/core/provider.ts";
 import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 
 describe("registry", () => {
+  const registrations: Array<() => void> = [];
+  const register = (provider: ProviderConstructor): (() => void) => {
+    const unregister = registerProvider(provider);
+    registrations.push(unregister);
+    return unregister;
+  };
+
   // Use unique names per test suite to avoid collisions with module-level Maps.
   const testProviderName = `testprovider${Math.random().toString(36).slice(2)}`;
   const testProviderName2 = `testprovider${Math.random().toString(36).slice(2)}`;
   const testProviderName3 = `testprovider${Math.random().toString(36).slice(2)}`;
+  const testProviderName4 = `testprovider${Math.random().toString(36).slice(2)}`;
+  const testProviderName5 = `testprovider${Math.random().toString(36).slice(2)}`;
   const envVarName = `${testProviderName.toUpperCase()}_API_KEY`;
 
   class MockProvider extends Provider {
@@ -53,15 +72,109 @@ describe("registry", () => {
     }
   }
 
+  class ImageOnlyProvider extends Provider {
+    static readonly providerName = testProviderName4;
+    static readonly defaultBaseURL = "https://images.example.com";
+    static readonly apiKeyEnvVar = null;
+
+    constructor(config: Readonly<ProviderConfig>) {
+      super(config, ImageOnlyProvider);
+    }
+
+    async searchByImage(): Promise<[]> {
+      return [];
+    }
+  }
+
+  class ClassFieldProvider extends Provider {
+    static readonly providerName = testProviderName5;
+    static readonly defaultBaseURL = "https://fields.example.com";
+    static readonly capabilities = ["search"] as const;
+
+    readonly search = async (): Promise<readonly SearchResult[]> => [];
+
+    constructor(config: Readonly<ProviderConfig>) {
+      super(config, ClassFieldProvider);
+    }
+  }
+
   beforeEach(() => {
     delete process.env[envVarName];
     MockProvider.capturedConfigs.length = 0;
   });
 
+  afterEach(() => {
+    for (const unregister of registrations.splice(0).reverse()) unregister();
+  });
+
   describe("register() + has()", () => {
-    it("registers a provider class", () => {
-      register(MockProvider);
+    it("registers a provider class and returns an isolated cleanup", () => {
+      const unregister = register(MockProvider);
       expect(has(testProviderName)).toBe(true);
+
+      unregister();
+
+      expect(has(testProviderName)).toBe(false);
+    });
+
+    it("restores the previous registration when a replacement is removed", () => {
+      class ReplacementProvider extends Provider {
+        static readonly providerName = testProviderName;
+        static readonly defaultBaseURL = "https://replacement.example.com";
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, ReplacementProvider);
+        }
+      }
+      register(MockProvider);
+      const removeReplacement = register(ReplacementProvider);
+
+      removeReplacement();
+
+      expect(create(testProviderName)).toBeInstanceOf(MockProvider);
+    });
+
+    it("does not restore a registration removed before its replacement", () => {
+      class ReplacementProvider extends Provider {
+        static readonly providerName = testProviderName;
+        static readonly defaultBaseURL = "https://replacement.example.com";
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, ReplacementProvider);
+        }
+      }
+      const removeOriginal = register(MockProvider);
+      const removeReplacement = register(ReplacementProvider);
+
+      removeOriginal();
+      removeReplacement();
+
+      expect(has(testProviderName)).toBe(false);
+    });
+
+    it.each([
+      "",
+      " custom",
+      "custom ",
+      "auto",
+      "all",
+      "custom\nprovider",
+      "custom_provider",
+      "Custom",
+      "custom--provider",
+      "custom\u202Eprovider",
+      "custom\u2028provider",
+    ])("rejects the unsafe provider name %j", (providerName) => {
+      class InvalidNameProvider extends Provider {
+        static readonly providerName = providerName;
+        static readonly defaultBaseURL = "https://invalid.example.com";
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, InvalidNameProvider);
+        }
+      }
+
+      expect(() => register(InvalidNameProvider)).toThrow(TypeError);
     });
 
     it("returns false for unregistered providers", () => {
@@ -170,6 +283,24 @@ describe("registry", () => {
   });
 
   describe("capabilities", () => {
+    it("discovers registered providers by implemented capability", async () => {
+      register(MockProvider);
+      register(ReadOnlyProvider);
+      register(ImageOnlyProvider);
+      register(ClassFieldProvider);
+
+      expect(searchProviders()).toContain(testProviderName);
+      expect(searchProviders()).toContain(testProviderName5);
+      await expect(createSearchProvider(testProviderName5).search("query")).resolves.toEqual([]);
+      expect(searchProviders()).not.toContain(testProviderName3);
+      expect(readProviders()).toContain(testProviderName3);
+      expect(readProviders()).not.toContain(testProviderName);
+      expect(searchImageProviders()).toContain(testProviderName4);
+      expect(searchImageProviders()).not.toContain(testProviderName);
+      expect(getProviderApiKeyEnvVar(testProviderName4)).toBeNull();
+      expect(getProviderApiKeyEnvVar("custom-provider")).toBe("CUSTOM_PROVIDER_API_KEY");
+    });
+
     it("returns a search-capable provider when required", async () => {
       register(MockProvider);
 

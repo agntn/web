@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import webOmpExtension from "../../packages/omp/extensions/web.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
+import { Provider, register } from "../../src/index.ts";
+import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 
 type OmpTool = {
   readonly name: ToolDefinition["name"];
@@ -18,6 +20,7 @@ type OmpTool = {
 };
 
 const theme = {} as unknown as Theme;
+const customProviderCleanups: Array<() => void> = [];
 
 function captureOmpExtension(): { readonly label: string; readonly tools: Map<string, OmpTool> } {
   let label = "";
@@ -51,6 +54,7 @@ function renderedText(component: unknown, width = 240): string {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
   resetDefaultClientForTests();
 });
 
@@ -242,6 +246,74 @@ describe("OMP extension", () => {
       vi.unstubAllGlobals();
       resetDefaultClientForTests();
     }
+  });
+
+  it("accepts registered custom providers for each implemented capability", async () => {
+    const providerName = `ompprovider${Math.random().toString(36).slice(2)}`;
+    class OmpProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://omp.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, OmpProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com", title: "Custom", snippet: "Search result" }];
+      }
+
+      async searchByImage() {
+        return [
+          {
+            pageUrl: "https://example.com/page",
+            imageUrl: "https://example.com/image.jpg",
+            title: "Custom image",
+            provider: providerName,
+          },
+        ];
+      }
+
+      async read(url: string) {
+        return { url, content: "Custom page" };
+      }
+    }
+    customProviderCleanups.push(register(OmpProvider));
+    const { tools } = captureOmpExtension();
+
+    const searchResult = await requiredTool(tools, "web_search").execute(
+      "search-call",
+      { query: "custom query", provider: providerName },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const imageResult = await requiredTool(tools, "web_search_image").execute(
+      "image-call",
+      { url: "https://example.com/input.jpg", provider: providerName },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const readResult = await requiredTool(tools, "web_read").execute(
+      "read-call",
+      { url: "https://example.com", provider: providerName },
+      undefined,
+      undefined,
+      {} as never,
+    );
+
+    expect(searchResult.details).toMatchObject({
+      provider: providerName,
+      results: [{ title: "Custom" }],
+    });
+    expect(imageResult.details).toMatchObject({
+      provider: providerName,
+      results: [{ title: "Custom image" }],
+    });
+    expect(readResult.details).toMatchObject({
+      provider: providerName,
+      result: { content: "Custom page" },
+    });
   });
 
   it("executes provider discovery through the live package", async () => {

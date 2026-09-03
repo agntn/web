@@ -79,6 +79,43 @@ You can also pass the key explicitly:
 const exa = create("exa", { apiKey: "your-key-here" });
 ```
 
+### Custom providers
+
+Registered providers are discovered from their prototype methods. Providers that implement methods as class fields declare matching static `capabilities`. The same live capability lists drive the library, CLI, AI SDK, MCP, Pi, and OMP, so a custom provider does not need to enter a built in name tuple:
+
+```typescript
+import {
+  Provider,
+  register,
+  searchProviders,
+  searchImageProviders,
+  readProviders,
+  type ProviderConfig,
+  type SearchResult,
+} from "@agntn/web";
+
+class InternalSearch extends Provider {
+  static readonly providerName = "internal-search";
+  static readonly defaultBaseURL = "https://search.example.com";
+  static readonly apiKeyEnvVar = null;
+
+  constructor(config: Readonly<ProviderConfig>) {
+    super(config, InternalSearch);
+  }
+
+  async search(query: string): Promise<SearchResult[]> {
+    return [{ url: "https://example.com", title: query, snippet: "Internal result" }];
+  }
+}
+
+register(InternalSearch);
+console.log(searchProviders());
+console.log(searchImageProviders());
+console.log(readProviders());
+```
+
+Provider names use lowercase ASCII letters, digits, and single internal hyphens. Set `apiKeyEnvVar` to `null` when registration is enough to configure the provider. Otherwise automatic selection expects a derived variable such as `INTERNAL_SEARCH_API_KEY`; explicit `create()` calls can still pass `apiKey`. For class field methods, declare any of `"search"`, `"searchImage"`, and `"read"` in a static `capabilities` array. Agent tool schemas advertise the built in names but accept strings, then validate the selected name against the live capability list at execution time.
+
 ### Search all providers
 
 Query all available providers in parallel and get deduplicated results:
@@ -206,12 +243,17 @@ const { text } = await generateText({
 `searchTool` accepts one query or an array of queries. Explicit scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, metadata? }`; automatic searches also include `attempts` and `failures`. `provider="all"` returns `{ results, successfulProviders, errors, filterReports, providerMetadata? }`, with `providers` and `evidence` on every deduplicated result. Batch search items retain the same diagnostics. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts, failures }`; successful batch items keep the same reader provenance beside `url`, while exhausted automatic failures keep `attempts` and `failures` beside the error:
 
 ```typescript
-// The AI can choose: a specific provider, or "all" for parallel search
 tools: { web_search: searchTool, web_search_image: searchImageTool, web_read: readTool }
-/** searchTool input: { query: string | string[], provider?: "brave" | "exa" | ... | "all", maxResults?: number, highlights?: boolean } */
-// searchImageTool input: { url: string, provider?: "serpapi", maxResults?: number }
-// readTool input: { url: string | string[], provider?: "jina" | "context" | "firecrawl" | "tinyfish", format?: "markdown" | "text" | "html" }
+
+type SearchToolInput = {
+  query: string | string[];
+  provider?: string;
+  maxResults?: number;
+  highlights?: boolean;
+};
 ```
+
+Provider fields accept built in and custom registered names. Each tool validates that the selected provider implements its capability before making a request.
 
 Without an explicit provider, `searchTool` starts with the first reachable provider from the environment and tries the remaining configured providers after payment, rate-limit, timeout, or server failures. `readTool` starts with Jina Reader and follows the same policy, with Jina HTTP 409 conflicts also eligible for fallback.
 
@@ -236,7 +278,7 @@ web providers
 | `web search <query...>`  | Search one or more queries                    |
 | `web search-image <url>` | Find matching pages from a public image URL   |
 | `web read <url...>`      | Read one or more URLs into normalized content |
-| `web providers`          | List built-in providers                       |
+| `web providers`          | List registered providers                     |
 | `web mcp`                | Run the MCP server over stdio                 |
 
 Search commands accept domain, source, and category lists separated by commas. Search JSON uses the same detailed envelopes as the library and agent tools, including provider errors during `--provider all`; each batch item keeps its own result or error. Read commands use automatic selection unless `--provider` is set. Scalar read JSON is `{ result, requestedProvider, provider, attempts, failures }`; batch successes add `url` to that shape, and exhausted automatic failures retain the same diagnostics. Any failed read batch item makes the command exit 1 without discarding successes.
@@ -465,7 +507,7 @@ interface ReadUrlOptions {
 }
 ```
 
-The built-in read providers are `jina`, `context`, `firecrawl`, and `tinyfish`. Custom registered provider names also work at runtime. Firecrawl supports `targetSelector` and `removeSelector` as CSS filters but rejects `maxTokens` instead of silently ignoring it.
+The built in read providers are `jina`, `context`, `firecrawl`, and `tinyfish`. Custom registered providers work in explicit agent calls and join automatic fallback when configured. Firecrawl supports `targetSelector` and `removeSelector` as CSS filters but rejects `maxTokens` instead of silently ignoring it.
 
 ## Development
 

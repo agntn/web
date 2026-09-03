@@ -43,7 +43,7 @@ export const providerDetectionOrder = [
 
 export function providerApiKeyEnvVar(name: string): string | null {
   if (isBuiltinProviderName(name)) return providerApiKeyEnvVars[name];
-  return `${name.toUpperCase()}_API_KEY`;
+  return `${name.toUpperCase().replaceAll(/[^A-Z0-9]/gu, "_")}_API_KEY`;
 }
 
 function isBuiltinProviderName(name: string): name is WebSearchProviderName {

@@ -9,13 +9,10 @@ import { Type, type TProperties, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { webToolTitle } from "./tui.ts";
 import { builtinProviders } from "./core/providers.ts";
+import { searchProviders, searchImageProviders, readProviders } from "./core/registry.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
-import {
-  imageSearchProviderNames,
-  searchByImage,
-  type ImageSearchProviderName,
-} from "./core/image.ts";
-import { readProviderNames, readUrlDetailed, type ReadProviderName } from "./core/read.ts";
+import { imageSearchProviderNames, searchByImage } from "./core/image.ts";
+import { readProviderNames, readUrlDetailed } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
@@ -25,11 +22,12 @@ import { runtimeInfo, version } from "./version.ts";
 
 const MAX_RESULTS_HARD_CAP = 20;
 
-const providerNames = [...builtinProviders, "all"] as const;
+const advertisedSearchProviderNames = [...builtinProviders, "all"] as const;
 const strictObject = <T extends TProperties>(properties: T) =>
   Type.Object(properties, { additionalProperties: false });
 const unknownRecordSchema = Type.Record(Type.String(), Type.Unknown());
 const searchFilterSchema = Type.Union(searchFilterNames.map((name) => Type.Literal(name)));
+const namedSearchProviderSchema = Type.String({ pattern: "^(?!all$).+" });
 const searchResultProperties = {
   url: Type.String(),
   title: Type.String(),
@@ -87,7 +85,7 @@ const searchAllResponseSchema = strictObject({
 const searchBatchItemSchema = Type.Union([
   strictObject({
     query: Type.String(),
-    provider: Type.Union(builtinProviders.map((name) => Type.Literal(name))),
+    provider: namedSearchProviderSchema,
     results: Type.Array(searchResultSchema),
     filterReports: Type.Array(searchFilterReportSchema),
     providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
@@ -217,13 +215,9 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           { description: "Search query, or a batch of search queries" },
         ),
         provider: Type.Optional(
-          Type.Union(
-            providerNames.map((name) => Type.Literal(name)),
-            {
-              description:
-                'Provider to use. Automatic selection tries other configured providers after payment, rate-limit, timeout, or server failures. Use "all" for parallel search.',
-            },
-          ),
+          Type.String({
+            description: `Provider to use. Built in providers: ${advertisedSearchProviderNames.join(", ")}. Automatic selection tries other configured providers after payment, rate limit, timeout, or server failures. Use "all" for parallel search.`,
+          }),
         ),
         maxResults: Type.Optional(
           Type.Integer({
@@ -293,12 +287,9 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           minLength: 1,
         }),
         provider: Type.Optional(
-          Type.Union(
-            imageSearchProviderNames.map((name) => Type.Literal(name)),
-            {
-              description: "Reverse image search provider. Defaults to SerpAPI Google Lens.",
-            },
-          ),
+          Type.String({
+            description: `Reverse image search provider. Built in providers: ${imageSearchProviderNames.join(", ")}. Defaults to SerpAPI Google Lens.`,
+          }),
         ),
         maxResults: Type.Optional(
           Type.Integer({
@@ -335,13 +326,9 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           { description: "URL to read, or a batch of URLs" },
         ),
         provider: Type.Optional(
-          Type.Union(
-            [Type.Literal("auto"), ...readProviderNames.map((name) => Type.Literal(name))],
-            {
-              description:
-                'Read provider to use. "auto" starts with Jina and falls back after eligible payment, conflict, rate-limit, timeout, or server failures.',
-            },
-          ),
+          Type.String({
+            description: `Read provider to use. Built in providers: ${readProviderNames.join(", ")}. "auto" starts with Jina and falls back after eligible payment, conflict, rate limit, timeout, or server failures.`,
+          }),
         ),
         format: Type.Optional(
           Type.Union([Type.Literal("markdown"), Type.Literal("text"), Type.Literal("html")], {
@@ -428,7 +415,7 @@ export async function executeSearch(args: Readonly<Record<string, unknown>>): Pr
 
 async function runSearch(
   query: string | readonly string[],
-  requestedProvider: (typeof providerNames)[number] | undefined,
+  requestedProvider: string | undefined,
   searchOptions: SearchRequestOptions,
 ): Promise<unknown> {
   if (typeof query !== "string") {
@@ -524,29 +511,30 @@ function searchInputArg(value: unknown): string | readonly string[] {
   return value;
 }
 
-function searchProviderArg(value: unknown): (typeof providerNames)[number] | undefined {
-  if (value === undefined) return undefined;
-  const provider = providerNames.find((name) => name === value);
-  if (!provider) {
-    throw new TypeError(`provider must be one of: ${providerNames.join(", ")}`);
-  }
-  return provider;
-}
-
-function imageSearchProviderArg(value: unknown): ImageSearchProviderName | undefined {
-  if (value === undefined) return undefined;
-  const provider = imageSearchProviderNames.find((name) => name === value);
-  if (!provider) {
-    throw new TypeError(`provider must be one of: ${imageSearchProviderNames.join(", ")}`);
-  }
-  return provider;
-}
-
-function readProviderArg(value: unknown): ReadProviderName | undefined {
+function searchProviderArg(value: unknown): string | undefined {
   if (value === undefined || value === "auto") return undefined;
-  const provider = readProviderNames.find((name) => name === value);
+  if (value === "all") return value;
+  const provider = searchProviders().find((name) => name === value);
   if (!provider) {
-    throw new TypeError(`provider must be one of: auto, ${readProviderNames.join(", ")}`);
+    throw new TypeError(`provider must be one of: auto, all, ${searchProviders().join(", ")}`);
+  }
+  return provider;
+}
+
+function imageSearchProviderArg(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  const provider = searchImageProviders().find((name) => name === value);
+  if (!provider) {
+    throw new TypeError(`provider must be one of: ${searchImageProviders().join(", ")}`);
+  }
+  return provider;
+}
+
+function readProviderArg(value: unknown): string | undefined {
+  if (value === undefined || value === "auto") return undefined;
+  const provider = readProviders().find((name) => name === value);
+  if (!provider) {
+    throw new TypeError(`provider must be one of: auto, ${readProviders().join(", ")}`);
   }
   return provider;
 }

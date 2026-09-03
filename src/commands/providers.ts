@@ -5,7 +5,7 @@ import { listProviders, version } from "../index.ts";
 export default defineCommand({
   meta: {
     name: "providers",
-    description: "List built-in providers and their configuration status",
+    description: "List registered providers and their configuration status",
   },
   args: {
     json: {

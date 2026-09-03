@@ -41,7 +41,7 @@ test/unit/                # Public behavior and provider contract tests
 | Add image search     | `src/core/image.ts` + provider adapter + `src/commands/search-image.ts` | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                               |
 | Add read behavior    | `src/core/read.ts` + provider adapter + `src/commands/read.ts`          | Preserve URL → content semantics                                                                                                                                  |
 | Extend CLI           | `src/commands/` + `src/cli.ts`                                          | Add subcommands with `citty`; keep text and JSON output stable                                                                                                    |
-| Extend agent tools   | `src/ai.ts`, `packages/{pi,omp}/extensions/web.ts`, `src/mcp.ts`        | Keep names specific to each capability; MCP and extensions mirror provider enums from their core capability modules, never a frozen copy                          |
+| Extend agent tools   | `src/ai.ts`, `packages/{pi,omp}/extensions/web.ts`, `src/mcp.ts`        | Static descriptions advertise built in names; execution validates strings against the live registry capability functions                                          |
 | Change TUI rendering | `src/tui.ts` + both extension adapters                                  | Keep collapsed rows compact, expanded previews bounded, and every interpolated value safe for terminals                                                           |
 | Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                                    | The low level SDK `Server` uses TypeBox schemas; every error branch goes through `errorResult`; executor guards check boundaries again when hosts skip validation |
 | Add tests            | `test/`                                                                 | Mirror public behavior, not implementation details                                                                                                                |
@@ -56,10 +56,11 @@ test/unit/                # Public behavior and provider contract tests
 - Public API stays export-barrel-driven from `src/index.ts`
 - CLI should be thin and call reusable functions from `src/index.ts`
 - Prefer normalized models over provider-shaped raw objects
-- Keep capability names explicit: `search*` for query → results, `searchByImage` for image URL → matches, and `read*`/`readUrl` for URL → content
+- Keep capability names explicit and topically aligned: `search*` for query → results, `searchImage*`/`searchByImage` for image URL → matches, and `read*`/`readUrl` for URL → content
+- Keep capability order consistent across APIs and documentation: search, search image, read
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible
-- Keep capability provider lists in one source of truth: `src/core/read.ts` exports the names of providers that support reads; AI and Pi surfaces import that list instead of mirroring `['jina']`
+- Built in capability lists are the source for static descriptions; `searchProviders()`, `searchImageProviders()`, and `readProviders()` are the live execution contract
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
 ## ADDING A NEW PROVIDER
@@ -76,7 +77,7 @@ Seven files must be updated. Missing any causes a bug (test failure, missing fro
 
 After: `pnpm typecheck && pnpm test:run && pnpm build`
 
-Note: Pi tool descriptions (`PROVIDERS` array, description strings) are frozen at session start. Search execution accepts names from live `builtinProviders`, but a new Pi session is required before the schema description advertises a newly added provider.
+Note: tool descriptions are frozen at session start. Execution accepts custom names from the live capability registry; a new session is required before descriptions advertise a newly added built in provider.
 
 ## ANTI-PATTERNS
 

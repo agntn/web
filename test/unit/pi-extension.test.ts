@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import stringWidth from "string-width";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import webExtension, { resolveWebModuleUrl } from "../../packages/pi/extensions/web.ts";
 import {
   builtinProviders,
@@ -12,6 +12,11 @@ import {
 } from "../../src/index.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { providerApiKeyEnvVar } from "../../src/core/providers.ts";
+
+const customProviderCleanups: Array<() => void> = [];
+afterEach(() => {
+  for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
+});
 
 type CapturedTool = Readonly<
   Pick<ToolDefinition, "name" | "label" | "parameters" | "execute" | "renderCall" | "renderResult">
@@ -275,8 +280,7 @@ describe("Pi extension", () => {
         return [richResult];
       }
     }
-    register(RichFixtureProvider);
-    Reflect.apply(Array.prototype.push, builtinProviders, [providerName]);
+    customProviderCleanups.push(register(RichFixtureProvider));
 
     const fetchMock = vi.fn(async (input: unknown) => {
       const url = input instanceof Request ? input.url : String(input);
@@ -357,7 +361,6 @@ describe("Pi extension", () => {
         expect.not.stringContaining("bad"),
       ]);
     } finally {
-      Reflect.apply(Array.prototype.pop, builtinProviders, []);
       if (previousKey === undefined) delete process.env.EXA_API_KEY;
       else process.env.EXA_API_KEY = previousKey;
       vi.unstubAllGlobals();
@@ -365,28 +368,73 @@ describe("Pi extension", () => {
     }
   });
 
-  it("accepts a search provider added by the live web module", async () => {
+  it("accepts registered custom providers for each implemented capability", async () => {
     const providerName = `liveprovider${Math.random().toString(36).slice(2)}`;
-    Reflect.apply(Array.prototype.push, builtinProviders, [providerName]);
+    class LiveProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://live.example.com";
 
-    try {
-      const tools = captureTools();
-      const searchTool = tools.get("web_search");
-      if (!searchTool) throw new Error("web_search was not registered");
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, LiveProvider);
+      }
 
-      const execute = searchTool.execute.bind(searchTool);
-      const execution: unknown = Reflect.apply(execute, undefined, [
-        "test-call",
-        { query: " ", provider: providerName },
-        undefined,
-        undefined,
-        undefined,
-      ]);
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com", title: "Custom", snippet: "Search result" }];
+      }
 
-      await expect(execution).rejects.toThrow("Query cannot be empty");
-    } finally {
-      Reflect.apply(Array.prototype.pop, builtinProviders, []);
+      async searchByImage() {
+        return [
+          {
+            pageUrl: "https://example.com/page",
+            imageUrl: "https://example.com/image.jpg",
+            title: "Custom image",
+            provider: providerName,
+          },
+        ];
+      }
+
+      async read(url: string) {
+        return { url, content: "Custom page" };
+      }
     }
+    customProviderCleanups.push(register(LiveProvider));
+    const tools = captureTools();
+    const searchTool = tools.get("web_search");
+    const imageTool = tools.get("web_search_image");
+    const readTool = tools.get("web_read");
+    if (!searchTool || !imageTool || !readTool) throw new Error("Missing web tools");
+
+    const searchResult: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
+      "search-call",
+      { query: "custom query", provider: providerName },
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    const imageResult: unknown = Reflect.apply(imageTool.execute.bind(imageTool), undefined, [
+      "image-call",
+      { url: "https://example.com/input.jpg", provider: providerName },
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    const readResult: unknown = Reflect.apply(readTool.execute.bind(readTool), undefined, [
+      "read-call",
+      { url: "https://example.com", provider: providerName },
+      undefined,
+      undefined,
+      undefined,
+    ]);
+
+    await expect(searchResult).resolves.toMatchObject({
+      details: { provider: providerName, results: [{ title: "Custom" }] },
+    });
+    await expect(imageResult).resolves.toMatchObject({
+      details: { provider: providerName, results: [{ title: "Custom image" }] },
+    });
+    await expect(readResult).resolves.toMatchObject({
+      details: { provider: providerName, result: { content: "Custom page" } },
+    });
   });
 
   it("counts providers whose results were deduplicated from an all search", async () => {

@@ -12,10 +12,15 @@ import type {
 } from "./types.ts";
 import { InvalidProviderUrlError } from "./errors.ts";
 
+export type ProviderCapability = "search" | "searchImage" | "read";
+
 export interface ProviderConstructor {
   readonly providerName: string;
   readonly defaultBaseURL: string;
+  readonly apiKeyEnvVar?: string | null;
+  readonly capabilities?: readonly ProviderCapability[];
   readonly searchFilterCapabilities?: SearchFilterCapabilities;
+  readonly prototype: Readonly<Provider>;
   new (config: Readonly<ProviderConfig>): Provider;
 }
 

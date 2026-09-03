@@ -6,6 +6,7 @@ import {
   isReadProvider,
   isSearchProvider,
   type ImageSearchProvider,
+  type ProviderCapability,
   type ProviderConstructor,
   type ReadProvider,
   type SearchProvider,
@@ -17,15 +18,30 @@ import {
   UnknownProviderError,
 } from "./errors.ts";
 
+interface ProviderRegistration {
+  readonly provider: ProviderConstructor;
+  readonly previous?: ProviderRegistration;
+}
+
 const providerClasses = new Map<string, ProviderConstructor>();
+const providerRegistrations = new Map<string, ProviderRegistration>();
+const removedRegistrations = new WeakSet<ProviderRegistration>();
 
 /**
  * Register a provider class.
  * Called by providers on import to self-register.
  * @param {ProviderConstructor} provider - Provider class to register.
+ * @returns {() => void} A function that removes this registration when it is still current.
  */
-export function register(provider: ProviderConstructor): void {
+export function register(provider: ProviderConstructor): () => void {
+  assertProviderName(provider.providerName);
+  const registration: ProviderRegistration = {
+    provider,
+    previous: providerRegistrations.get(provider.providerName),
+  };
+  providerRegistrations.set(provider.providerName, registration);
   providerClasses.set(provider.providerName, provider);
+  return () => removeRegistration(provider.providerName, registration);
 }
 
 /**
@@ -41,7 +57,7 @@ export function create(name: string, config?: Readonly<ProviderConfig>): Provide
     throw new UnknownProviderError(name);
   }
 
-  const envVar = providerApiKeyEnvVar(name);
+  const envVar = getProviderApiKeyEnvVar(name);
   const apiKey = config?.apiKey || (envVar === null ? undefined : process.env[envVar]);
 
   return new ProviderClass({
@@ -90,12 +106,89 @@ export function createReadProvider(
   return provider;
 }
 
+/**
+ * Return every registered provider name in registration order.
+ * @returns {string[]} Registered provider names.
+ */
 export function providers(): string[] {
   return Array.from(providerClasses.keys());
 }
 
+/**
+ * Return registered providers that implement text search.
+ * @returns {string[]} Search provider names.
+ */
+export function searchProviders(): string[] {
+  return providerNamesWithCapability("search", isSearchProvider);
+}
+
+/**
+ * Return registered providers that implement reverse image search.
+ * @returns {string[]} Image search provider names.
+ */
+export function searchImageProviders(): string[] {
+  return providerNamesWithCapability("searchImage", isImageSearchProvider);
+}
+
+/**
+ * Return registered providers that implement URL reading.
+ * @returns {string[]} Read provider names.
+ */
+export function readProviders(): string[] {
+  return providerNamesWithCapability("read", isReadProvider);
+}
+
+/**
+ * Return the API key variable declared by a provider or derived from its name.
+ * @param {string} name - Registered or prospective provider name.
+ * @returns {string | null} Environment variable name, or null for a keyless provider.
+ */
+export function getProviderApiKeyEnvVar(name: string): string | null {
+  const declaredEnvVar = providerClasses.get(name)?.apiKeyEnvVar;
+  return declaredEnvVar === undefined ? providerApiKeyEnvVar(name) : declaredEnvVar;
+}
+
 export function getSearchFilterCapabilities(name: string): SearchFilterCapabilities | undefined {
   return providerClasses.get(name)?.searchFilterCapabilities;
+}
+
+function providerNamesWithCapability(
+  capability: ProviderCapability,
+  predicate: (provider: object) => boolean,
+): string[] {
+  return Array.from(providerClasses.entries())
+    .filter(
+      ([, ProviderClass]) =>
+        ProviderClass.capabilities?.includes(capability) === true ||
+        predicate(ProviderClass.prototype),
+    )
+    .map(([name]) => name);
+}
+
+function removeRegistration(name: string, registration: Readonly<ProviderRegistration>): void {
+  if (removedRegistrations.has(registration)) return;
+  removedRegistrations.add(registration);
+  if (providerRegistrations.get(name) !== registration) return;
+
+  let previous = registration.previous;
+  while (previous !== undefined && removedRegistrations.has(previous)) {
+    previous = previous.previous;
+  }
+  if (previous === undefined) {
+    providerRegistrations.delete(name);
+    providerClasses.delete(name);
+    return;
+  }
+  providerRegistrations.set(name, previous);
+  providerClasses.set(name, previous.provider);
+}
+
+function assertProviderName(name: string): void {
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name) || name === "auto" || name === "all") {
+    throw new TypeError(
+      'providerName must use lowercase ASCII letters, digits, and single internal hyphens, and cannot be "auto" or "all"',
+    );
+  }
 }
 
 export function has(name: string): boolean {

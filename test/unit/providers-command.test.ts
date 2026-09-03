@@ -9,7 +9,8 @@ vi.mock("consola", () => ({
 }));
 
 import providersCommand from "../../src/commands/providers.ts";
-import { builtinProviders } from "../../src/index.ts";
+import { builtinProviders, Provider, register } from "../../src/index.ts";
+import type { ProviderConfig } from "../../src/core/types.ts";
 
 type ProviderStatus = {
   readonly name: string;
@@ -34,6 +35,7 @@ const envKeys = [
 
 describe("providers command", () => {
   const savedEnv: Record<string, string | undefined> = {};
+  const customProviderCleanups: Array<() => void> = [];
   let writes: string[];
   let originalWrite: typeof process.stdout.write;
 
@@ -52,6 +54,7 @@ describe("providers command", () => {
   });
 
   afterEach(() => {
+    for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
     for (const key of envKeys) {
       if (savedEnv[key] !== undefined) {
         process.env[key] = savedEnv[key];
@@ -178,6 +181,29 @@ describe("providers command", () => {
       const after = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
       const tavAfter = after.find((provider) => provider.name === "tavily");
       expect(tavAfter.configured).toBe(true);
+    });
+
+    it("lists a registered custom provider", async () => {
+      const providerName = `command-provider-${Math.random().toString(36).slice(2)}`;
+      class CommandProvider extends Provider {
+        static readonly providerName = providerName;
+        static readonly defaultBaseURL = "https://command.example.com";
+        static readonly apiKeyEnvVar = null;
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, CommandProvider);
+        }
+      }
+      customProviderCleanups.push(register(CommandProvider));
+
+      await providersCommand.run!({ args: { json: true } } as never);
+
+      const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      expect(parsed).toContainEqual({
+        name: providerName,
+        envVar: null,
+        configured: true,
+      });
     });
   });
 });
