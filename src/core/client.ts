@@ -169,23 +169,76 @@ const SENSITIVE_PARAM_SET = new Set(SENSITIVE_PARAMS.map((param) => param.toLowe
 
 function sanitizeUrl(url: string): string {
   try {
-    const parsed = new URL(url);
-
-    const userInfoRedacted = redactUserInfo(
-      url,
-      parsed.username.length > 0 || parsed.password.length > 0,
-      parsed.password.length > 0,
-    );
-    const queryRedacted = redactSensitiveQueryParams(userInfoRedacted.url);
-
-    if (!userInfoRedacted.changed && !queryRedacted.changed) {
-      return url;
-    }
-
-    return queryRedacted.url;
+    const directRedaction = redactUrlComponents(url);
+    return redactEncodedPathUrls(directRedaction.url).url;
   } catch {
     return url;
   }
+}
+
+function redactUrlComponents(url: string): { url: string; changed: boolean } {
+  const parsed = new URL(url);
+  const userInfoRedacted = redactUserInfo(
+    url,
+    parsed.username.length > 0 || parsed.password.length > 0,
+    parsed.password.length > 0,
+  );
+  const queryRedacted = redactSensitiveQueryParams(userInfoRedacted.url);
+
+  return {
+    url: queryRedacted.url,
+    changed: userInfoRedacted.changed || queryRedacted.changed,
+  };
+}
+
+function redactEncodedPathUrls(url: string): { url: string; changed: boolean } {
+  const schemeEnd = url.indexOf("://");
+  if (schemeEnd === -1) {
+    return { url, changed: false };
+  }
+
+  const pathStart = url.indexOf("/", schemeEnd + 3);
+  if (pathStart === -1) {
+    return { url, changed: false };
+  }
+
+  const queryStart = url.indexOf("?", pathStart);
+  const fragmentStart = url.indexOf("#", pathStart);
+  const pathEndCandidates = [queryStart, fragmentStart].filter((index) => index !== -1);
+  const pathEnd = pathEndCandidates.length > 0 ? Math.min(...pathEndCandidates) : url.length;
+  const path = url.slice(pathStart, pathEnd);
+  let changed = false;
+
+  const redactedPath = path
+    .split("/")
+    .map((segment) => {
+      if (!segment.includes("%")) {
+        return segment;
+      }
+
+      try {
+        const decoded = decodeURIComponent(segment);
+        const redacted = redactUrlComponents(decoded);
+        if (!redacted.changed) {
+          return segment;
+        }
+
+        changed = true;
+        return encodeURIComponent(redacted.url);
+      } catch {
+        return segment;
+      }
+    })
+    .join("/");
+
+  if (!changed) {
+    return { url, changed: false };
+  }
+
+  return {
+    url: `${url.slice(0, pathStart)}${redactedPath}${url.slice(pathEnd)}`,
+    changed: true,
+  };
 }
 
 function redactUserInfo(
