@@ -25,6 +25,7 @@ packages/
 ├── omp/extensions/web.ts # OMP tool surface
 └── pi/extensions/web.ts  # Pi tool/command surface
 src/tui.ts                # Shared terminal-safe presentation for Pi, OMP, and MCP
+docs/                     # Docus site: guide, provider pages, live explorer on Workers (see docs/AGENTS.md)
 test/unit/                # Public behavior and provider contract tests
 .github/workflows/
 ├── test.yml              # CI: typecheck -> build -> test
@@ -99,4 +100,6 @@ pnpm typecheck
 pnpm build
 pnpm test:run
 pnpm release
+pnpm docs         # Docus site + explorer on :3000 (after pnpm build)
+pnpm docs:build   # Cloudflare Workers build of the docs
 ```

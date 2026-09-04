@@ -62,7 +62,9 @@
     "prepack": "pnpm run build",
     "release": "pnpm test:run && pnpm build && changelogen --release --push",
     "lint": "pnpm build && oxlint . && oxfmt --check .",
-    "lint:fix": "pnpm build && oxlint . --fix && oxfmt ."
+    "lint:fix": "pnpm build && oxlint . --fix && oxfmt .",
+    "docs": "pnpm --dir docs dev",
+    "docs:build": "pnpm --dir docs build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
