@@ -487,6 +487,60 @@ describe("Client", () => {
       }
     });
 
+    it("should redact secrets from an encoded target URL in the request path", async () => {
+      const client = new Client();
+
+      const error = new FetchError("Server error");
+      error.statusCode = 500;
+      error.data = "";
+
+      mockFetch.mockRejectedValueOnce(error);
+
+      try {
+        await client.getJSON(
+          "https://r.jina.ai/https%3A%2F%2Freader%3Asigned-pass%40example.com%2Fprivate%3Ftoken%3Dsigned-secret%26q%3Dkept",
+          undefined,
+          undefined,
+        );
+        throw new Error("Expected HTTPError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(HTTPError);
+        if (!(err instanceof HTTPError)) {
+          throw err;
+        }
+        expect(err.url).not.toContain("signed-pass");
+        expect(err.url).not.toContain("signed-secret");
+        expect(err.message).not.toContain("signed-pass");
+        expect(err.message).not.toContain("signed-secret");
+        expect(decodeURIComponent(new URL(err.url).pathname.slice(1))).toBe(
+          "https://[REDACTED]:[REDACTED]@example.com/private?token=%5BREDACTED%5D&q=kept",
+        );
+      }
+    });
+
+    it("should preserve an encoded target URL when it contains no secrets", async () => {
+      const client = new Client();
+      const requestUrl =
+        "https://r.jina.ai/https%3A%2F%2Fexample.com%2Fpublic%3Fq%3Dhello%2520world";
+
+      const error = new FetchError("Not found");
+      error.statusCode = 404;
+      error.data = "";
+
+      mockFetch.mockRejectedValueOnce(error);
+
+      try {
+        await client.getJSON(requestUrl, undefined, undefined);
+        throw new Error("Expected HTTPError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(HTTPError);
+        if (!(err instanceof HTTPError)) {
+          throw err;
+        }
+        expect(err.url).toBe(requestUrl);
+      }
+    });
+
     it("should redact multiple sensitive params from URL in HTTPError", async () => {
       const client = new Client();
 
