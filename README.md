@@ -9,7 +9,7 @@ One API for Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, Tavily, TinyFish, 
 
 If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
 
-`@agntn/web` normalizes all of that behind a single interface. It also ships [AI SDK](https://ai-sdk.dev/) tools and a CLI. Text search is query-to-results, reverse image search is image URL-to-matches, and read is URL-to-content.
+`@agntn/web` normalizes all of that behind a single interface. Docs and the live explorer: [web.agntn.dev](https://web.agntn.dev). The source lives in [`docs/`](./docs); run `pnpm docs` after `pnpm build` for a local copy. It also ships [AI SDK](https://ai-sdk.dev/) tools and a CLI. Text search is query-to-results, reverse image search is image URL-to-matches, and read is URL-to-content.
 
 ## Pi and OMP extensions
 
