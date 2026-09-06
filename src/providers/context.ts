@@ -8,7 +8,13 @@ import type {
 } from "../core/types.ts";
 import { Client } from "../core/client.ts";
 import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
-import { AuthError, normalizeError } from "../core/errors.ts";
+import {
+  AuthError,
+  HTTPError,
+  PaymentError,
+  normalizeError,
+  type WebError,
+} from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface ContextSearchResult {
@@ -95,7 +101,7 @@ class ContextProvider extends Provider {
       );
       return response.results.slice(0, resultLimit(options?.maxResults)).map(mapSearchResult);
     } catch (error) {
-      throw normalizeError(error, ContextProvider.providerName);
+      throw normalizeContextError(error);
     }
   }
 
@@ -108,12 +114,38 @@ class ContextProvider extends Provider {
       );
       return mapReadResult(response, options?.format);
     } catch (error) {
-      throw normalizeError(error, ContextProvider.providerName);
+      throw normalizeContextError(error);
     }
   }
 
   private authHeaders(): Record<string, string> {
     return { Authorization: `Bearer ${this.apiKey}` };
+  }
+}
+
+/**
+ * Context reports depleted credits as HTTP 401, not a rejected key.
+ * @param error - Rejected request.
+ * @returns {WebError} Payment or normalized provider error.
+ */
+function normalizeContextError(error: unknown): WebError {
+  if (error instanceof HTTPError && error.statusCode === 401 && isUsageExceeded(error.body)) {
+    return new PaymentError(error.statusCode, error.url, error.body);
+  }
+  return normalizeError(error, ContextProvider.providerName);
+}
+
+function isUsageExceeded(body: string): boolean {
+  try {
+    const data: unknown = JSON.parse(body);
+    return (
+      typeof data === "object" &&
+      data !== null &&
+      "error_code" in data &&
+      data.error_code === "USAGE_EXCEEDED"
+    );
+  } catch {
+    return false;
   }
 }
 

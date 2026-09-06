@@ -432,7 +432,7 @@ try {
 }
 ```
 
-A 401 from any provider becomes `AuthError`. A 429 from any provider becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `WebError`.
+A 401 normally becomes `AuthError`. Context.dev's `USAGE_EXCEEDED` is credit exhaustion, not a bad key: it becomes `PaymentError`, an `HTTPError` subclass that keeps the original 401, URL and body and allows automatic fallback. A 429 becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `WebError`.
 
 For safety, `HTTPError.url` redacts sensitive query params and URL userinfo credentials before surfacing the URL in error messages.
 

@@ -10,7 +10,7 @@ export class WebError extends Error {
   }
 }
 
-/** Non-auth HTTP error with status code, URL, and response body. */
+/** HTTP failure with status code, URL, and response body. */
 export class HTTPError extends WebError {
   readonly statusCode: number;
   readonly url: string;
@@ -34,6 +34,14 @@ export class HTTPError extends WebError {
 
   isServerError(): boolean {
     return this.statusCode >= 500;
+  }
+}
+
+/** Provider credit exhaustion, retaining the original HTTP status and response. */
+export class PaymentError extends HTTPError {
+  constructor(statusCode: number, url: string, body: string) {
+    super(statusCode, url, body);
+    this.name = "PaymentError";
   }
 }
 
@@ -269,12 +277,13 @@ function validateDateOrder(start?: string, end?: string): void {
 
 /**
  * Convert any caught error into a typed {@link WebError} subclass.
- * Maps HTTP status codes to specific error types: 401 to AuthError, 429 to RateLimitError.
+ * Preserves payment errors; otherwise maps 401 to AuthError and 429 to RateLimitError.
  * @param {*} error - Caught value.
  * @param {string} provider - Provider that raised the error.
  * @returns {WebError} Normalized web error.
  */
 export function normalizeError(error: unknown, provider?: string): WebError {
+  if (error instanceof PaymentError) return error;
   if (error instanceof HTTPError && error.statusCode === 401) {
     return new AuthError(
       `Authentication failed: ${error.body || "Invalid or missing API key"}`,

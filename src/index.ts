@@ -60,6 +60,7 @@ export type {
 export {
   WebError,
   HTTPError,
+  PaymentError,
   AuthError,
   RateLimitError,
   UnknownProviderError,
