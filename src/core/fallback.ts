@@ -1,4 +1,4 @@
-import { HTTPError, RateLimitError, WebError } from "./errors.ts";
+import { HTTPError, PaymentError, RateLimitError, WebError } from "./errors.ts";
 
 /** Operation whose automatic provider selection may continue after a failure. */
 export type FallbackOperation = "search" | "read";
@@ -42,7 +42,7 @@ export function isFallbackEligible(
   provider: string,
   operation: FallbackOperation,
 ): boolean {
-  if (error instanceof RateLimitError) return true;
+  if (error instanceof PaymentError || error instanceof RateLimitError) return true;
   if (!(error instanceof HTTPError)) return false;
 
   const isJinaReadConflict =
