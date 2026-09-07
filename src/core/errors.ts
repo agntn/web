@@ -16,8 +16,8 @@ export class HTTPError extends WebError {
   readonly url: string;
   readonly body: string;
 
-  constructor(statusCode: number, url: string, body: string) {
-    super(formatHTTPErrorMessage(statusCode, url, body));
+  constructor(statusCode: number, url: string, body: string, options?: Readonly<ErrorOptions>) {
+    super(formatHTTPErrorMessage(statusCode, url, body), options);
     this.name = "HTTPError";
     this.statusCode = statusCode;
     this.url = url;

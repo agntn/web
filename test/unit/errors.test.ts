@@ -36,6 +36,13 @@ describe("HTTPError", () => {
     expect(error).toBeInstanceOf(WebError);
   });
 
+  it("should keep the cause behind a failure without a response", () => {
+    const cause = new TypeError("fetch failed");
+    const error = new HTTPError(0, "https://example.com", "fetch failed", { cause });
+    expect(error.cause).toBe(cause);
+    expect(error.message).toBe("HTTP 0: https://example.com: fetch failed");
+  });
+
   it("should identify 404 as not found", () => {
     const error = new HTTPError(404, "https://example.com", "");
     expect(error.isNotFound()).toBe(true);

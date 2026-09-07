@@ -11,8 +11,8 @@ vi.mock("ofetch", () => ({
     data: unknown;
     response?: Response;
 
-    constructor(message: string) {
-      super(message);
+    constructor(message: string, options?: Readonly<ErrorOptions>) {
+      super(message, options);
       this.name = "FetchError";
       this.statusCode = 0;
       this.data = null;
@@ -111,6 +111,11 @@ describe("Client", () => {
       ]);
 
       expect(outcome).toBeInstanceOf(HTTPError);
+      if (outcome instanceof HTTPError) {
+        expect(outcome.message).toBe(
+          "HTTP 0: https://api.example.com/slow: The operation was aborted due to timeout",
+        );
+      }
       expect(controller.signal.aborted).toBe(false);
       expect(abortReason(0).name).toBe("TimeoutError");
     });
@@ -458,7 +463,7 @@ describe("Client", () => {
       }
     });
 
-    it("should handle FetchError with null data", async () => {
+    it("should leave the body empty for FetchError with null data", async () => {
       const client = new Client();
 
       const error = new FetchError("Not found");
@@ -469,10 +474,85 @@ describe("Client", () => {
 
       try {
         await client.getJSON("https://api.example.com/data", undefined, undefined);
+        throw new Error("Expected HTTPError");
       } catch (err) {
-        if (err instanceof HTTPError) {
-          expect(err.body).toBe('""');
+        expect(err).toBeInstanceOf(HTTPError);
+        if (!(err instanceof HTTPError)) {
+          throw err;
         }
+        expect(err.body).toBe("");
+        expect(err.message).toBe("HTTP 404: https://api.example.com/data");
+      }
+    });
+
+    it("should name the transport failure when no response arrived", async () => {
+      const client = new Client();
+      const dns = Object.assign(new Error("getaddrinfo ENOTFOUND api.example.com"), {
+        code: "ENOTFOUND",
+      });
+      const fetchFailed = new TypeError("fetch failed", { cause: dns });
+      const error = new FetchError(
+        '[GET] "https://api.example.com/data?api_key=sk-live-secret": <no response> fetch failed',
+        { cause: fetchFailed },
+      );
+
+      mockFetch.mockRejectedValueOnce(error);
+
+      try {
+        await client.getJSON("https://api.example.com/data?api_key=sk-live-secret");
+        throw new Error("Expected HTTPError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(HTTPError);
+        if (!(err instanceof HTTPError)) {
+          throw err;
+        }
+        expect(err.statusCode).toBe(0);
+        expect(err.body).toBe("fetch failed: getaddrinfo ENOTFOUND api.example.com");
+        expect(err.message).toBe(
+          "HTTP 0: https://api.example.com/data?api_key=%5BREDACTED%5D: fetch failed: getaddrinfo ENOTFOUND api.example.com",
+        );
+        expect(err.message).not.toContain("sk-live-secret");
+        expect(err.cause).toBe(fetchFailed);
+      }
+    });
+
+    it("should list every address behind an aggregate connection failure", async () => {
+      const client = new Client();
+      const refused = new AggregateError([
+        new Error("connect ECONNREFUSED ::1:8080"),
+        new Error("connect ECONNREFUSED 127.0.0.1:8080"),
+      ]);
+      const error = new FetchError(
+        '[GET] "http://localhost:8080/search": <no response> fetch failed',
+        { cause: new TypeError("fetch failed", { cause: refused }) },
+      );
+
+      mockFetch.mockRejectedValueOnce(error);
+
+      await expect(client.getJSON("http://localhost:8080/search")).rejects.toThrow(
+        "HTTP 0: http://localhost:8080/search: fetch failed: connect ECONNREFUSED ::1:8080, connect ECONNREFUSED 127.0.0.1:8080",
+      );
+    });
+
+    it("should leave the body empty when the transport failure has no cause", async () => {
+      const client = new Client();
+
+      mockFetch.mockRejectedValueOnce(
+        new FetchError('[GET] "https://api.example.com/data": <no response>'),
+      );
+
+      try {
+        await client.getJSON("https://api.example.com/data");
+        throw new Error("Expected HTTPError");
+      } catch (err) {
+        expect(err).toBeInstanceOf(HTTPError);
+        if (!(err instanceof HTTPError)) {
+          throw err;
+        }
+        expect(err.statusCode).toBe(0);
+        expect(err.body).toBe("");
+        expect(err.message).toBe("HTTP 0: https://api.example.com/data");
+        expect(err.cause).toBeUndefined();
       }
     });
 
@@ -865,8 +945,10 @@ function abortReason(call: number): DOMException {
 
 function rejectOnAbort(signal: Readonly<AbortSignal>): Promise<never> {
   return new Promise((_resolve, reject) => {
-    signal.addEventListener("abort", () => reject(new FetchError(String(signal.reason))), {
-      once: true,
-    });
+    signal.addEventListener(
+      "abort",
+      () => reject(new FetchError(String(signal.reason), { cause: signal.reason })),
+      { once: true },
+    );
   });
 }

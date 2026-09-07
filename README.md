@@ -432,7 +432,7 @@ try {
 }
 ```
 
-A 401 normally becomes `AuthError`. Spent credits are a different story, whatever status they hide behind: Context.dev's `USAGE_EXCEEDED` on a 401, Tavily's 432 and 433 usage limits and SerpBase's `status: 1020` inside a 200 all become `PaymentError`, an `HTTPError` subclass that keeps the original status, URL and body and allows automatic fallback. A 429 becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `WebError`.
+A 401 normally becomes `AuthError`. Spent credits are a different story, whatever status they hide behind: Context.dev's `USAGE_EXCEEDED` on a 401, Tavily's 432 and 433 usage limits and SerpBase's `status: 1020` inside a 200 all become `PaymentError`, an `HTTPError` subclass that keeps the original status, URL and body and allows automatic fallback. A 429 becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `WebError`. No response at all, DNS failure, refused connection or a timeout, is `HTTPError` with `statusCode` 0. `body` names the transport cause and `cause` keeps the original error.
 
 For safety, `HTTPError.url` redacts sensitive query params and URL userinfo credentials before surfacing the URL in error messages.
 
