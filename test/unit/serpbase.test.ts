@@ -22,7 +22,8 @@ vi.mock("../../src/core/client.ts", () => ({
 }));
 
 import { createSearchProvider, has } from "../../src/core/registry.ts";
-import { WebError, AuthError, RateLimitError } from "../../src/core/errors.ts";
+import { WebError, AuthError, PaymentError, RateLimitError } from "../../src/core/errors.ts";
+import { isFallbackEligible } from "../../src/core/fallback.ts";
 import { isPaginatedSearchProvider } from "../../src/core/provider.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
@@ -214,19 +215,29 @@ describe("serpbase provider", () => {
       await expect(provider.search("test query")).rejects.toThrow(RateLimitError);
     });
 
-    it("throws WebError for insufficient credits business status", async () => {
-      mockPostJSON.mockResolvedValueOnce({
+    it("classifies insufficient credits as PaymentError", async () => {
+      const response = {
         status: 1020,
         error: "insufficient credits",
         request_id: "req-credits",
         elapsed_ms: 0,
         credits_charged: 0,
         search_type: "search",
-      });
+      };
+      mockPostJSON.mockResolvedValueOnce(response);
 
       const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      const error = await provider.search("test query").catch((caught: unknown) => caught);
 
-      await expect(provider.search("test query")).rejects.toThrow(WebError);
+      expect(error).toBeInstanceOf(WebError);
+      expect(error).toBeInstanceOf(PaymentError);
+      expect(error).toMatchObject({
+        name: "PaymentError",
+        statusCode: 200,
+        url: "https://api.serpbase.dev/google/search",
+        body: JSON.stringify(response),
+      });
+      expect(isFallbackEligible(error, "serpbase", "search")).toBe(true);
     });
   });
 });

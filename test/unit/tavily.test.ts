@@ -22,7 +22,8 @@ vi.mock("../../src/core/client.ts", () => ({
 }));
 
 import { createSearchProvider, has } from "../../src/core/registry.ts";
-import { AuthError } from "../../src/core/errors.ts";
+import { AuthError, HTTPError, PaymentError, normalizeError } from "../../src/core/errors.ts";
+import { isFallbackEligible } from "../../src/core/fallback.ts";
 import { isDetailedSearchProvider } from "../../src/core/provider.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
@@ -172,6 +173,39 @@ describe("tavily provider", () => {
       const results = await provider.search("query");
 
       expect(results).toEqual([]);
+    });
+  });
+
+  describe("usage limits", () => {
+    const url = "https://api.tavily.com/search";
+    const body = JSON.stringify({
+      detail: { error: "This request exceeds your plan's set usage limit." },
+    });
+
+    it.each([432, 433])("classifies HTTP %i as PaymentError", async (statusCode) => {
+      mockPostJSON.mockRejectedValueOnce(new HTTPError(statusCode, url, body));
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+
+      const error = await provider.search("test query").catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(PaymentError);
+      expect(error).toMatchObject({ name: "PaymentError", statusCode, url, body });
+      expect(normalizeError(error, "tavily")).toBe(error);
+      expect(isFallbackEligible(error, "tavily", "search")).toBe(true);
+    });
+
+    it.each([
+      [400, HTTPError],
+      [401, AuthError],
+    ])("keeps HTTP %i strict", async (statusCode, expected) => {
+      mockPostJSON.mockRejectedValueOnce(new HTTPError(statusCode, url, body));
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+
+      const error = await provider.search("test query").catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(expected);
+      expect(error).not.toBeInstanceOf(PaymentError);
+      expect(isFallbackEligible(error, "tavily", "search")).toBe(false);
     });
   });
 });
