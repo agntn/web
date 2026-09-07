@@ -60,7 +60,7 @@ export class Client {
     try {
       return signal
         ? await this.fetchWithCancellation(
-            () => this.fetch<T>(url, { headers, signal, retry: false }),
+            (attemptSignal) => this.fetch<T>(url, { headers, signal: attemptSignal, retry: false }),
             signal,
           )
         : await this.fetch<T>(url, { headers, signal });
@@ -86,12 +86,12 @@ export class Client {
     try {
       return signal
         ? await this.fetchWithCancellation(
-            () =>
+            (attemptSignal) =>
               this.fetch<T>(url, {
                 method: "POST",
                 body,
                 headers,
-                signal,
+                signal: attemptSignal,
                 retry: false,
               }),
             signal,
@@ -108,18 +108,45 @@ export class Client {
   }
 
   private async fetchWithCancellation<T>(
-    request: () => Promise<T>,
+    request: (signal: Readonly<AbortSignal>) => Promise<T>,
     signal: Readonly<AbortSignal>,
   ): Promise<T> {
     for (let attempt = 0; ; attempt += 1) {
       signal.throwIfAborted();
       try {
-        return await request();
+        return await this.requestWithTimeout(request, signal);
       } catch (error) {
         signal.throwIfAborted();
         if (attempt >= this.maxRetries || !isRetryable(error)) throw error;
         await abortableDelay(this.retryDelay(attempt), signal);
       }
+    }
+  }
+
+  /**
+   * ofetch skips its own timeout once a signal is supplied, so each attempt gets one here.
+   * @param request - Function that performs one attempt with the effective signal.
+   * @param signal - Caller cancellation signal.
+   * @returns {Promise<T>} Parsed response body.
+   */
+  private async requestWithTimeout<T>(
+    request: (signal: Readonly<AbortSignal>) => Promise<T>,
+    signal: Readonly<AbortSignal>,
+  ): Promise<T> {
+    if (!this.timeout) return request(signal);
+
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () =>
+        controller.abort(
+          new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+        ),
+      this.timeout,
+    );
+    try {
+      return await request(AbortSignal.any([signal, controller.signal]));
+    } finally {
+      clearTimeout(timer);
     }
   }
 
