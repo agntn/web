@@ -27,7 +27,7 @@ import { FetchError } from "ofetch";
 
 describe("Client", () => {
   beforeEach(() => {
-    mockFetch.mockClear();
+    mockFetch.mockReset();
     vi.clearAllMocks();
   });
 
@@ -73,22 +73,63 @@ describe("Client", () => {
   });
 
   describe("getJSON", () => {
-    it("should call fetch with url and signal", async () => {
+    it("should call fetch with url and a signal that follows the caller", async () => {
       const client = new Client();
       const testUrl = "https://api.example.com/data";
       const testData = { result: "success" };
-      const signal = new AbortController().signal;
+      const controller = new AbortController();
+      const reason = new DOMException("cancelled after response", "AbortError");
 
       mockFetch.mockResolvedValueOnce(testData);
 
-      const result = await client.getJSON(testUrl, undefined, signal);
+      const result = await client.getJSON(testUrl, undefined, controller.signal);
 
       expect(mockFetch).toHaveBeenCalledWith(testUrl, {
         headers: undefined,
-        signal,
+        signal: forwardedSignal(0),
         retry: false,
       });
       expect(result).toEqual(testData);
+      controller.abort(reason);
+      expect(abortReason(0)).toBe(reason);
+    });
+
+    it("should apply the timeout while a caller signal remains active", async () => {
+      const client = new Client({ timeout: 20, maxRetries: 0 });
+      const controller = new AbortController();
+      mockFetch.mockImplementationOnce(
+        (_url: string, options: Readonly<{ signal: Readonly<AbortSignal> }>) =>
+          rejectOnAbort(options.signal),
+      );
+
+      const outcome = await Promise.race([
+        client.getJSON("https://api.example.com/slow", undefined, controller.signal).then(
+          () => "resolved",
+          (error: unknown) => error,
+        ),
+        new Promise((resolve) => setTimeout(() => resolve("still pending"), 500)),
+      ]);
+
+      expect(outcome).toBeInstanceOf(HTTPError);
+      expect(controller.signal.aborted).toBe(false);
+      expect(abortReason(0).name).toBe("TimeoutError");
+    });
+
+    it("should retry after a timeout with a fresh timeout", async () => {
+      const client = new Client({ timeout: 20, maxRetries: 1, baseDelay: 0 });
+      mockFetch
+        .mockImplementationOnce(
+          (_url: string, options: Readonly<{ signal: Readonly<AbortSignal> }>) =>
+            rejectOnAbort(options.signal),
+        )
+        .mockResolvedValueOnce({ result: "success" });
+
+      await expect(
+        client.getJSON("https://api.example.com/slow", undefined, new AbortController().signal),
+      ).resolves.toEqual({ result: "success" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(abortReason(0).name).toBe("TimeoutError");
+      expect(forwardedSignal(1).aborted).toBe(false);
     });
 
     it("should retry eligible failures while a caller signal remains active", async () => {
@@ -211,7 +252,7 @@ describe("Client", () => {
         method: "POST",
         body: testBody,
         headers: undefined,
-        signal,
+        signal: forwardedSignal(0),
         retry: false,
       });
       expect(result).toEqual(testResponse);
@@ -800,3 +841,32 @@ describe("Client", () => {
     });
   });
 });
+
+function forwardedSignal(call: number): AbortSignal {
+  const options: unknown = mockFetch.mock.calls[call]?.[1];
+  if (
+    typeof options !== "object" ||
+    options === null ||
+    !("signal" in options) ||
+    !(options.signal instanceof AbortSignal)
+  ) {
+    throw new Error(`fetch call ${call} carried no signal`);
+  }
+  return options.signal;
+}
+
+function abortReason(call: number): DOMException {
+  const reason: unknown = forwardedSignal(call).reason;
+  if (!(reason instanceof DOMException)) {
+    throw new Error(`fetch call ${call} was not aborted with a DOMException`);
+  }
+  return reason;
+}
+
+function rejectOnAbort(signal: Readonly<AbortSignal>): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    signal.addEventListener("abort", () => reject(new FetchError(String(signal.reason))), {
+      once: true,
+    });
+  });
+}
