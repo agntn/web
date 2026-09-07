@@ -6,7 +6,13 @@ import type {
   ProviderConfig,
 } from "../core/types.ts";
 import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
-import { AuthError, normalizeError } from "../core/errors.ts";
+import {
+  AuthError,
+  HTTPError,
+  PaymentError,
+  normalizeError,
+  type WebError,
+} from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface TavilySearchRequest {
@@ -34,6 +40,8 @@ interface TavilySearchResponse {
   readonly answer?: string;
   readonly query: string;
 }
+
+const TAVILY_USAGE_LIMIT_STATUS_CODES = new Set([432, 433]);
 
 class TavilyProvider extends Provider {
   static readonly providerName = "tavily";
@@ -91,9 +99,21 @@ class TavilyProvider extends Provider {
         ...(response.answer === undefined ? {} : { metadata: { answer: response.answer } }),
       };
     } catch (error) {
-      throw normalizeError(error, "tavily");
+      throw normalizeTavilyError(error);
     }
   }
+}
+
+/**
+ * Tavily answers a spent plan or pay-as-you-go cap with HTTP 432 or 433, never 402.
+ * @param error - Rejected request.
+ * @returns {WebError} Payment or normalized provider error.
+ */
+function normalizeTavilyError(error: unknown): WebError {
+  if (error instanceof HTTPError && TAVILY_USAGE_LIMIT_STATUS_CODES.has(error.statusCode)) {
+    return new PaymentError(error.statusCode, error.url, error.body);
+  }
+  return normalizeError(error, "tavily");
 }
 
 function mapResult(result: TavilyResult): SearchResult {

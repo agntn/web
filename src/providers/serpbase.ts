@@ -13,6 +13,7 @@ import {
   WebError,
   AuthError,
   InvalidSearchContinuationError,
+  PaymentError,
   RateLimitError,
   normalizeError,
 } from "../core/errors.ts";
@@ -117,7 +118,7 @@ class SerpBaseProvider extends Provider {
         headers,
         options?.signal,
       );
-      assertSerpBaseSuccess(response);
+      assertSerpBaseSuccess(response, url);
       const providerResults = resultsForResponse(response);
       return {
         results: providerResults
@@ -169,7 +170,12 @@ function clampMaxResults(maxResults: number): number {
   return Math.min(Math.max(maxResults, 1), SERPBASE_MAX_RESULTS);
 }
 
-function assertSerpBaseSuccess(response: SerpBaseSearchResponse): void {
+/**
+ * Status 1020 in SerpBase's HTTP 200 envelope means a spent balance, not a bad key.
+ * @param response - Parsed SerpBase envelope.
+ * @param url - Endpoint that answered.
+ */
+function assertSerpBaseSuccess(response: SerpBaseSearchResponse, url: string): void {
   if (response.status === 0) return;
 
   const message = response.error ?? `SerpBase API error: status=${response.status}`;
@@ -179,7 +185,7 @@ function assertSerpBaseSuccess(response: SerpBaseSearchResponse): void {
     case 1029:
       throw new RateLimitError(60);
     case 1020:
-      throw new WebError(`SerpBase insufficient credits: ${message}`);
+      throw new PaymentError(200, url, JSON.stringify(response));
     default:
       throw new WebError(`SerpBase API error ${response.status}: ${message}`);
   }
