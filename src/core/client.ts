@@ -175,11 +175,8 @@ export class Client {
         throw new RateLimitError(parseRetryAfter(response.headers.get("Retry-After")));
       throw new HTTPError(response.status, safeUrl, "Streaming request rejected");
     }
-    if (
-      !response._data ||
-      response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !==
-        "text/event-stream"
-    ) {
+    const contentType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
+    if (!response._data || (contentType !== undefined && contentType !== "text/event-stream")) {
       await response.body?.cancel().catch(() => {});
       throw new HTTPError(502, safeUrl, "Expected an SSE response body");
     }

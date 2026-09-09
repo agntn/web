@@ -99,6 +99,26 @@ describe("SSE transport", () => {
     expect(cancelled).toBe(true);
   });
 
+  it("parses valid SSE when the Codex backend omits Content-Type", async () => {
+    vi.stubGlobal(
+      "fetch",
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  'event: response.completed\ndata: {"type":"response.completed"}\n\n',
+                ),
+              );
+              controller.close();
+            },
+          }),
+        ),
+    );
+    expect(await collectEvents()).toEqual([{ type: "response.completed" }]);
+  });
+
   it("rejects a successful non-SSE body and cancels it", async () => {
     let cancelled = false;
     vi.stubGlobal(
