@@ -9,6 +9,7 @@ const DEFAULT_BASE_DELAY = 50;
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_USER_AGENT = `agntn-web/${version}`;
 const RETRY_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_CAUSE_DEPTH = 8;
 
 /** HTTP client with exponential backoff retry and error mapping to web error types. */
 export class Client {
@@ -162,12 +163,50 @@ export class Client {
         return new RateLimitError(retryAfter);
       }
 
-      const body = typeof error.data === "string" ? error.data : JSON.stringify(error.data ?? "");
+      const body = responseBody(error.data) || transportFailure(error.cause);
+      const options = error.cause === undefined ? undefined : { cause: error.cause };
 
-      return new HTTPError(error.statusCode ?? 0, sanitizeUrl(url), body);
+      return new HTTPError(error.statusCode ?? 0, sanitizeUrl(url), body, options);
     }
     return error instanceof Error ? error : new Error(String(error));
   }
+}
+
+function responseBody(data: unknown): string {
+  if (typeof data === "string") return data;
+  return data === undefined || data === null ? "" : JSON.stringify(data);
+}
+
+/**
+ * Name the failure behind a request that produced no usable response.
+ * Reads the chain under the ofetch error, never its own message, which repeats the unredacted URL.
+ * @param cause - Cause attached to the ofetch error.
+ * @returns {string} Distinct cause messages from the outside in, or an empty string.
+ */
+function transportFailure(cause: unknown): string {
+  const parts: string[] = [];
+  const seen = new Set<Error>();
+  let current: unknown = cause;
+
+  while (current instanceof Error && !seen.has(current) && seen.size < MAX_CAUSE_DEPTH) {
+    seen.add(current);
+    const part = errorSummary(current);
+    if (part.length > 0 && parts.at(-1) !== part) parts.push(part);
+    current = current.cause;
+  }
+
+  return parts.join(": ");
+}
+
+function errorSummary(error: Readonly<Error>): string {
+  if (error.message.length > 0) return error.message;
+  if (error instanceof AggregateError) {
+    return error.errors
+      .map((inner: unknown) => (inner instanceof Error ? inner.message : String(inner)))
+      .filter((message) => message.length > 0)
+      .join(", ");
+  }
+  return "code" in error && typeof error.code === "string" ? error.code : error.name;
 }
 
 function isRetryable(error: unknown): boolean {
