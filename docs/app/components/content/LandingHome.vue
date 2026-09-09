@@ -4,7 +4,7 @@ import { PROVIDERS } from "../../utils/providers";
 const { samples, tick, index, paused, current, step } = useLandingSearch();
 
 const stats = [
-  { value: "11", label: "providers" },
+  { value: String(PROVIDERS.length), label: "providers" },
   { value: "3", label: "capabilities" },
   { value: "4", label: "readers" },
   { value: "4", label: "agent tools" },
@@ -152,7 +152,7 @@ const activeProvider = computed(() => current.value.provider);
     >
       Exa wants a POST with <code class="font-mono text-[13px] text-highlighted">x-api-key</code>, Brave a GET with
       <code class="font-mono text-[13px] text-highlighted">X-Subscription-Token</code>, Tavily puts the key in the body.
-      Eleven APIs, eleven ideas about a request. Each adapter maps one of them onto the shared types and says what it can do. The rest of the library just reads that.
+      Different APIs, different ideas about a request. Each adapter maps one of them onto the shared types and says what it can do. The rest of the library just reads that.
       <template #visual>
         <div class="web-frame grid grid-cols-2 overflow-hidden rounded-xl sm:grid-cols-3 lg:grid-cols-4">
           <NuxtLink

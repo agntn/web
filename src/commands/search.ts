@@ -375,7 +375,11 @@ async function handleSearchError(
   if (error instanceof AuthError) {
     const provider = providerName || error.provider;
     const envVar = providerApiKeyEnvVar(provider);
-    if (envVar !== null) consola.info(`Set the ${envVar} environment variable.`);
+    if (provider === "openai-codex") {
+      consola.info(
+        "Sign in with Pi, OMP, Codex, or OpenCode. Let that client refresh an expired login.",
+      );
+    } else if (envVar !== null) consola.info(`Set the ${envVar} environment variable.`);
     return exitWithError(`Authentication failed for provider "${provider}".`);
   }
   if (error instanceof SearchNotSupportedError) {

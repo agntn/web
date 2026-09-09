@@ -108,6 +108,8 @@ const firecrawlMetadata = {
   creditsUsed: 2,
 };
 
+afterEach(() => vi.unstubAllEnvs());
+
 describe("searchAll", () => {
   beforeEach(() => {
     mockPostJSON.mockReset();
@@ -118,6 +120,8 @@ describe("searchAll", () => {
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.JINA_API_KEY;
     delete process.env.MOJEEK_API_KEY;
+    vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", "");
+    vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", "");
     delete process.env.TAVILY_API_KEY;
     delete process.env.TINYFISH_API_KEY;
     delete process.env.SERPAPI_API_KEY;
@@ -547,6 +551,8 @@ describe("searchAllDetailed", () => {
     delete process.env.FIRECRAWL_API_KEY;
     delete process.env.JINA_API_KEY;
     delete process.env.MOJEEK_API_KEY;
+    vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", "");
+    vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", "");
     delete process.env.TAVILY_API_KEY;
     delete process.env.TINYFISH_API_KEY;
     delete process.env.SERPAPI_API_KEY;

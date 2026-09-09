@@ -35,6 +35,7 @@ describe("@agntn/web", () => {
       "firecrawl",
       "jina",
       "mojeek",
+      "openai-codex",
       "searxng",
       "serpapi",
       "serpbase",
@@ -46,7 +47,11 @@ describe("@agntn/web", () => {
   it("should register built-in providers from main entrypoint", () => {
     for (const provider of builtinProviders) {
       const config =
-        provider === "searxng" || provider === "jina" ? undefined : { apiKey: "test-api-key" };
+        provider === "openai-codex"
+          ? { codex: { credentials: { accessToken: "test-token", accountId: "test-account" } } }
+          : provider === "searxng" || provider === "jina"
+            ? undefined
+            : { apiKey: "test-api-key" };
       expect(() => create(provider, config)).not.toThrow();
     }
   });

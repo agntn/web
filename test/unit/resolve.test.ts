@@ -13,6 +13,8 @@ const envKeys = [
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
   "MOJEEK_API_KEY",
+  "OPENAI_CODEX_ACCESS_TOKEN",
+  "OPENAI_CODEX_ACCOUNT_ID",
   "TAVILY_API_KEY",
   "TINYFISH_API_KEY",
   "SERPAPI_API_KEY",
@@ -150,6 +152,7 @@ describe("resolve", () => {
 
       expect(matrix).toEqual({
         brave: { filters: [] },
+        "openai-codex": { filters: [] },
         context: { filters: ["includeDomains", "excludeDomains"] },
         exa: {
           filters: [

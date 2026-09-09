@@ -197,69 +197,75 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     name: "web_search",
     label: "Web Search",
     description:
-      "Search one query or an independent batch through a selected provider, automatic fallback, or every configured provider. Continue one provider's result sequence with its opaque token.",
+      "Search one query or an independent batch through a selected provider, automatic fallback, or every configured provider. OpenAI Codex search reuses the host login or a saved OAuth login. Continue supported providers with an opaque token.",
     parameters: searchParameters,
     approval: "read",
     ...renderers("web_search"),
-    async execute(_toolCallId, params, signal) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const web = await loadWeb();
-      const provider = normalizeSearchProvider(params.provider, web.searchProviders());
-      const options: SearchPageOptions = {
-        maxResults: params.maxResults,
-        continuation: params.continuation,
-        highlights: params.highlights,
-        summary: params.summary,
-        fullText: params.fullText,
-        includeDomains: params.includeDomains,
-        excludeDomains: params.excludeDomains,
-        sources: params.sources,
-        categories: params.categories,
-        category: params.category,
-        startPublishedDate: params.startPublishedDate,
-        endPublishedDate: params.endPublishedDate,
-      };
-      const executionOptions = { ...options, signal };
+      return web.withCodexHostAuth(
+        ctx?.modelRegistry?.authStorage,
+        async () => {
+          const provider = normalizeSearchProvider(params.provider, web.searchProviders());
+          const options: SearchPageOptions = {
+            maxResults: params.maxResults,
+            continuation: params.continuation,
+            highlights: params.highlights,
+            summary: params.summary,
+            fullText: params.fullText,
+            includeDomains: params.includeDomains,
+            excludeDomains: params.excludeDomains,
+            sources: params.sources,
+            categories: params.categories,
+            category: params.category,
+            startPublishedDate: params.startPublishedDate,
+            endPublishedDate: params.endPublishedDate,
+          };
+          const executionOptions = { ...options, signal };
 
-      if (Array.isArray(params.query)) {
-        if (params.continuation !== undefined) {
-          throw new TypeError("continuation is only supported for a single query");
-        }
-        const outcomes = await web.searchBatch(params.query, {
-          provider,
-          ...executionOptions,
-        });
-        return toolResult({ mode: "batch" as const, provider, outcomes });
-      }
-      const query = params.query.trim();
-      if (!query) throw new web.EmptyQueryError();
-      if (provider === "all") {
-        const response = await web.searchAllDetailed(query, executionOptions);
-        return toolResult({
-          mode: "all" as const,
-          count: response.results.length,
-          ...response,
-          errors: response.errors.map(({ provider: failedProvider, error }) => ({
-            provider: failedProvider,
-            error: error.message,
-          })),
-        });
-      }
-      if (provider !== undefined) {
-        const response = await web.searchProviderDetailed(provider, query, executionOptions);
-        return toolResult({
-          ...response,
-          mode: "single" as const,
-          provider,
-          count: response.results.length,
-        });
-      }
-      const response = await web.searchWithFallback(query, executionOptions);
-      return toolResult({
-        ...response,
-        mode: "single" as const,
-        provider: response.provider,
-        count: response.results.length,
-      });
+          if (Array.isArray(params.query)) {
+            if (params.continuation !== undefined) {
+              throw new TypeError("continuation is only supported for a single query");
+            }
+            const outcomes = await web.searchBatch(params.query, {
+              provider,
+              ...executionOptions,
+            });
+            return toolResult({ mode: "batch" as const, provider, outcomes });
+          }
+          const query = params.query.trim();
+          if (!query) throw new web.EmptyQueryError();
+          if (provider === "all") {
+            const response = await web.searchAllDetailed(query, executionOptions);
+            return toolResult({
+              mode: "all" as const,
+              count: response.results.length,
+              ...response,
+              errors: response.errors.map(({ provider: failedProvider, error }) => ({
+                provider: failedProvider,
+                error: error.message,
+              })),
+            });
+          }
+          if (provider !== undefined) {
+            const response = await web.searchProviderDetailed(provider, query, executionOptions);
+            return toolResult({
+              ...response,
+              mode: "single" as const,
+              provider,
+              count: response.results.length,
+            });
+          }
+          const response = await web.searchWithFallback(query, executionOptions);
+          return toolResult({
+            ...response,
+            mode: "single" as const,
+            provider: response.provider,
+            count: response.results.length,
+          });
+        },
+        ctx?.sessionManager?.getSessionId(),
+      );
     },
   });
 
@@ -339,13 +345,19 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     parameters: Type.Object({}),
     approval: "read",
     ...renderers("web_providers"),
-    async execute(_toolCallId, _params, signal) {
+    async execute(_toolCallId, _params, signal, _onUpdate, ctx) {
       const web = await loadWeb();
-      return toolResult({
-        runtime: web.runtimeInfo,
-        packageCapabilities: web.packageCapabilities,
-        providers: await web.listProvidersAsync({ signal }),
-      });
+      return web.withCodexHostAuth(
+        ctx?.modelRegistry?.authStorage,
+        async () => {
+          return toolResult({
+            runtime: web.runtimeInfo,
+            packageCapabilities: web.packageCapabilities,
+            providers: await web.listProvidersAsync({ signal }),
+          });
+        },
+        ctx?.sessionManager?.getSessionId(),
+      );
     },
   });
 }
