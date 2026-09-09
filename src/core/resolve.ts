@@ -4,6 +4,7 @@ import {
   getProviderApiKeyEnvVar,
   getProviderCapabilities,
   getSearchFilterCapabilities,
+  isProviderConfigured,
   providers,
   searchProviders,
 } from "./registry.ts";
@@ -12,15 +13,7 @@ import { isAvailabilityProvider, type ProviderCapabilities } from "./provider.ts
 import { settleWithConcurrency, throwIfAborted, withExecutionBudget } from "./execution.ts";
 import type { ExecutionOptions, SearchFilterName } from "./types.ts";
 
-/**
- * Return whether a registered provider has no key requirement or a configured API key.
- * @param {string} name - Provider name to inspect.
- * @returns {boolean} Whether automatic selection may use the provider.
- */
-export function isProviderConfigured(name: string): boolean {
-  const envVar = getProviderApiKeyEnvVar(name);
-  return envVar === null || Boolean(process.env[envVar]);
-}
+export { isProviderConfigured } from "./registry.ts";
 
 export function detectAvailableProviders(): string[] {
   return orderedSearchProviders().filter(isProviderConfigured);

@@ -85,6 +85,8 @@ export interface ProviderConstructor {
   readonly providerName: string;
   readonly defaultBaseURL: string;
   readonly apiKeyEnvVar?: string | null;
+  /** Optional local configuration check for providers requiring more than one credential. */
+  readonly isConfigured?: () => boolean;
   readonly capabilities?: readonly ProviderCapability[];
   readonly capabilityDetails?: ProviderCapabilityDetails;
   readonly searchFilterCapabilities?: SearchFilterCapabilities;

@@ -3,6 +3,7 @@ import type { $Fetch } from "ofetch";
 import type { ClientOptions } from "./types.ts";
 import { HTTPError, RateLimitError, parseRetryAfter } from "./errors.ts";
 import { version } from "../version.ts";
+import { readSseJson } from "./sse.ts";
 
 const DEFAULT_MAX_RETRIES = 5;
 const DEFAULT_BASE_DELAY = 50;
@@ -106,6 +107,83 @@ export class Client {
     } catch (error) {
       throw this.mapError(error, url);
     }
+  }
+
+  /**
+   * Stream a metered POST without retries, redirects, or upstream error bodies.
+   * @param url - Request URL.
+   * @param body - JSON request body.
+   * @param headers - Authentication and protocol headers.
+   * @param signal - Caller cancellation.
+   * @yields {unknown} Parsed JSON data events.
+   * @returns {AsyncGenerator<unknown>} Bounded JSON SSE events.
+   */
+  async *postSSE(
+    url: string,
+    body: Readonly<Record<string, unknown>>,
+    headers?: Readonly<Record<string, string>>,
+    signal?: Readonly<AbortSignal>,
+  ): AsyncGenerator<unknown> {
+    const controller = new AbortController();
+    const timer =
+      this.timeout > 0
+        ? setTimeout(
+            () => controller.abort(new DOMException("Stream timed out", "TimeoutError")),
+            this.timeout,
+          )
+        : undefined;
+    const effectiveSignal = signal
+      ? AbortSignal.any([signal, controller.signal])
+      : controller.signal;
+    const safeUrl = sanitizeUrl(url);
+    try {
+      effectiveSignal.throwIfAborted();
+      const stream = await this.openSSE(url, body, headers, effectiveSignal);
+      yield* readSseJson(stream, safeUrl, effectiveSignal);
+    } catch (error) {
+      effectiveSignal.throwIfAborted();
+      if (error instanceof HTTPError || error instanceof RateLimitError) throw error;
+      throw new HTTPError(502, safeUrl, "Event stream transport failed");
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+    }
+  }
+
+  private async openSSE(
+    url: string,
+    body: Readonly<Record<string, unknown>>,
+    headers: Readonly<Record<string, string>> | undefined,
+    signal: Readonly<AbortSignal>,
+  ): Promise<Readonly<ReadableStream<Uint8Array>>> {
+    const safeUrl = sanitizeUrl(url);
+    const response = await this.fetch.raw<unknown, "stream">(url, {
+      method: "POST",
+      body,
+      headers: { ...headers, Accept: "text/event-stream" },
+      responseType: "stream",
+      redirect: "error",
+      retry: false,
+      timeout: 0,
+      ignoreResponseError: true,
+      signal,
+    });
+    signal.throwIfAborted();
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => {});
+      if (response.status === 429)
+        throw new RateLimitError(parseRetryAfter(response.headers.get("Retry-After")));
+      throw new HTTPError(response.status, safeUrl, "Streaming request rejected");
+    }
+    if (
+      !response._data ||
+      response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() !==
+        "text/event-stream"
+    ) {
+      await response.body?.cancel().catch(() => {});
+      throw new HTTPError(502, safeUrl, "Expected an SSE response body");
+    }
+    return response._data;
   }
 
   private async fetchWithCancellation<T>(

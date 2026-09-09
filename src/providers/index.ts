@@ -3,6 +3,7 @@ import "./brave.ts";
 import "./context.ts";
 import "./jina.ts";
 import "./mojeek.ts";
+import "./openai-codex.ts";
 import "./tavily.ts";
 import "./tinyfish.ts";
 import "./serpapi.ts";

@@ -405,7 +405,7 @@ onMounted(() => {
     <div v-else-if="operation === 'providers' && state.providers" class="web-frame overflow-hidden rounded-xl">
       <div class="flex items-center justify-between gap-3 border-b border-muted px-4 py-3">
         <p class="font-mono text-xs text-muted">listProviders() on the docs worker · @agntn/web {{ state.providers.version }}</p>
-        <p class="font-mono text-[11px] text-dimmed">configured means the worker holds a key</p>
+        <p class="font-mono text-[11px] text-dimmed">configured means the worker has the required credentials</p>
       </div>
       <div class="web-table-wrap">
         <table class="web-table">

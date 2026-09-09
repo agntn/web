@@ -135,10 +135,34 @@ export interface ReadOptions extends ExecutionOptions {
   noCache?: boolean;
 }
 
+/** OAuth access for the ChatGPT Codex backend, not an OpenAI API key. */
+export interface CodexCredentials {
+  readonly accessToken: string;
+  readonly accountId: string;
+}
+
+/** Refresh is requested at most once, after the backend rejects authentication. */
+export interface CodexCredentialRequest {
+  readonly refresh: boolean;
+  readonly signal: Readonly<AbortSignal>;
+}
+
+/** The caller owns token storage, expiry checks, refresh, and concurrent refresh coordination. */
+export type CodexCredentialProvider = (
+  request: CodexCredentialRequest,
+) => CodexCredentials | Promise<CodexCredentials>;
+
+/** Explicit Codex configuration takes precedence over environment credentials and model. */
+export interface CodexConfig {
+  readonly credentials?: CodexCredentials | CodexCredentialProvider;
+  readonly model?: string;
+}
+
 export interface ProviderConfig {
   apiKey?: string;
   baseURL?: string;
   readBaseURL?: string;
+  codex?: CodexConfig;
 }
 
 export interface ClientOptions {

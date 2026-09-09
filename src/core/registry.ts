@@ -153,6 +153,18 @@ export function getProviderApiKeyEnvVar(name: string): string | null {
   return declaredEnvVar === undefined ? providerApiKeyEnvVar(name) : declaredEnvVar;
 }
 
+/**
+ * Check local credentials without a network request or token refresh.
+ * @param name - Registered provider name.
+ * @returns {boolean} Whether selection from the environment can use this provider.
+ */
+export function isProviderConfigured(name: string): boolean {
+  const provider = providerClasses.get(name);
+  if (provider?.isConfigured) return provider.isConfigured();
+  const envVar = getProviderApiKeyEnvVar(name);
+  return envVar === null || Boolean(process.env[envVar]);
+}
+
 export function getSearchFilterCapabilities(name: string): SearchFilterCapabilities | undefined {
   return providerClasses.get(name)?.searchFilterCapabilities;
 }

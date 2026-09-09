@@ -21,7 +21,7 @@ const advertisedSearchProviderNames = [...builtinProviders, "all"].join(", ");
 
 export const searchTool = tool({
   description:
-    'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored. Single searches may continue with an opaque token bound to its provider.',
+    'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, OpenAI Codex, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored. Single searches may continue with an opaque token bound to its provider.',
   inputSchema: z.object({
     query: z
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])

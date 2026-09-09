@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import webOmpExtension from "../../packages/omp/extensions/web.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
+import { completedEvents, sse } from "../fixtures/codex.ts";
 import { Provider, register } from "../../src/index.ts";
 import type { ProviderStatus } from "../../src/index.ts";
 import type { ProviderConfig, SearchRequestOptions, SearchResult } from "../../src/core/types.ts";
@@ -182,6 +183,42 @@ describe("OMP extension", () => {
     expect(
       Math.max(...wideOutput.split("\n").map((line) => stringWidth(line))),
     ).toBeLessThanOrEqual(182);
+  });
+
+  it("executes Codex search through the registered OMP tool and renders its results", async () => {
+    vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", "test-token");
+    vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", "test-account");
+    vi.stubGlobal("fetch", async () => sse(completedEvents()));
+    try {
+      const search = requiredTool(captureOmpExtension().tools, "web_search");
+      const result: unknown = await Reflect.apply(search.execute, search, [
+        "codex-test",
+        {
+          query: "public query",
+          provider: "openai-codex",
+          summary: true,
+        },
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
+      if (typeof result !== "object" || result === null || !("content" in result))
+        throw new Error("Missing model content");
+      const content = JSON.stringify(result.content);
+      expect(content).toContain("https://example.com/");
+      expect(content).toContain("Generated answer with a citation.");
+      expect(content).not.toContain("test-token");
+      if (!search.renderResult) throw new Error("Missing result renderer");
+      const rendered: unknown = Reflect.apply(search.renderResult, search, [
+        result,
+        { expanded: false, isPartial: false },
+        theme,
+      ]);
+      expect(renderedText(rendered)).toContain("found 2 results");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("rejects schema and executor boundary violations", async () => {

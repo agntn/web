@@ -197,7 +197,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     name: "web_search",
     label: "Web Search",
     description:
-      "Search one query or an independent batch through a selected provider, automatic fallback, or every configured provider. Continue one provider's result sequence with its opaque token.",
+      "Search one query or an independent batch through a selected provider, automatic fallback, or every configured provider. OpenAI Codex search requires explicit OAuth environment credentials. Continue supported providers with an opaque token.",
     parameters: searchParameters,
     approval: "read",
     ...renderers("web_search"),

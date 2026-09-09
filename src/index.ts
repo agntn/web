@@ -21,6 +21,10 @@ export type {
   ReadResult,
   ReadOptions,
   ProviderConfig,
+  CodexConfig,
+  CodexCredentials,
+  CodexCredentialRequest,
+  CodexCredentialProvider,
   ClientOptions,
 } from "./core/types.ts";
 export {

@@ -15,6 +15,7 @@ import {
 } from "../../src/index.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { providerApiKeyEnvVar } from "../../src/core/providers.ts";
+import { completedEvents, sse } from "../fixtures/codex.ts";
 
 const customProviderCleanups: Array<() => void> = [];
 afterEach(() => {
@@ -122,6 +123,33 @@ describe("Pi extension", () => {
       readonly properties?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
     };
     expect(schema.properties?.continuation).toMatchObject({ type: "string", maxLength: 4096 });
+  });
+
+  it("executes Codex search and exposes sources and the requested answer to the model", async () => {
+    vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", "test-token");
+    vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", "test-account");
+    vi.stubGlobal("fetch", async () => sse(completedEvents()));
+    try {
+      const search = captureTools().get("web_search");
+      if (!search) throw new Error("Missing search tool");
+      const result: unknown = await Reflect.apply(search.execute, search, [
+        "codex-test",
+        { query: "public query", provider: "openai-codex", summary: true },
+        undefined,
+        undefined,
+        undefined,
+      ]);
+      expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
+      if (typeof result !== "object" || result === null || !("content" in result))
+        throw new Error("Missing model content");
+      const content = JSON.stringify(result.content);
+      expect(content).toContain("https://example.com/");
+      expect(content).toContain("Generated answer with a citation.");
+      expect(content).not.toContain("test-token");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
   });
 
   it("rejects one continuation for a search batch", async () => {

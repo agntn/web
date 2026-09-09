@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/github/license/agntn/web?style=flat&colorA=130f40&colorB=474787)](https://github.com/agntn/web/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/agntn/web)
 
-One API for Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, Tavily, TinyFish, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
+One API for Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, OpenAI Codex, Tavily, TinyFish, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
 
 If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
 
@@ -30,6 +30,8 @@ Provided slash commands:
 
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` - show provider configuration, reachability, and capability details
+
+OpenAI Codex search also works through both extensions with `OPENAI_CODEX_ACCESS_TOKEN` and `OPENAI_CODEX_ACCOUNT_ID`. They do not read host login files.
 
 Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Pi sends rich search fields with a cap for each result and includes provider metadata without expanding the TUI. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
 
@@ -79,6 +81,34 @@ You can also pass the key explicitly:
 const exa = create("exa", { apiKey: "your-key-here" });
 ```
 
+### OpenAI Codex search
+
+Use the hosted web search tool through a ChatGPT Codex login. This is an experimental backend adapter. It does not use an OpenAI API key.
+
+```bash
+export OPENAI_CODEX_ACCESS_TOKEN="your-oauth-access-token"
+export OPENAI_CODEX_ACCOUNT_ID="your-chatgpt-account-id"
+web search "Node.js release notes" --provider openai-codex --json
+```
+
+Application code can supply a fixed pair or a credential callback:
+
+```typescript
+import { createSearchProvider, type CodexCredentialProvider } from "@agntn/web";
+
+export function createCodexSearch(credentials: CodexCredentialProvider) {
+  return createSearchProvider("openai-codex", { codex: { credentials } });
+}
+```
+
+The callback receives `{ refresh, signal }` and returns `{ accessToken, accountId }`, optionally through a promise. It runs before each search and once more with `refresh: true` after an authentication rejection. The caller owns login, expiry checks, storage and concurrent refresh coordination. Environment credentials are not refreshed. No OMP or Codex auth files are read or modified.
+
+Only native search sources and citation annotations become results. `snippet` stays empty because the generated answer is not a page excerpt. Request `summary: true` through a detailed search helper to include that answer in `metadata.answer`. Results default to 10 and are capped locally at 100. No paging, portable filters or URL reading.
+
+The default model is `gpt-5.5`, overridable by `codex.model` or `OPENAI_CODEX_MODEL`. A search is limited to 90 seconds. OAuth credentials only go to the fixed ChatGPT endpoint, never a custom base URL or a redirect. Both environment credentials are required for `auto` and `all`; a callback passed to an instance does not configure those global flows.
+
+[Codex setup and limitations](./docs/content/2.providers/12.openai-codex.md).
+
 ### Custom providers
 
 Registered providers are discovered from their prototype methods. Providers that implement methods as class fields declare matching static `capabilities`. The same live capability lists drive the library, CLI, AI SDK, MCP, Pi, and OMP, so a custom provider does not need to enter a built in name tuple:
@@ -121,6 +151,8 @@ console.log(searchProviders());
 console.log(searchImageProviders());
 console.log(readProviders());
 ```
+
+A provider with several required credentials can declare a synchronous static `isConfigured()` check. It must inspect local configuration only, without network requests or token refresh.
 
 Provider names use lowercase ASCII letters, digits, and single internal hyphens. Set `apiKeyEnvVar` to `null` when registration is enough to configure the provider. Otherwise automatic selection expects a derived variable such as `INTERNAL_SEARCH_API_KEY`; explicit `create()` calls can still pass `apiKey`. For class field methods, declare any of `"search"`, `"searchImage"`, and `"read"` in a static `capabilities` array. Declare static `capabilityDetails` when discovery should also report content controls, result limits, rich search fields, or read options. Agent tool schemas advertise the built in names but accept strings, then validate the selected name against the live capability list at execution time.
 
@@ -368,37 +400,39 @@ The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`
 
 ## Providers
 
-| Provider    | Env var               | Auth               | Free tier                              |
-| ----------- | --------------------- | ------------------ | -------------------------------------- |
-| Brave       | `BRAVE_API_KEY`       | Header             | 2k queries/mo                          |
-| Context.dev | `CONTEXT_DEV_API_KEY` | Bearer header      | Credit-based free tier                 |
-| Exa         | `EXA_API_KEY`         | Header             | 1k queries/mo                          |
-| Firecrawl   | `FIRECRAWL_API_KEY`   | Bearer header      | Credit-based free tier                 |
-| Jina        | `JINA_API_KEY`        | Bearer header      | Required for search; optional for read |
-| Mojeek      | `MOJEEK_API_KEY`      | Query param        | Limited free trial                     |
-| SearXNG     | -                     | None               | Self-hosted                            |
-| SerpAPI     | `SERPAPI_API_KEY`     | Query param        | 100 queries/mo; Google Lens supported  |
-| SerpBase    | `SERPBASE_API_KEY`    | `X-API-Key` header | 100 searches to start                  |
-| Tavily      | `TAVILY_API_KEY`      | Body               | 1k queries/mo                          |
-| TinyFish    | `TINYFISH_API_KEY`    | `X-API-Key` header | Free at $0; Search access required     |
+| Provider     | Env var                                                 | Auth               | Free tier                              |
+| ------------ | ------------------------------------------------------- | ------------------ | -------------------------------------- |
+| Brave        | `BRAVE_API_KEY`                                         | Header             | 2k queries/mo                          |
+| Context.dev  | `CONTEXT_DEV_API_KEY`                                   | Bearer header      | Credit-based free tier                 |
+| Exa          | `EXA_API_KEY`                                           | Header             | 1k queries/mo                          |
+| Firecrawl    | `FIRECRAWL_API_KEY`                                     | Bearer header      | Credit-based free tier                 |
+| Jina         | `JINA_API_KEY`                                          | Bearer header      | Required for search; optional for read |
+| Mojeek       | `MOJEEK_API_KEY`                                        | Query param        | Limited free trial                     |
+| OpenAI Codex | `OPENAI_CODEX_ACCESS_TOKEN` + `OPENAI_CODEX_ACCOUNT_ID` | OAuth Bearer       | Codex account access and usage limits  |
+| SearXNG      | -                                                       | None               | Self-hosted                            |
+| SerpAPI      | `SERPAPI_API_KEY`                                       | Query param        | 100 queries/mo; Google Lens supported  |
+| SerpBase     | `SERPBASE_API_KEY`                                      | `X-API-Key` header | 100 searches to start                  |
+| Tavily       | `TAVILY_API_KEY`                                        | Body               | 1k queries/mo                          |
+| TinyFish     | `TINYFISH_API_KEY`                                      | `X-API-Key` header | Free at $0; Search access required     |
 
 ### Result shape
 
-All search providers always return `{ url, title, snippet }`. Optional fields depend on what each provider's native API exposes; `@agntn/web` passes them through without flattening:
+All search providers always return `{ url, title, snippet }`. OpenAI Codex leaves `snippet` empty and puts a requested generated answer in response `metadata.answer`, never in a source excerpt. Optional fields depend on what each provider's native API exposes; `@agntn/web` passes them through without flattening:
 
-| Provider    | Optional fields populated                                                                                                                               |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Context.dev | `metadata.{relevance, markdownCode}`                                                                                                                    |
-| Exa         | `highlights[]` by default; requested `text` (full page) and `summary`; `score`, `publishedDate`, `author`, `image`, `favicon`                           |
-| Firecrawl   | `text` (markdown from the scraped page)                                                                                                                 |
-| Jina        | `text` (`content`/`text`), `publishedDate`, `image`, `metadata`                                                                                         |
-| Mojeek      | `score`, `publishedDate`, `image`, `metadata.{confidence, documentSize, lastModifiedDate, crawledDate, moreResultsFromDomain, imageWidth, imageHeight}` |
-| Tavily      | requested `text` (`raw_content`); `score`, `publishedDate`                                                                                              |
-| TinyFish    | `publishedDate`, `author`, `metadata.{position, siteName, publisher, authors, venue, year, citedByCount, pdfUrl}`                                       |
-| Brave       | `text` (joined `extra_snippets`), `favicon`                                                                                                             |
-| SerpAPI     | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}`                                                           |
-| SerpBase    | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}`               |
-| SearXNG     | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}`                                                                               |
+| Provider     | Optional fields populated                                                                                                                               |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Context.dev  | `metadata.{relevance, markdownCode}`                                                                                                                    |
+| Exa          | `highlights[]` by default; requested `text` (full page) and `summary`; `score`, `publishedDate`, `author`, `image`, `favicon`                           |
+| Firecrawl    | `text` (markdown from the scraped page)                                                                                                                 |
+| Jina         | `text` (`content`/`text`), `publishedDate`, `image`, `metadata`                                                                                         |
+| Mojeek       | `score`, `publishedDate`, `image`, `metadata.{confidence, documentSize, lastModifiedDate, crawledDate, moreResultsFromDomain, imageWidth, imageHeight}` |
+| OpenAI Codex | None on results; response metadata carries model, request ID, usage and requested answer                                                                |
+| Tavily       | requested `text` (`raw_content`); `score`, `publishedDate`                                                                                              |
+| TinyFish     | `publishedDate`, `author`, `metadata.{position, siteName, publisher, authors, venue, year, citedByCount, pdfUrl}`                                       |
+| Brave        | `text` (joined `extra_snippets`), `favicon`                                                                                                             |
+| SerpAPI      | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}`                                                           |
+| SerpBase     | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}`               |
+| SearXNG      | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}`                                                                               |
 
 Pick the provider that fits the shape you want. Firecrawl returns page passages relevant to the query in `snippet` by default, including Markdown when the source passage contains it. Exa returns highlights by default and can add generated summaries or full text when requested. Tavily can add a query answer in response metadata or raw page content through the same controls. TinyFish carries useful news and research metadata. Jina returns page content with its search results. Brave, Mojeek, SerpAPI, SerpBase, and SearXNG return classic SERP metadata.
 
@@ -539,21 +573,22 @@ type SearchPageOptions = SearchRequestOptions & {
 };
 ```
 
-Provider `.search()` remains a list API for the first page. The detailed core helpers accept `SearchPageOptions` and return normalized pagination state. `maxResults` defaults to 10 and caps the final result list, including `searchAll` output after URL deduplication. Each provider also receives it as the requested result count. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. Generated content and full page text default to false and must be requested through `summary` and `fullText`; Exa uses `summary` for result summaries, while Tavily uses it for a query answer. The remaining filters are specific to each provider:
+Provider `.search()` remains a list API for the first page. The detailed core helpers accept `SearchPageOptions` and return normalized pagination state. `maxResults` defaults to 10 and caps the final result list, including `searchAll` output after URL deduplication. Each provider also receives it as the requested result count. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. Generated content and full page text default to false and must be requested through `summary` and `fullText`; Exa uses `summary` for result summaries, while Tavily and OpenAI Codex use it for a query answer. The remaining filters are specific to each provider:
 
-| Provider    | Domain filters   | Source values           | Category values                              | Date bounds |
-| ----------- | ---------------- | ----------------------- | -------------------------------------------- | ----------- |
-| Brave       | none             | none                    | none                                         | none        |
-| Context.dev | include, exclude | none                    | none                                         | none        |
-| Exa         | include, exclude | none                    | forwarded as given                           | start, end  |
-| Firecrawl   | include, exclude | `web`, `news`, `images` | `research`, `pdf`, `developer`               | none        |
-| Jina        | include          | none                    | `web`, `images`, `news`                      | none        |
-| Mojeek      | include, exclude | none                    | none                                         | start, end  |
-| SearXNG     | none             | none                    | forwarded as given                           | none        |
-| SerpAPI     | none             | none                    | none                                         | none        |
-| SerpBase    | none             | none                    | `image`, `images`, `news`, `video`, `videos` | none        |
-| Tavily      | include, exclude | none                    | none                                         | none        |
-| TinyFish    | include, exclude | none                    | `news`, `research_paper`                     | start, end  |
+| Provider     | Domain filters   | Source values           | Category values                              | Date bounds |
+| ------------ | ---------------- | ----------------------- | -------------------------------------------- | ----------- |
+| Brave        | none             | none                    | none                                         | none        |
+| Context.dev  | include, exclude | none                    | none                                         | none        |
+| Exa          | include, exclude | none                    | forwarded as given                           | start, end  |
+| Firecrawl    | include, exclude | `web`, `news`, `images` | `research`, `pdf`, `developer`               | none        |
+| Jina         | include          | none                    | `web`, `images`, `news`                      | none        |
+| Mojeek       | include, exclude | none                    | none                                         | start, end  |
+| OpenAI Codex | none             | none                    | none                                         | none        |
+| SearXNG      | none             | none                    | forwarded as given                           | none        |
+| SerpAPI      | none             | none                    | none                                         | none        |
+| SerpBase     | none             | none                    | `image`, `images`, `news`, `video`, `videos` | none        |
+| Tavily       | include, exclude | none                    | none                                         | none        |
+| TinyFish     | include, exclude | none                    | `news`, `research_paper`                     | start, end  |
 
 Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
 
