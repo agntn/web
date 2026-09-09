@@ -22,6 +22,7 @@ export type {
   ReadOptions,
   ProviderConfig,
   CodexConfig,
+  CodexAuthSource,
   CodexCredentials,
   CodexCredentialRequest,
   CodexCredentialProvider,
@@ -87,6 +88,8 @@ export {
 } from "./core/errors.ts";
 
 export { Client, defaultClient } from "./core/client.ts";
+export { withCodexHostAuth } from "./core/codex-auth.ts";
+export type { CodexHostAuth } from "./core/codex-auth.ts";
 
 export {
   register,

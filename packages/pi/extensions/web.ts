@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type, type Static } from "typebox";
+import { Type } from "typebox";
 import {
   createViewportText,
   formatProviderCapabilities,
@@ -273,8 +273,6 @@ const readParameters = Type.Object({
 
 const emptyParameters = Type.Object({});
 
-type EmptyParams = Static<typeof emptyParameters>;
-
 function statusRenderers(name: WebToolName) {
   return {
     renderCall(args: unknown, theme: Readonly<StatusTheme>, context: Readonly<RenderOptions>) {
@@ -320,164 +318,180 @@ export default function webExtension(pi: ExtensionAPI) {
     ],
     parameters: searchParameters,
     ...statusRenderers("web_search"),
-    async execute(_toolCallId, params, signal): Promise<AgentToolResult<SearchDetails>> {
+    async execute(
+      _toolCallId,
+      params,
+      signal,
+      _onUpdate,
+      ctx,
+    ): Promise<AgentToolResult<SearchDetails>> {
       const web = await loadWeb();
-      const providerName = normalizeSearchProviderInput(params.provider, web.searchProviders());
-      const searchOptions: SearchPageOptions = stripUndefined({
-        maxResults: params.maxResults,
-        continuation: params.continuation,
-        highlights: params.highlights,
-        summary: params.summary,
-        fullText: params.fullText,
-        includeDomains: params.includeDomains,
-        excludeDomains: params.excludeDomains,
-        sources: params.sources,
-        categories: params.categories,
-        category: params.category,
-        startPublishedDate: params.startPublishedDate,
-        endPublishedDate: params.endPublishedDate,
-      });
-      const executionOptions = { ...searchOptions, signal };
+      return web.withCodexHostAuth(
+        ctx?.modelRegistry?.authStorage,
+        async () => {
+          const providerName = normalizeSearchProviderInput(params.provider, web.searchProviders());
+          const searchOptions: SearchPageOptions = stripUndefined({
+            maxResults: params.maxResults,
+            continuation: params.continuation,
+            highlights: params.highlights,
+            summary: params.summary,
+            fullText: params.fullText,
+            includeDomains: params.includeDomains,
+            excludeDomains: params.excludeDomains,
+            sources: params.sources,
+            categories: params.categories,
+            category: params.category,
+            startPublishedDate: params.startPublishedDate,
+            endPublishedDate: params.endPublishedDate,
+          });
+          const executionOptions = { ...searchOptions, signal };
 
-      if (Array.isArray(params.query)) {
-        const outcomes = await web.searchBatch(params.query, {
-          provider: providerName,
-          ...executionOptions,
-        });
-        return {
-          content: [{ type: "text", text: formatSearchBatch(outcomes) }],
-          details: {
-            mode: "batch",
-            queries: params.query,
-            provider: providerName,
-            options: searchOptions,
-            outcomes,
-          },
-        };
-      }
+          if (Array.isArray(params.query)) {
+            const outcomes = await web.searchBatch(params.query, {
+              provider: providerName,
+              ...executionOptions,
+            });
+            return {
+              content: [{ type: "text", text: formatSearchBatch(outcomes) }],
+              details: {
+                mode: "batch",
+                queries: params.query,
+                provider: providerName,
+                options: searchOptions,
+                outcomes,
+              },
+            };
+          }
 
-      const query = params.query.trim();
-      if (!query) {
-        throw new Error("Query cannot be empty");
-      }
-      if (providerName === "all") {
-        const response = await web.searchAllDetailed(query, executionOptions);
-        const results = response.results;
-        const header = buildHeader({
-          mode: "all",
-          query,
-          count: results.length,
-          successfulProviders: response.successfulProviders,
-          errCount: response.errors.length,
-        });
-        const result: AgentToolResult<SearchDetails> = {
-          content: [
-            {
-              type: "text",
-              text: withHeader(
-                header,
-                formatAllResults(
-                  results,
-                  response.errors,
-                  response.filterReports,
-                  response.providerPagination,
-                  response.providerMetadata ?? [],
-                ),
-              ),
-            },
-          ],
-          details: {
-            mode: "all",
-            query,
-            options: searchOptions,
-            count: results.length,
-            results,
-            successfulProviders: response.successfulProviders,
-            errors: response.errors.map((e) => ({
-              provider: e.provider,
-              error: e.error.message,
-            })),
-            filterReports: response.filterReports,
-            providerPagination: response.providerPagination,
-            ...(response.providerMetadata === undefined
-              ? {}
-              : { providerMetadata: response.providerMetadata }),
-          },
-        };
-        return result;
-      }
+          const query = params.query.trim();
+          if (!query) {
+            throw new Error("Query cannot be empty");
+          }
+          if (providerName === "all") {
+            const response = await web.searchAllDetailed(query, executionOptions);
+            const results = response.results;
+            const header = buildHeader({
+              mode: "all",
+              query,
+              count: results.length,
+              successfulProviders: response.successfulProviders,
+              errCount: response.errors.length,
+            });
+            const result: AgentToolResult<SearchDetails> = {
+              content: [
+                {
+                  type: "text",
+                  text: withHeader(
+                    header,
+                    formatAllResults(
+                      results,
+                      response.errors,
+                      response.filterReports,
+                      response.providerPagination,
+                      response.providerMetadata ?? [],
+                    ),
+                  ),
+                },
+              ],
+              details: {
+                mode: "all",
+                query,
+                options: searchOptions,
+                count: results.length,
+                results,
+                successfulProviders: response.successfulProviders,
+                errors: response.errors.map((e) => ({
+                  provider: e.provider,
+                  error: e.error.message,
+                })),
+                filterReports: response.filterReports,
+                providerPagination: response.providerPagination,
+                ...(response.providerMetadata === undefined
+                  ? {}
+                  : { providerMetadata: response.providerMetadata }),
+              },
+            };
+            return result;
+          }
 
-      if (providerName !== undefined) {
-        const response = await web.searchProviderDetailed(providerName, query, executionOptions);
-        const header = buildHeader({
-          mode: "single",
-          provider: providerName,
-          query,
-          count: response.results.length,
-          autoSelected: false,
-          ignoredFilters: response.ignoredFilters,
-          undeclaredFilters: response.undeclaredFilters,
-        });
-        return {
-          content: [
-            {
-              type: "text",
-              text: withHeader(
-                header,
-                formatSingleResults(response.results, response.pagination, response.metadata),
-              ),
-            },
-          ],
-          details: {
+          if (providerName !== undefined) {
+            const response = await web.searchProviderDetailed(
+              providerName,
+              query,
+              executionOptions,
+            );
+            const header = buildHeader({
+              mode: "single",
+              provider: providerName,
+              query,
+              count: response.results.length,
+              autoSelected: false,
+              ignoredFilters: response.ignoredFilters,
+              undeclaredFilters: response.undeclaredFilters,
+            });
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: withHeader(
+                    header,
+                    formatSingleResults(response.results, response.pagination, response.metadata),
+                  ),
+                },
+              ],
+              details: {
+                mode: "single",
+                query,
+                provider: providerName,
+                options: searchOptions,
+                count: response.results.length,
+                results: response.results,
+                ignoredFilters: response.ignoredFilters,
+                undeclaredFilters: response.undeclaredFilters,
+                pagination: response.pagination,
+                ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
+              },
+            };
+          }
+
+          const response = await web.searchWithFallback(query, executionOptions);
+          const header = buildHeader({
             mode: "single",
+            provider: response.provider,
             query,
-            provider: providerName,
-            options: searchOptions,
             count: response.results.length,
-            results: response.results,
+            autoSelected: true,
             ignoredFilters: response.ignoredFilters,
             undeclaredFilters: response.undeclaredFilters,
-            pagination: response.pagination,
-            ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
-          },
-        };
-      }
-
-      const response = await web.searchWithFallback(query, executionOptions);
-      const header = buildHeader({
-        mode: "single",
-        provider: response.provider,
-        query,
-        count: response.results.length,
-        autoSelected: true,
-        ignoredFilters: response.ignoredFilters,
-        undeclaredFilters: response.undeclaredFilters,
-      });
-      return {
-        content: [
-          {
-            type: "text",
-            text: withHeader(
-              header,
-              formatSingleResults(response.results, response.pagination, response.metadata),
-            ),
-          },
-        ],
-        details: {
-          mode: "single",
-          query,
-          provider: response.provider,
-          options: searchOptions,
-          count: response.results.length,
-          results: response.results,
-          ignoredFilters: response.ignoredFilters,
-          undeclaredFilters: response.undeclaredFilters,
-          pagination: response.pagination,
-          attempts: response.attempts,
-          failures: response.failures,
-          ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
+          });
+          return {
+            content: [
+              {
+                type: "text",
+                text: withHeader(
+                  header,
+                  formatSingleResults(response.results, response.pagination, response.metadata),
+                ),
+              },
+            ],
+            details: {
+              mode: "single",
+              query,
+              provider: response.provider,
+              options: searchOptions,
+              count: response.results.length,
+              results: response.results,
+              ignoredFilters: response.ignoredFilters,
+              undeclaredFilters: response.undeclaredFilters,
+              pagination: response.pagination,
+              attempts: response.attempts,
+              failures: response.failures,
+              ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
+            },
+          };
         },
-      };
+        ctx?.sessionManager?.getSessionId(),
+      );
     },
   });
 
@@ -601,9 +615,11 @@ export default function webExtension(pi: ExtensionAPI) {
     parameters: emptyParameters,
     ...statusRenderers("web_providers"),
     async execute(
-      _toolCallId: string,
-      _params: EmptyParams,
-      signal: Readonly<AbortSignal> | undefined,
+      _toolCallId,
+      _params,
+      signal,
+      _onUpdate,
+      ctx,
     ): Promise<
       AgentToolResult<{
         readonly runtime: RuntimeInfo;
@@ -612,36 +628,49 @@ export default function webExtension(pi: ExtensionAPI) {
       }>
     > {
       const web = await loadWeb();
-      const statuses = await web.listProvidersAsync({ signal });
-      const lines = statuses.map((s) => formatProviderStatus(s));
-      const runtimeLine = `web ${web.runtimeInfo.version} build ${web.runtimeInfo.buildId}, started ${web.runtimeInfo.processStartedAt}`;
-      const readLimit = web.packageCapabilities.read.outputLimit;
-      const searchContinuation = web.packageCapabilities.search.continuation;
-      const packageLine = `search continuation=${searchContinuation.option} (${searchContinuation.scope}); portable read content: ${readLimit.option} defaults to ${readLimit.agentDefault}, max ${readLimit.agentMaximum}; continuation=${web.packageCapabilities.read.continuation.option}`;
-      return {
-        content: [
-          {
-            type: "text",
-            text: [
-              runtimeLine,
-              packageLine,
-              ...(lines.length > 0 ? lines : ["No providers registered."]),
-            ].join("\n"),
-          },
-        ],
-        details: {
-          runtime: web.runtimeInfo,
-          packageCapabilities: web.packageCapabilities,
-          providers: statuses,
+      return web.withCodexHostAuth(
+        ctx?.modelRegistry?.authStorage,
+        async () => {
+          const statuses = await web.listProvidersAsync({ signal });
+          const lines = statuses.map((s) => formatProviderStatus(s));
+          const runtimeLine = `web ${web.runtimeInfo.version} build ${web.runtimeInfo.buildId}, started ${web.runtimeInfo.processStartedAt}`;
+          const readLimit = web.packageCapabilities.read.outputLimit;
+          const searchContinuation = web.packageCapabilities.search.continuation;
+          const packageLine = `search continuation=${searchContinuation.option} (${searchContinuation.scope}); portable read content: ${readLimit.option} defaults to ${readLimit.agentDefault}, max ${readLimit.agentMaximum}; continuation=${web.packageCapabilities.read.continuation.option}`;
+          return {
+            content: [
+              {
+                type: "text",
+                text: [
+                  runtimeLine,
+                  packageLine,
+                  ...(lines.length > 0 ? lines : ["No providers registered."]),
+                ].join("\n"),
+              },
+            ],
+            details: {
+              runtime: web.runtimeInfo,
+              packageCapabilities: web.packageCapabilities,
+              providers: statuses,
+            },
+          };
         },
-      };
+        ctx?.sessionManager?.getSessionId(),
+      );
     },
   });
 
   pi.registerCommand("web", {
     description: "Search the web: /web [query]",
     handler: async (args, ctx) => {
-      if (ctx.hasUI) await runWebCommand(args, ctx.ui);
+      const web = await loadWeb();
+      await web.withCodexHostAuth(
+        ctx.modelRegistry?.authStorage,
+        async () => {
+          if (ctx.hasUI) await runWebCommand(args, ctx.ui);
+        },
+        ctx.sessionManager?.getSessionId(),
+      );
     },
   });
 
@@ -649,7 +678,11 @@ export default function webExtension(pi: ExtensionAPI) {
     description: "List configured web providers",
     handler: async (_args, ctx) => {
       const web = await loadWeb();
-      const statuses = await web.listProvidersAsync();
+      const statuses = await web.withCodexHostAuth(
+        ctx.modelRegistry?.authStorage,
+        () => web.listProvidersAsync(),
+        ctx.sessionManager?.getSessionId(),
+      );
       if (!ctx.hasUI) return;
       ctx.ui.notify(statuses.map(formatProviderStatus).join("\n"), "info");
     },

@@ -161,7 +161,7 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     label: "OpenAI Codex",
     icon: "i-lucide-search",
     envVar: "OPENAI_CODEX_ACCESS_TOKEN",
-    auth: "OAuth Bearer plus OPENAI_CODEX_ACCOUNT_ID",
+    auth: "Existing Pi, OMP, Codex or OpenCode OAuth login",
     host: "chatgpt.com/backend-api/codex/responses",
     freeTier: "Codex account access and usage limits",
     search: true,

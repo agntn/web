@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import * as ompTypebox from "@oh-my-pi/omptype/typebox";
 import type { ExtensionAPI, Theme, ToolDefinition } from "@oh-my-pi/pi-coding-agent";
@@ -217,6 +219,45 @@ describe("OMP extension", () => {
       ]);
       expect(renderedText(rendered)).toContain("found 2 results");
     } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("uses the calling host login without exported tokens", async () => {
+    const home = mkdtempSync(join(tmpdir(), "web-host-auth-"));
+    customProviderCleanups.push(() => rmSync(home, { recursive: true, force: true }));
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
+    vi.stubEnv("OPENAI_CODEX_AUTH_SOURCE", "auto");
+    vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", "");
+    vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", "");
+    let resolutions = 0;
+    vi.stubGlobal("fetch", async () => sse(completedEvents()));
+    try {
+      const search = requiredTool(captureOmpExtension().tools, "web_search");
+      const ctx = {
+        modelRegistry: {
+          authStorage: {
+            hasOAuth: () => true,
+            getOAuthAccess: async () => {
+              resolutions += 1;
+              return { accessToken: "native-test-token", accountId: "native-test-account" };
+            },
+          },
+        },
+        sessionManager: { getSessionId: () => "host-session" },
+      };
+      const result: unknown = await Reflect.apply(search.execute, search, [
+        "host-test",
+        { query: "public query", provider: "openai-codex" },
+        undefined,
+        undefined,
+        ctx,
+      ]);
+      expect(resolutions).toBe(1);
+      expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
+    } finally {
+      vi.unstubAllGlobals();
       vi.unstubAllEnvs();
     }
   });

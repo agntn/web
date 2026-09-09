@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import stringWidth from "string-width";
@@ -146,6 +148,46 @@ describe("Pi extension", () => {
       expect(content).toContain("https://example.com/");
       expect(content).toContain("Generated answer with a citation.");
       expect(content).not.toContain("test-token");
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("uses the calling host login without exported tokens", async () => {
+    const home = mkdtempSync(join(tmpdir(), "web-host-auth-"));
+    customProviderCleanups.push(() => rmSync(home, { recursive: true, force: true }));
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
+    vi.stubEnv("OPENAI_CODEX_AUTH_SOURCE", "auto");
+    vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", "");
+    vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", "");
+    let resolutions = 0;
+    vi.stubGlobal("fetch", async () => sse(completedEvents()));
+    try {
+      const search = captureTools().get("web_search");
+      if (!search) throw new Error("Missing search tool");
+      const ctx = {
+        modelRegistry: {
+          authStorage: {
+            get: () => ({ type: "oauth", accountId: "native-test-account" }),
+            getApiKey: async () => {
+              resolutions += 1;
+              return "native-test-token";
+            },
+          },
+        },
+        sessionManager: { getSessionId: () => "host-session" },
+      };
+      const result: unknown = await Reflect.apply(search.execute, search, [
+        "host-test",
+        { query: "public query", provider: "openai-codex" },
+        undefined,
+        undefined,
+        ctx,
+      ]);
+      expect(resolutions).toBe(1);
+      expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();

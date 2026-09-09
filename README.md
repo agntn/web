@@ -31,7 +31,7 @@ Provided slash commands:
 - `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
 - `/web-providers` - show provider configuration, reachability, and capability details
 
-OpenAI Codex search also works through both extensions with `OPENAI_CODEX_ACCESS_TOKEN` and `OPENAI_CODEX_ACCOUNT_ID`. They do not read host login files.
+OpenAI Codex search reuses the invoking Pi or OMP login and its native token resolver. Outside a host, it detects saved Codex, Pi, OMP and OpenCode OAuth logins. No manual token export is needed.
 
 Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Pi sends rich search fields with a cap for each result and includes provider metadata without expanding the TUI. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
 
@@ -86,12 +86,14 @@ const exa = create("exa", { apiKey: "your-key-here" });
 Use the hosted web search tool through a ChatGPT Codex login. This is an experimental backend adapter. It does not use an OpenAI API key.
 
 ```bash
-export OPENAI_CODEX_ACCESS_TOKEN="your-oauth-access-token"
-export OPENAI_CODEX_ACCOUNT_ID="your-chatgpt-account-id"
 web search "Node.js release notes" --provider openai-codex --json
 ```
 
-Application code can supply a fixed pair or a credential callback:
+Log in with Pi, OMP, Codex or OpenCode, then run the command. In Pi/OMP tools, the current host owns refresh. Standalone commands read usable saved access tokens without changing login files or rotating their refresh tokens. If every saved token is expired, open its owning client to refresh the login.
+
+Set `codex.authSource` or `OPENAI_CODEX_AUTH_SOURCE` to `codex`, `pi`, `omp` or `opencode` to choose one store, `none` to disable automatic auth, or `auto` for the default. Automatic selection prefers the invoking host, then saved Codex, Pi, OMP and OpenCode logins. OMP SQLite discovery uses the optional Node `node:sqlite` builtin.
+
+Explicit `codex.credentials` overrides everything. Next are `OPENAI_CODEX_ACCESS_TOKEN` and optional `OPENAI_CODEX_ACCOUNT_ID`; the account ID can come from the token claim. Application code can also supply a credential callback:
 
 ```typescript
 import { createSearchProvider, type CodexCredentialProvider } from "@agntn/web";
@@ -101,11 +103,11 @@ export function createCodexSearch(credentials: CodexCredentialProvider) {
 }
 ```
 
-The callback receives `{ refresh, signal }` and returns `{ accessToken, accountId }`, optionally through a promise. It runs before each search and once more with `refresh: true` after an authentication rejection. The caller owns login, expiry checks, storage and concurrent refresh coordination. Environment credentials are not refreshed. No OMP or Codex auth files are read or modified.
+The callback receives `{ refresh, signal }` and returns `{ accessToken, accountId }`, optionally through a promise. It runs before each search and once more with `refresh: true` after an authentication rejection. The caller owns login, expiry checks, storage and concurrent refresh coordination. Environment credentials are not refreshed. Saved-login discovery is read-only; native Pi/OMP resolvers own any refresh and persistence.
 
 Only native search sources and citation annotations become results. `snippet` stays empty because the generated answer is not a page excerpt. Request `summary: true` through a detailed search helper to include that answer in `metadata.answer`. Results default to 10 and are capped locally at 100. No paging, portable filters or URL reading.
 
-The default model is `gpt-5.5`, overridable by `codex.model` or `OPENAI_CODEX_MODEL`. A search is limited to 90 seconds. OAuth credentials only go to the fixed ChatGPT endpoint, never a custom base URL or a redirect. Both environment credentials are required for `auto` and `all`; a callback passed to an instance does not configure those global flows.
+The default model is `gpt-5.5`, overridable by `codex.model` or `OPENAI_CODEX_MODEL`. A search is limited to 90 seconds. OAuth credentials only go to the fixed ChatGPT endpoint, never a custom base URL or a redirect. `auto`, `all` and provider discovery recognize saved logins and scoped host auth. A callback passed to an instance stays local to that instance.
 
 [Codex setup and limitations](./docs/content/2.providers/12.openai-codex.md).
 
@@ -400,20 +402,20 @@ The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`
 
 ## Providers
 
-| Provider     | Env var                                                 | Auth               | Free tier                              |
-| ------------ | ------------------------------------------------------- | ------------------ | -------------------------------------- |
-| Brave        | `BRAVE_API_KEY`                                         | Header             | 2k queries/mo                          |
-| Context.dev  | `CONTEXT_DEV_API_KEY`                                   | Bearer header      | Credit-based free tier                 |
-| Exa          | `EXA_API_KEY`                                           | Header             | 1k queries/mo                          |
-| Firecrawl    | `FIRECRAWL_API_KEY`                                     | Bearer header      | Credit-based free tier                 |
-| Jina         | `JINA_API_KEY`                                          | Bearer header      | Required for search; optional for read |
-| Mojeek       | `MOJEEK_API_KEY`                                        | Query param        | Limited free trial                     |
-| OpenAI Codex | `OPENAI_CODEX_ACCESS_TOKEN` + `OPENAI_CODEX_ACCOUNT_ID` | OAuth Bearer       | Codex account access and usage limits  |
-| SearXNG      | -                                                       | None               | Self-hosted                            |
-| SerpAPI      | `SERPAPI_API_KEY`                                       | Query param        | 100 queries/mo; Google Lens supported  |
-| SerpBase     | `SERPBASE_API_KEY`                                      | `X-API-Key` header | 100 searches to start                  |
-| Tavily       | `TAVILY_API_KEY`                                        | Body               | 1k queries/mo                          |
-| TinyFish     | `TINYFISH_API_KEY`                                      | `X-API-Key` header | Free at $0; Search access required     |
+| Provider     | Env var                                              | Auth               | Free tier                              |
+| ------------ | ---------------------------------------------------- | ------------------ | -------------------------------------- |
+| Brave        | `BRAVE_API_KEY`                                      | Header             | 2k queries/mo                          |
+| Context.dev  | `CONTEXT_DEV_API_KEY`                                | Bearer header      | Credit-based free tier                 |
+| Exa          | `EXA_API_KEY`                                        | Header             | 1k queries/mo                          |
+| Firecrawl    | `FIRECRAWL_API_KEY`                                  | Bearer header      | Credit-based free tier                 |
+| Jina         | `JINA_API_KEY`                                       | Bearer header      | Required for search; optional for read |
+| Mojeek       | `MOJEEK_API_KEY`                                     | Query param        | Limited free trial                     |
+| OpenAI Codex | Existing login; optional `OPENAI_CODEX_ACCESS_TOKEN` | OAuth Bearer       | Codex account access and usage limits  |
+| SearXNG      | -                                                    | None               | Self-hosted                            |
+| SerpAPI      | `SERPAPI_API_KEY`                                    | Query param        | 100 queries/mo; Google Lens supported  |
+| SerpBase     | `SERPBASE_API_KEY`                                   | `X-API-Key` header | 100 searches to start                  |
+| Tavily       | `TAVILY_API_KEY`                                     | Body               | 1k queries/mo                          |
+| TinyFish     | `TINYFISH_API_KEY`                                   | `X-API-Key` header | Free at $0; Search access required     |
 
 ### Result shape
 

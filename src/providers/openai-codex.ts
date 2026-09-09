@@ -8,6 +8,13 @@ import {
   normalizeError,
 } from "../core/errors.ts";
 import { operationSignal } from "../core/execution.ts";
+import {
+  codexAuthSource,
+  hasCodexLogin,
+  nativeCodexCredentials,
+  resolveCodexCredentials,
+  type ResolvedCodexCredentials,
+} from "../core/codex-auth.ts";
 import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { register } from "../core/registry.ts";
 import type {
@@ -120,16 +127,23 @@ class OpenAICodexProvider extends Provider {
         "openai-codex",
       );
     }
-    const credentials = config.codex?.credentials ?? environmentCredentials(config.apiKey);
+    const credentials = configuredCredentials(config);
     this.#credentials =
-      typeof credentials === "function" ? credentials : parseCredentials(credentials);
+      typeof credentials === "function" ? credentials : resolveCodexCredentials(credentials);
     this.#model = configuredModel(config);
     if (!this.#model.trim()) throw new TypeError("Codex model must not be empty");
   }
 
   static isConfigured(): boolean {
-    const credentials = environmentCredentials();
-    return validHeaderValue(credentials.accessToken) && validHeaderValue(credentials.accountId);
+    try {
+      if (hasEnvironmentCredentials()) {
+        resolveCodexCredentials(environmentCredentials());
+        return true;
+      }
+      return hasCodexLogin(codexAuthSource());
+    } catch {
+      return false;
+    }
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
@@ -176,11 +190,11 @@ class OpenAICodexProvider extends Provider {
   private async resolveCredentials(
     refresh: boolean,
     signal: Readonly<AbortSignal>,
-  ): Promise<CodexCredentials> {
+  ): Promise<ResolvedCodexCredentials> {
     signal.throwIfAborted();
-    if (typeof this.#credentials !== "function") return this.#credentials;
+    if (typeof this.#credentials !== "function") return resolveCodexCredentials(this.#credentials);
     try {
-      return parseCredentials(await awaitCredentials(this.#credentials, refresh, signal));
+      return resolveCodexCredentials(await awaitCredentials(this.#credentials, refresh, signal));
     } catch {
       signal.throwIfAborted();
       throw new AuthError(
@@ -192,7 +206,7 @@ class OpenAICodexProvider extends Provider {
 
   private async runSearch(
     query: string,
-    credentials: Readonly<CodexCredentials>,
+    credentials: ResolvedCodexCredentials,
     maxResults: number,
     summary: boolean,
     signal: Readonly<AbortSignal>,
@@ -229,25 +243,22 @@ class OpenAICodexProvider extends Provider {
 function environmentCredentials(
   accessToken = process.env.OPENAI_CODEX_ACCESS_TOKEN,
 ): CodexCredentials {
-  return { accessToken: accessToken ?? "", accountId: process.env.OPENAI_CODEX_ACCOUNT_ID ?? "" };
+  return {
+    accessToken: accessToken ?? "",
+    accountId: process.env.OPENAI_CODEX_ACCOUNT_ID || undefined,
+  };
 }
 
-function validHeaderValue(value: unknown): value is string {
-  return typeof value === "string" && /^[!-~]+$/u.test(value);
+function hasEnvironmentCredentials(): boolean {
+  return Boolean(process.env.OPENAI_CODEX_ACCESS_TOKEN || process.env.OPENAI_CODEX_ACCOUNT_ID);
 }
 
-function parseCredentials(credentials: Readonly<CodexCredentials>): CodexCredentials {
-  if (
-    !credentials ||
-    !validHeaderValue(credentials.accessToken) ||
-    !validHeaderValue(credentials.accountId)
-  ) {
-    throw new AuthError(
-      "Set OPENAI_CODEX_ACCESS_TOKEN and OPENAI_CODEX_ACCOUNT_ID, or supply codex.credentials",
-      "openai-codex",
-    );
-  }
-  return { accessToken: credentials.accessToken, accountId: credentials.accountId };
+function configuredCredentials(
+  config: Readonly<ProviderConfig>,
+): CodexCredentials | CodexCredentialProvider {
+  if (config.codex?.credentials !== undefined) return config.codex.credentials;
+  if (config.apiKey || hasEnvironmentCredentials()) return environmentCredentials(config.apiKey);
+  return nativeCodexCredentials(codexAuthSource(config.codex?.authSource));
 }
 
 /**
