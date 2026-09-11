@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.5.3
+
+[compare changes](https://github.com/agntn/web/compare/v0.5.2...v0.5.3)
+
+### 🚀 Enhancements
+
+- **cli:** Bring search to API parity ([#118](https://github.com/agntn/web/pull/118))
+- Make registered providers available to agents ([#122](https://github.com/agntn/web/pull/122))
+- **search:** Expose rich content controls ([#123](https://github.com/agntn/web/pull/123))
+- Expose complete provider capabilities ([#124](https://github.com/agntn/web/pull/124))
+- **read:** Add portable output limits and continuation ([#125](https://github.com/agntn/web/pull/125))
+- Paginate search results ([#126](https://github.com/agntn/web/pull/126))
+- Add execution budgets to web operations ([#127](https://github.com/agntn/web/pull/127))
+- Use Codex logins for web search ([#135](https://github.com/agntn/web/pull/135))
+
+### 🩹 Fixes
+
+- **pi:** Keep rich fields in model output ([#119](https://github.com/agntn/web/pull/119))
+- Fall back on transient provider failures ([#120](https://github.com/agntn/web/pull/120))
+- **search:** Preserve provenance when URLs merge ([#121](https://github.com/agntn/web/pull/121))
+- **client:** Redact secrets in embedded URLs ([#129](https://github.com/agntn/web/pull/129))
+- **context:** Allow fallback after credit exhaustion ([#131](https://github.com/agntn/web/pull/131))
+- **client:** Apply the timeout to cancellable requests ([#132](https://github.com/agntn/web/pull/132))
+- Continue automatic search past Tavily and SerpBase usage limits ([#133](https://github.com/agntn/web/pull/133))
+- **client:** Name the transport failure behind HTTP 0 ([#134](https://github.com/agntn/web/pull/134))
+- **firecrawl:** News hits lose the passage behind a thumbnail ([#137](https://github.com/agntn/web/pull/137))
+
+### 📖 Documentation
+
+- Build web.agntn.dev on Docus and Workers ([#128](https://github.com/agntn/web/pull/128))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.5.2
 
 [compare changes](https://github.com/agntn/web/compare/v0.5.1...v0.5.2)
