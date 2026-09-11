@@ -294,6 +294,53 @@ describe("firecrawl provider", () => {
       expect(results).toHaveLength(5);
     });
 
+    it("keeps news snippets when a thumbnail is present", async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {
+          news: [
+            {
+              title: "News Result",
+              snippet: "## Relevant news passage",
+              url: "https://example.com/news",
+              date: "3 hours ago",
+              imageUrl: "https://example.com/thumb.jpg",
+              position: 1,
+            },
+          ],
+          images: [
+            {
+              title: "Image Result",
+              url: "https://example.com/page",
+              imageUrl: "https://example.com/full.jpg",
+              imageWidth: 100,
+              imageHeight: 80,
+            },
+          ],
+        },
+      });
+
+      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const results = await provider.search("test query", { sources: ["news", "images"] });
+
+      expect(results).toEqual([
+        {
+          title: "News Result",
+          url: "https://example.com/news",
+          snippet: "## Relevant news passage",
+          publishedDate: "3 hours ago",
+          image: "https://example.com/thumb.jpg",
+        },
+        {
+          title: "Image Result",
+          url: "https://example.com/page",
+          snippet: "",
+          image: "https://example.com/full.jpg",
+          metadata: { imageWidth: 100, imageHeight: 80 },
+        },
+      ]);
+    });
+
     it("maps image source results", async () => {
       mockPostJSON.mockResolvedValueOnce({
         success: true,

@@ -23,6 +23,8 @@ interface FirecrawlWebResult extends FirecrawlSearchResult {
 
 interface FirecrawlNewsResult extends FirecrawlSearchResult {
   readonly snippet: string;
+  readonly date?: string;
+  readonly imageUrl?: string;
 }
 
 interface FirecrawlImageResult {
@@ -186,9 +188,11 @@ function mapSearchResponse(
   const images = response.data?.images ?? [];
   const metadata = searchMetadata(response);
   return {
-    results: [...web, ...news, ...images]
-      .slice(0, clampMaxResults(maxResults))
-      .map(mapSearchResult),
+    results: [
+      ...web.map(mapWebResult),
+      ...news.map(mapNewsResult),
+      ...images.map(mapImageResult),
+    ].slice(0, clampMaxResults(maxResults)),
     ...(Object.keys(metadata).length === 0 ? {} : { metadata }),
   };
 }
@@ -242,23 +246,33 @@ function normalizeFormat(format?: string): "markdown" | "html" {
   return "markdown";
 }
 
-function mapSearchResult(
-  result: FirecrawlWebResult | FirecrawlNewsResult | FirecrawlImageResult,
-): SearchResult {
-  if ("imageUrl" in result) {
-    return {
-      url: result.url,
-      title: result.title,
-      snippet: "",
-      image: result.imageUrl,
-      metadata: { imageWidth: result.imageWidth, imageHeight: result.imageHeight },
-    };
-  }
+function mapWebResult(result: FirecrawlWebResult): SearchResult {
   return {
     url: result.url,
     title: result.title,
-    snippet: "description" in result ? result.description : result.snippet,
+    snippet: result.description,
     text: result.markdown,
+  };
+}
+
+function mapNewsResult(result: FirecrawlNewsResult): SearchResult {
+  return {
+    url: result.url,
+    title: result.title,
+    snippet: result.snippet,
+    publishedDate: result.date,
+    image: result.imageUrl,
+    text: result.markdown,
+  };
+}
+
+function mapImageResult(result: FirecrawlImageResult): SearchResult {
+  return {
+    url: result.url,
+    title: result.title,
+    snippet: "",
+    image: result.imageUrl,
+    metadata: { imageWidth: result.imageWidth, imageHeight: result.imageHeight },
   };
 }
 
