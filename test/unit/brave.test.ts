@@ -112,6 +112,14 @@ describe("brave provider", () => {
       expect(url).toContain("count=5");
     });
 
+    it("requests extra snippets so Brave can populate text", async () => {
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      await provider.search("test query");
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(url).toContain("extra_snippets=true");
+    });
+
     it("returns empty array when web.results is undefined", async () => {
       mockGetJSON.mockResolvedValueOnce({
         web: undefined,
@@ -144,6 +152,26 @@ describe("brave provider", () => {
       const results = await provider.search("query");
 
       expect(results[0].text).toBe("Snippet 1\nSnippet 2\nSnippet 3");
+    });
+
+    it("omits text when extra_snippets is missing or empty", async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        web: {
+          results: [
+            {
+              title: "Test",
+              url: "https://example.com",
+              description: "Description",
+              extra_snippets: [],
+            },
+          ],
+        },
+      });
+
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const results = await provider.search("query");
+
+      expect(results[0].text).toBeUndefined();
     });
   });
 });

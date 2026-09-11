@@ -94,7 +94,7 @@ function braveSearchUrl(
   offset: number,
 ): string {
   const offsetParam = offset === 0 ? "" : `&offset=${offset}`;
-  return `${baseURL}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults ?? 10}${offsetParam}`;
+  return `${baseURL}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults ?? 10}&extra_snippets=true${offsetParam}`;
 }
 
 function braveContinuation(
@@ -117,8 +117,13 @@ function mapResult(result: BraveResult): SearchResult {
     title: result.title,
     snippet: result.description,
     favicon: result.meta_url?.favicon,
-    text: result.extra_snippets ? result.extra_snippets.join("\n") : undefined,
+    text: extraSnippetText(result.extra_snippets),
   };
+}
+
+function extraSnippetText(snippets?: readonly string[]): string | undefined {
+  const parts = snippets?.filter((snippet) => snippet.length > 0) ?? [];
+  return parts.length > 0 ? parts.join("\n") : undefined;
 }
 
 register(BraveProvider);
