@@ -735,7 +735,10 @@ describe("Pi extension", () => {
         undefined,
         undefined,
         undefined,
-      ]) as Promise<{ readonly details: { readonly result: unknown } }>;
+      ]) as Promise<{
+        readonly content: readonly { readonly text: string }[];
+        readonly details: { readonly result: unknown };
+      }>;
 
     const bounded = await execute({ url: "https://example.com", provider: providerName });
     const requested = await execute({
@@ -748,10 +751,14 @@ describe("Pi extension", () => {
     expect(bounded.details).toMatchObject({ result: { content: "Linked page" } });
     expect(bounded.details.result).not.toHaveProperty("links");
     expect(bounded.details.result).not.toHaveProperty("images");
+    expect(bounded.content[0]?.text).not.toContain("Links");
     expect(requested.details).toMatchObject({
       options: { maxChars: 20_000, links: true, images: true },
       result: { links: page.links, images: page.images },
     });
+    expect(requested.content[0]?.text).toContain(
+      "Linked page\n\nLinks (1):\n  https://example.com/a\n\nImages (1):\n  https://example.com/hero.png",
+    );
   });
 
   it("counts providers whose results were deduplicated from an all search", async () => {
