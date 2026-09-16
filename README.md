@@ -1,629 +1,191 @@
 # @agntn/web
 
-[![npm version](https://img.shields.io/npm/v/%40agntn%2Fweb?style=flat&colorA=130f40&colorB=474787)](https://npmjs.com/package/@agntn/web)
-[![npm downloads](https://img.shields.io/npm/dm/%40agntn%2Fweb?style=flat&colorA=130f40&colorB=474787)](https://npm.chart.dev/@agntn/web)
-[![license](https://img.shields.io/github/license/agntn/web?style=flat&colorA=130f40&colorB=474787)](https://github.com/agntn/web/blob/main/LICENSE)
+[![npm version](https://npmx.dev/api/registry/badge/version/@agntn/web)](https://npmx.dev/package/@agntn/web)
+[![npm downloads](https://npmx.dev/api/registry/badge/downloads/@agntn/web)](https://npmx.dev/package/@agntn/web)
+[![license](https://npmx.dev/api/registry/badge/license/@agntn/web)](https://npmx.dev/package/@agntn/web)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/agntn/web)
 
-One API for Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, OpenAI Codex, Tavily, TinyFish, SerpAPI, SerpBase, and SearXNG. Write your search logic once, swap the provider string, done.
+🔎 Twelve search APIs, one `{ url, title, snippet }`. You ask Exa, Brave or your own SearXNG the same way, you read the page behind a hit the same way, and nobody has to remember whose key goes in which header.
 
-If you're building an AI agent or a CLI tool that needs web search, you don't want to hardcode a single provider's API. They all return roughly the same thing, a list of URLs with titles and snippets, but the auth, endpoints, and response shapes are all different. Exa uses POST with `x-api-key`, Brave uses GET with `X-Subscription-Token`, Jina uses Bearer auth, Tavily puts the key in the request body. And so on.
+## Why?
 
-`@agntn/web` normalizes all of that behind a single interface. Docs and the live explorer: [web.agntn.dev](https://web.agntn.dev). The source lives in [`docs/`](./docs); run `pnpm docs` after `pnpm build` for a local copy. It also ships [AI SDK](https://ai-sdk.dev/) tools and a CLI. Text search is query-to-results, reverse image search is image URL-to-matches, and read is URL-to-content.
+Every search API sells the same thing, ten links with a title and a snippet, and every one of them takes the order differently. Exa wants a POST with `x-api-key`, Brave a GET with `X-Subscription-Token`, Tavily puts the key inside the JSON body, why not. Wire three of those into an agent and you have three clients, three response shapes and three ideas of what a date looks like. So this is one class shape in front of twelve of them, search, read and reverse image search, same objects out no matter who answered.
 
-## Pi and OMP extensions
+Docs and a live explorer: [web.agntn.dev](https://web.agntn.dev).
 
-`@agntn/web` ships the same four tools for [pi](https://pi.dev) and OMP. Pi also gets two slash commands. Install the package straight from GitHub:
+## ✨ Features
 
-```bash
-pi install git:github.com/agntn/web
-```
+- 🧩 **Twelve backends, one contract.** Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, OpenAI Codex, SearXNG, SerpAPI, SerpBase, Tavily and TinyFish, and from your side the difference is a string.
+- 🔎 **Search, read, reverse image.** Query to results, URL to Markdown, image URL to the pages it shows up on. Three calls, not three packages.
+- 🌐 **`all` means all.** One query goes to every provider you have a key for, comes back deduplicated by URL with the UTM junk stripped, and each hit says which providers agreed on it.
+- 🛟 **Fallback you don't write.** Out of credits on Firecrawl, rate limited on SerpAPI? The next configured provider gets the query and the answer names who actually replied.
+- 📏 **Reads have a ceiling.** `maxChars` is exact, counted in code points, and a page that doesn't fit hands you a continuation token instead of 400 kB you didn't ask for.
+- 📄 **Page two exists.** Brave, Mojeek, SearXNG, SerpAPI, SerpBase and TinyFish page through results with an opaque token that stays pinned to the query it came from.
+- 🤖 **One package, six doors.** CLI, library, AI SDK tools, an MCP server, a Pi extension and an OMP extension, and the JSON coming out is the same behind every one.
+- 🔐 **Keys stay out of your logs.** The key is scrubbed from the URL before an error ever gets to say it out loud.
+- 🧠 **Codex search on a login you already have.** Signed into Codex, Pi, OMP or OpenCode? OpenAI web search runs on that, no API key.
 
-Provided tools:
-
-- `web_search` - search one query or a batch of queries with a single provider, or use `provider="all"` for provider fan-out
-- `web_search_image` - find pages containing or resembling an image available by public URL
-- `web_read` - read one URL or a batch of URLs and report the effective reader after fallback
-- `web_providers` - show the running build and process start, then list configuration, reachability, operations, read options, result limits, filters, and rich search fields
-
-Provided slash commands:
-
-- `/web [query]` - quick search from the TUI; results are shown as a selector and the chosen URL is pasted into the editor
-- `/web-providers` - show provider configuration, reachability, and capability details
-
-OpenAI Codex search reuses the invoking Pi or OMP login and its native token resolver. Outside a host, it detects saved Codex, Pi, OMP and OpenCode OAuth logins. No manual token export is needed.
-
-Both extensions reuse the same env vars as the library (`EXA_API_KEY`, `BRAVE_API_KEY`, `CONTEXT_DEV_API_KEY`, `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `MOJEEK_API_KEY`, `TAVILY_API_KEY`, `TINYFISH_API_KEY`, `SERPAPI_API_KEY`, `SERPBASE_API_KEY`, or a self-hosted SearXNG). Their native TUI rows show progress, provider choice, result counts, fallback attempts, and bounded expanded previews without rendering a whole page into the terminal. Pi sends rich search fields with a cap for each result and includes provider metadata without expanding the TUI. Pi and OMP provide their own coding-agent and TUI runtimes, so no extra runtime install is needed.
-
-## Install
+## 📦 Install
 
 ```bash
 pnpm add @agntn/web
 ```
 
-For the AI SDK tool (`@agntn/web/ai` subpath), you also need `ai` and `zod` as peer dependencies:
+Node.js 22 or newer. The AI SDK tools on `@agntn/web/ai` want `ai` and `zod` next to them, the main entry never touches either:
 
 ```bash
 pnpm add ai zod
 ```
 
-## Usage
+## 🚀 First call
 
-Set your API key as an environment variable and create a provider:
+```bash
+npx @agntn/web "how many r in strawberry"
+```
+
+```
+How many 'r's are in strawberry? And do LLMs know how to spell? - DEV Community
+  https://dev.to/savannah_norem/how-many-rs-are-in-strawberry-and-do-llms-know-how-to-spell-2513
+  Well the short answers are three and kind of… but not really. ... Any which way you cut it, there are three ‘r’s in stra...
+
+Language Log » "The cosmic jam from whence it came"
+  https://languagelog.ldc.upenn.edu/nll/?p=66206
+  Elle Cordova offers an update from ChatGPT on the number of Rs in "strawberry": ... As of this morning, ChatGPT 4o gives...
+
+How many r are in strawberry? | AI Roundtable by Opper
+  https://opper.ai/ai-roundtable/questions/how-many-r-are-in-strawberry-fc2d3d2d
+  Answer: There are exactly three "r"s in the word "strawberry". (All 4 models agreed) ... Answer: There are 3 “r” letters...
+```
+
+Three. All four models agreed, good for them ;)
+
+No subcommand, no flags. Anything that isn't `search`, `read`, `search-image`, `providers` or `mcp` is a query. Which provider answered? The first one with a key in your env, checked in this order: Exa, Brave, Context.dev, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, Mojeek, then a saved Codex login, then a SearXNG on `localhost:8080`. No key anywhere means search has nobody to call and says so. `--provider brave` if you'd rather pick.
+
+Reading is different, that one works with nothing in your env:
+
+```bash
+web read https://example.com
+```
+
+```
+[provider=jina requested=auto] read https://example.com/
+Example Domain
+  https://example.com/
+
+This domain is for use in documentation examples without needing permission. Avoid use in operations.
+
+[Learn more](https://iana.org/domains/example)
+```
+
+Reads start at Jina's `r.jina.ai`, which doesn't need a key, and move on to Context.dev, Firecrawl or TinyFish when Jina is out of credit, rate limited, down or answers with its 409. The first line tells you who ended up doing the work.
+
+A handful more, keys permitting:
+
+```bash
+web search "typescript 7" "node.js 26" --provider all --json
+web search "rust 2027 edition" --provider brave --max-results 3
+web search "typescript 7" --provider exa --summary --full-text
+web search "typescript 7" --include-domains github.com --start-published-date 2026-01-01
+web read https://example.com --format markdown --max-chars 20000 --json
+web search-image https://example.com/image.jpg --max-results 5
+web providers
+```
+
+### Commands
+
+| Command                  | What it does                                  | Example                                          |
+| ------------------------ | --------------------------------------------- | ------------------------------------------------ |
+| `web <query>`            | Search with the first configured provider     | `web "typescript 7"`                             |
+| `web search <query...>`  | One query or a batch, one provider or `all`   | `web search "a" "b" --provider all --json`       |
+| `web search-image <url>` | Pages that contain or resemble a public image | `web search-image https://.../logo.png`          |
+| `web read <url...>`      | One URL or a batch into normalized content    | `web read https://example.com --max-chars 20000` |
+| `web providers`          | Who is configured and what each one can do    | `web providers`                                  |
+| `web mcp`                | The MCP server on stdio                       | `web mcp`                                        |
+
+`--provider` and `--max-results` work on every search. Domain, source, category and date filters go to the providers that understand them and get reported as ignored on the ones that don't. `--json` gives you the same envelope the library and the agent tools return. The full flag list is in the [CLI guide](https://web.agntn.dev/guide/cli).
+
+## 🧠 Library
 
 ```typescript
-import { create } from "@agntn/web";
+import { create, readUrl, searchAll } from "@agntn/web";
 
-// Reads EXA_API_KEY from process.env
-const exa = create("exa");
-
+const exa = create("exa"); // reads EXA_API_KEY
 const results = await exa.search("typescript runtime benchmarks", { maxResults: 5 });
 
 for (const result of results) {
   console.log(result.title, result.url);
 }
+
+const everything = await searchAll("typescript runtime benchmarks"); // every configured provider, deduplicated
+console.log(everything.map((result) => [result.url, result.providers]));
+
+const page = await readUrl("https://example.com", { format: "markdown", maxChars: 20_000 });
+console.log(page.title, page.truncated, page.continuation);
 ```
 
-Swap the provider string, same code:
+That's most of it, really. `create("brave")` instead of `create("exa")` and nothing else in your code changes. `searchWithFallback()` picks the provider the CLI would and tells you in `attempts` who dropped out along the way. `searchProviderDetailed()` is the same search with `pagination` attached, pass its `continuation` back and you get page two. Errors are one family: a 401 is `AuthError`, spent credits are `PaymentError` whatever status they hide behind, a 429 is `RateLimitError` with `retryAfter`, and no response at all is `HTTPError` with status 0 and the real cause underneath. The details and the gotchas: [Searching](https://web.agntn.dev/guide/search), [Fan-out](https://web.agntn.dev/guide/fanout), [Reading](https://web.agntn.dev/guide/read), [Reverse image search](https://web.agntn.dev/guide/image).
 
-```typescript
-const brave = create("brave"); // reads BRAVE_API_KEY
-const context = create("context"); // reads CONTEXT_DEV_API_KEY
-const jina = create("jina"); // reads JINA_API_KEY
-const mojeek = create("mojeek"); // reads MOJEEK_API_KEY
-const tavily = create("tavily"); // reads TAVILY_API_KEY
-const tinyfish = create("tinyfish");
-```
+## 🗺️ Providers
 
-You can also pass the key explicitly:
+| Provider         | Auth                                                 | Does                | Filters                      | Pages |
+| ---------------- | ---------------------------------------------------- | ------------------- | ---------------------------- | ----- |
+| **brave**        | `BRAVE_API_KEY`                                      | search              | none                         | yes   |
+| **context**      | `CONTEXT_DEV_API_KEY`                                | search, read        | domains                      |       |
+| **exa**          | `EXA_API_KEY`                                        | search              | domains, category, dates     |       |
+| **firecrawl**    | `FIRECRAWL_API_KEY`                                  | search, read        | domains, sources, categories |       |
+| **jina**         | `JINA_API_KEY`, optional for read                    | search, read        | include domains, category    |       |
+| **mojeek**       | `MOJEEK_API_KEY`                                     | search              | domains, dates               | yes   |
+| **openai-codex** | Existing login, optional `OPENAI_CODEX_ACCESS_TOKEN` | search              | none                         |       |
+| **searxng**      | None, your own instance                              | search              | category                     | yes   |
+| **serpapi**      | `SERPAPI_API_KEY`                                    | search, searchImage | none                         | yes   |
+| **serpbase**     | `SERPBASE_API_KEY`                                   | search              | category                     | yes   |
+| **tavily**       | `TAVILY_API_KEY`                                     | search              | domains                      |       |
+| **tinyfish**     | `TINYFISH_API_KEY`                                   | search, read        | domains, category, dates     | yes   |
 
-```typescript
-const exa = create("exa", { apiKey: "your-key-here" });
-```
+Codex is the odd one out: no key, it borrows the login you already have in Codex, Pi, OMP or OpenCode, and `snippet` comes back empty because the model's answer is not a page excerpt. What each one fills in, which filters it honours and where it bites: [Providers](https://web.agntn.dev/providers).
 
-### OpenAI Codex search
-
-Use the hosted web search tool through a ChatGPT Codex login. This is an experimental backend adapter. It does not use an OpenAI API key.
+## 🤖 Agents
 
 ```bash
-web search "Node.js release notes" --provider openai-codex --json
+web mcp
+pi install git:github.com/agntn/web
+omp install @agntn/web
 ```
 
-Log in with Pi, OMP, Codex or OpenCode, then run the command. In Pi/OMP tools, the current host owns refresh. Standalone commands read usable saved access tokens without changing login files or rotating their refresh tokens. If every saved token is expired, open its owning client to refresh the login.
-
-Set `codex.authSource` or `OPENAI_CODEX_AUTH_SOURCE` to `codex`, `pi`, `omp` or `opencode` to choose one store, `none` to disable automatic auth, or `auto` for the default. Automatic selection prefers the invoking host, then saved Codex, Pi, OMP and OpenCode logins. OMP SQLite discovery uses the optional Node `node:sqlite` builtin.
-
-Explicit `codex.credentials` overrides everything. Next are `OPENAI_CODEX_ACCESS_TOKEN` and optional `OPENAI_CODEX_ACCOUNT_ID`; the account ID can come from the token claim. Application code can also supply a credential callback:
-
-```typescript
-import { createSearchProvider, type CodexCredentialProvider } from "@agntn/web";
-
-export function createCodexSearch(credentials: CodexCredentialProvider) {
-  return createSearchProvider("openai-codex", { codex: { credentials } });
-}
-```
-
-The callback receives `{ refresh, signal }` and returns `{ accessToken, accountId }`, optionally through a promise. It runs before each search and once more with `refresh: true` after an authentication rejection. The caller owns login, expiry checks, storage and concurrent refresh coordination. Environment credentials are not refreshed. Saved-login discovery is read-only; native Pi/OMP resolvers own any refresh and persistence.
-
-Only native search sources and citation annotations become results. `snippet` stays empty because the generated answer is not a page excerpt. Request `summary: true` through a detailed search helper to include that answer in `metadata.answer`. Results default to 10 and are capped locally at 100. No paging, portable filters or URL reading.
-
-The default model is `gpt-5.5`, overridable by `codex.model` or `OPENAI_CODEX_MODEL`. A search is limited to 90 seconds. OAuth credentials only go to the fixed ChatGPT endpoint, never a custom base URL or a redirect. `auto`, `all` and provider discovery recognize saved logins and scoped host auth. A callback passed to an instance stays local to that instance.
-
-[Codex setup and limitations](./docs/content/2.providers/12.openai-codex.md).
-
-### Custom providers
-
-Registered providers are discovered from their prototype methods. Providers that implement methods as class fields declare matching static `capabilities`. The same live capability lists drive the library, CLI, AI SDK, MCP, Pi, and OMP, so a custom provider does not need to enter a built in name tuple:
-
-```typescript
-import {
-  Provider,
-  register,
-  searchProviders,
-  searchImageProviders,
-  readProviders,
-  type ProviderCapabilityDetails,
-  type ProviderConfig,
-  type SearchResult,
-} from "@agntn/web";
-
-class InternalSearch extends Provider {
-  static readonly providerName = "internal-search";
-  static readonly defaultBaseURL = "https://search.example.com";
-  static readonly apiKeyEnvVar = null;
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: [],
-      resultLimit: { default: 10, maximum: 50 },
-      resultFields: [],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-
-  constructor(config: Readonly<ProviderConfig>) {
-    super(config, InternalSearch);
-  }
-
-  async search(query: string): Promise<SearchResult[]> {
-    return [{ url: "https://example.com", title: query, snippet: "Internal result" }];
-  }
-}
-
-register(InternalSearch);
-console.log(searchProviders());
-console.log(searchImageProviders());
-console.log(readProviders());
-```
-
-A provider with several required credentials can declare a synchronous static `isConfigured()` check. It must inspect local configuration only, without network requests or token refresh.
-
-Provider names use lowercase ASCII letters, digits, and single internal hyphens. Set `apiKeyEnvVar` to `null` when registration is enough to configure the provider. Otherwise automatic selection expects a derived variable such as `INTERNAL_SEARCH_API_KEY`; explicit `create()` calls can still pass `apiKey`. For class field methods, declare any of `"search"`, `"searchImage"`, and `"read"` in a static `capabilities` array. Declare static `capabilityDetails` when discovery should also report content controls, result limits, rich search fields, or read options. Agent tool schemas advertise the built in names but accept strings, then validate the selected name against the live capability list at execution time.
-
-`getProviderCapabilities(name)` reads one registered provider's matrix. `listProviders()` and `listProvidersAsync()` include the same matrix under `capabilities`, alongside configuration and optional reachability state. Unsupported operations are explicit (`{ supported: false }`); details omitted by a backward-compatible custom provider remain unknown instead of being guessed.
-
-A custom search provider may additionally implement `searchPage(query, options, continuation?)`. Its returned `continuation` is provider-native state consumed only by the same adapter; the detailed core helpers wrap it in a public token bound to that provider. Provider-native continuation state may contain up to 2,048 characters; the wrapped public token may contain up to 4,096. These limits are exported as `MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH` and `MAX_SEARCH_CONTINUATION_LENGTH` and reported by `packageCapabilities.search.continuation`. The absence of a returned provider continuation marks the page as terminal. Pagination support is discovered from the prototype and reported as `capabilities.search.pagination: true`.
-
-### Search all providers
-
-Query all available providers in parallel and get deduplicated results:
-
-```typescript
-import { searchAll } from "@agntn/web";
-
-// Detects providers from env vars, queries them in parallel
-const results = await searchAll("latest node.js release");
-
-for (const result of results) {
-  console.log(`[${result.providers.join(", ")}]`, result.title, result.url);
-}
-```
-
-`searchAll` uses `Promise.allSettled` internally, so if one provider fails, the others still return. Results are deduplicated by URL (normalized, UTM params stripped), then `maxResults` caps the final list. It defaults to 10. The first provider in the requested order supplies the representative result. `providers` lists every source that returned the URL, while `evidence` keeps each complete provider record without comparing unrelated score scales.
-
-You can also specify which providers to query:
-
-```typescript
-const results = await searchAll("query", {
-  providers: ["exa", "brave"],
-  maxResults: 5,
-});
-```
-
-Firecrawl exposes response-level diagnostics through its detailed search capability. `search()` still returns the normalized result list:
-
-```typescript
-import { create, isDetailedSearchProvider } from "@agntn/web";
-
-const firecrawl = create("firecrawl");
-if (isDetailedSearchProvider(firecrawl)) {
-  const { results, metadata } = await firecrawl.searchDetailed("query");
-  console.log(results, metadata?.id, metadata?.warning, metadata?.creditsUsed);
-}
-```
-
-`web search --provider firecrawl --json "query"` prints the detailed provider envelope with results, filter diagnostics, and this metadata. Tavily also uses response metadata for the generated query answer requested by `summary`, exposed as `metadata.answer`. The core detailed helpers preserve response metadata too: scalar `searchProviderDetailed()` and `searchWithFallback()` expose `metadata`, while `searchAllDetailed()` exposes `providerMetadata` entries that keep each metadata object paired with its provider.
-
-### Continue a search
-
-Brave, Mojeek, SearXNG, SerpAPI, SerpBase, and TinyFish expose deeper result pages through the detailed search helpers. A response from one provider has a normalized `pagination` state: `next` carries an opaque token backed by an authoritative provider signal, `unknown` carries a token when another page must be probed, `end` confirms that no further probe is available, and `unsupported` identifies providers without paging support. Opaque means callers must not depend on the token format; it does not make a continuation an authorization credential or a tamper-proof signature. Treat externally supplied continuations and their provider-native state as untrusted input.
-
-```typescript
-import { searchProviderDetailed } from "@agntn/web";
-
-const first = await searchProviderDetailed("brave", "typescript runtimes", {
-  maxResults: 10,
-});
-
-if (first.pagination.status === "next") {
-  const second = await searchProviderDetailed("brave", "typescript runtimes", {
-    maxResults: 10,
-    continuation: first.pagination.continuation,
-  });
-  console.log(second.results, second.pagination);
-}
-```
-
-The token is bound to the provider, query, and options that affect the result page. Changing any of them rejects the token before another provider request. `searchWithFallback()` chooses normally for the first page, then pins subsequent calls to the provider encoded in the token instead of mixing result sequences across fallback providers.
-
-Fan-out has no single cursor. `searchAllDetailed()` returns `providerPagination`, one independent state per successful provider, and rejects a continuation input. Use a `next` or `unknown` token from that array with `searchProviderDetailed()` and the matching provider. `searchBatch()` also rejects a single continuation because it cannot unambiguously belong to several queries.
-
-### Reverse image search
-
-SerpAPI Google Lens can find public pages containing or resembling an image available by URL. This is separate from text search, so providers without image lookup support are rejected instead of receiving a fake text query:
-
-```typescript
-import { searchByImage } from "@agntn/web";
-
-const matches = await searchByImage("https://example.com/image.jpg", {
-  provider: "serpapi",
-  maxResults: 5,
-});
-
-for (const match of matches) {
-  console.log(match.pageUrl, match.imageUrl, match.imageWidth, match.imageHeight);
-}
-```
-
-The built-in reverse image provider is `serpapi`. The image URL is sent to that provider, so use a publicly accessible URL without embedded credentials or private query tokens. Results include the page URL, matched image URL, dimensions when available, provider, source, position, and exact-match metadata.
-
-### Read a URL
-
-Use `readUrl` when you already have a URL and want normalized page content:
-
-```typescript
-import { readUrl } from "@agntn/web";
-
-const page = await readUrl("https://example.com/article", {
-  provider: "jina",
-  format: "markdown",
-  maxChars: 20_000,
-});
-
-console.log(page.title, page.content, page.truncated, page.continuation);
-```
-
-`maxChars` is an exact, provider-independent output bound measured in Unicode code points. When more content remains, the result has `truncated: true` and an opaque `continuation`; pass that token back with the same URL and native read options to fetch the next page. Continuations stay pinned to the effective provider and fail if the source content changed. Paginated results omit provider-supplied `text` and `html` duplicates so they cannot bypass the requested bound. The core library and CLI remain unbounded unless `maxChars` is requested; AI SDK, MCP, Pi, and OMP reads default to 20,000 characters and accept at most 200,000.
-
-`maxTokens` remains a provider-native request option, not an approximation of the portable character bound. Jina read uses `r.jina.ai` and does not require an API key for basic reads; when `JINA_API_KEY` is present, it is sent as Bearer auth. Context.dev, Firecrawl, and TinyFish also support reads; TinyFish uses its Fetch API and `TINYFISH_API_KEY`. Without an explicit provider, `readUrl` starts with Jina and tries configured readers after payment, rate-limit, timeout, or server failures, plus Jina HTTP 409 conflicts. Authentication, invalid requests, and explicit provider selection stay strict.
-
-Use `readUrlDetailed` when provider identity matters. `requestedProvider` records explicit selection or `auto`, `provider` is the reader that returned the page, `attempts` keeps the ordered provider path, and `failures` retains the message from each failed attempt:
-
-```typescript
-import { readUrlDetailed } from "@agntn/web";
-
-const { result, requestedProvider, provider, attempts, failures } = await readUrlDetailed(
-  "https://example.com/article",
-);
-console.log(requestedProvider, provider, attempts, failures, result.content);
-```
-
-If automatic selection cannot return after one or more eligible failures, `searchWithFallback` and `readUrlDetailed` throw `ProviderFallbackError`. Its `attempts` and `failures` retain the full attempted chain, and `cause` is the terminal provider error. A later authentication or invalid-request failure still stops selection immediately; providers after it are not attempted.
-
-### Batch operations
-
-`searchBatch` and `readBatch` accept up to 10 inputs and run three independent operations concurrently by default. Set `concurrency` from 1 to 10 to change that bound. Input order is preserved, and one failure does not discard the other outcomes. Detailed automatic outcomes add the effective `provider`, ordered `attempts`, and failed-provider messages in `failures`. Without an explicit search provider, each query tries the remaining configured providers after eligible transient failures:
-
-```typescript
-import { readBatch, searchBatch } from "@agntn/web";
-
-const searches = await searchBatch(["TypeScript 7", "Node.js releases"], {
-  provider: "exa",
-});
-const pages = await readBatch(["https://example.com/one", "https://example.com/two"]);
-```
-
-Each successful search through one provider returns `{ query, provider, results, filterReports, pagination, providerMetadata?, attempts?, failures? }`; fan-out outcomes use `providerPagination` instead. Exhausted automatic failures are `{ query, error, attempts, failures }`. `attempts` and `failures` are present for automatic selection, while `providerMetadata` is present only when a provider returned response-level metadata. A single continuation input is rejected for batches. Each basic read outcome is `{ url, result }` or `{ url, error }`.
-
-### AI SDK tool
-
-The `@agntn/web/ai` subpath exports ready-made tools compatible with [Vercel AI SDK](https://ai-sdk.dev/docs/foundations/tools):
-
-```typescript
-import { generateText } from "ai";
-import { readTool, searchImageTool, searchTool } from "@agntn/web/ai";
-
-const { text } = await generateText({
-  model: yourModel,
-  tools: {
-    web_search: searchTool,
-    web_search_image: searchImageTool,
-    web_read: readTool,
-  },
-  prompt: "Find the latest TypeScript release notes",
-});
-```
-
-`searchTool` accepts one query or an array of queries. Explicit scalar searches return `{ provider, results, ignoredFilters, undeclaredFilters, pagination, metadata? }`; automatic searches also include `attempts` and `failures`. `provider="all"` returns `{ results, successfulProviders, errors, filterReports, providerPagination, providerMetadata? }`, with `providers` and `evidence` on every deduplicated result. Batch search items retain the same diagnostics. `searchImageTool` accepts one public image URL. A scalar `readTool` call returns `{ result, requestedProvider, provider, attempts, failures }`; successful batch items keep the same reader provenance beside `url`, while exhausted automatic failures keep `attempts` and `failures` beside the error:
-
-```typescript
-tools: { web_search: searchTool, web_search_image: searchImageTool, web_read: readTool }
-
-type SearchToolInput = {
-  query: string | string[];
-  provider?: string;
-  maxResults?: number;
-  continuation?: string;
-  highlights?: boolean;
-  summary?: boolean;
-  fullText?: boolean;
-};
-```
-
-Provider fields accept built in and custom registered names. Each tool validates that the selected provider implements its capability before making a request.
-
-Without an explicit provider, `searchTool` starts with the first reachable provider from the environment and tries the remaining configured providers after payment, rate-limit, timeout, or server failures. `readTool` starts with Jina Reader and follows the same policy, with Jina HTTP 409 conflicts also eligible for fallback.
-
-## CLI
-
-```bash
-web "your query"
-web --provider brave "your query" --max-results 5
-web search "your query" --json
-web search "first query" "second query" --provider all --json
-web search "your query" --provider firecrawl --sources web,news --categories research
-web search "your query" --provider exa --summary --full-text
-web search "your query" --provider brave --continuation <opaque-token> --json
-web search "your query" --include-domains github.com,stackoverflow.com --start-published-date 2026-01-01
-web search-image https://example.com/image.jpg --max-results 5 --json
-web read https://example.com --format markdown --max-chars 20000 --json
-web read https://example.com --max-chars 20000 --continuation <opaque-token> --json
-web read https://example.com/one https://example.com/two --json
-web providers
-```
-
-| Command                  | Description                                   |
-| ------------------------ | --------------------------------------------- |
-| `web <query>`            | Search the web using the default provider     |
-| `web search <query...>`  | Search one or more queries                    |
-| `web search-image <url>` | Find matching pages from a public image URL   |
-| `web read <url...>`      | Read one or more URLs into normalized content |
-| `web providers`          | List registered providers                     |
-| `web mcp`                | Run the MCP server over stdio                 |
-
-Search commands accept domain, source, and category lists separated by commas. Search JSON uses the same detailed envelopes as the library and agent tools, including provider errors during `--provider all`; each batch item keeps its own result or error. Read commands use automatic selection unless `--provider` is set. Scalar read JSON is `{ result, requestedProvider, provider, attempts, failures }`; batch successes add `url` to that shape, and exhausted automatic failures retain the same diagnostics. Any failed read batch item makes the command exit 1 without discarding successes.
-
-### MCP server
-
-`web mcp` starts a [Model Context Protocol](https://modelcontextprotocol.io) server over stdio exposing the same capabilities as the agent tools. MCP clients keep control of their own TUI; the server supplies the same tool symbols and titles as the native extensions without writing decorations into the JSON-RPC stream:
-
-- `web_search` - search one query or a batch, or use `provider="all"` for provider fan-out
-- `web_search_image` - find matching pages and images from a public image URL
-- `web_read` - read one URL or a batch and return effective provider provenance
-- `web_providers` - show the running build and process start, then list configuration, reachability, and the complete provider capability matrix
-
-Each tool advertises an output schema and returns its result under `structuredContent.result`. Compact JSON stays in `content` for clients that only render text.
-
-Register it with any MCP client:
-
-```bash
-claude mcp add web --scope user -- web mcp
-```
-
-The programmatic surface is also importable from the `@agntn/web/mcp` subpath (`createMcpServer()`) when your host provides its own transport.
-
-| Flag                                | Description                                                                                      |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `--provider <name>`                 | Provider to use (text: first configured or `all`; image: SerpAPI; read: auto starting with Jina) |
-| `--max-results <n>`                 | Maximum text or image search results to return (default: `10`)                                   |
-| `--no-highlights`                   | Disable passages selected for the query when supported                                           |
-| `--summary`                         | Request generated summaries from Exa or an answer from Tavily                                    |
-| `--full-text`                       | Request full page text from Exa or Tavily                                                        |
-| `--include-domains <a,b>`           | Include only these domains in text search                                                        |
-| `--exclude-domains <a,b>`           | Exclude these domains from text search                                                           |
-| `--sources <a,b>`                   | Source types for providers that support them                                                     |
-| `--categories <a,b>`                | Categories for providers that support them                                                       |
-| `--category <name>`                 | One provider category                                                                            |
-| `--start-published-date <ISO date>` | Earliest publication date                                                                        |
-| `--end-published-date <ISO date>`   | Latest publication date                                                                          |
-| `--format <markdown\|text\|html>`   | Preferred read format                                                                            |
-| `--max-tokens <n>`                  | Provider-native maximum read tokens when supported                                               |
-| `--max-chars <n>`                   | Portable maximum page-content characters                                                         |
-| `--continuation <token>`            | Continue a truncated single-URL read                                                             |
-| `--json`                            | Output as JSON                                                                                   |
-
-## Providers
-
-| Provider     | Env var                                              | Auth               | Free tier                              |
-| ------------ | ---------------------------------------------------- | ------------------ | -------------------------------------- |
-| Brave        | `BRAVE_API_KEY`                                      | Header             | 2k queries/mo                          |
-| Context.dev  | `CONTEXT_DEV_API_KEY`                                | Bearer header      | Credit-based free tier                 |
-| Exa          | `EXA_API_KEY`                                        | Header             | 1k queries/mo                          |
-| Firecrawl    | `FIRECRAWL_API_KEY`                                  | Bearer header      | Credit-based free tier                 |
-| Jina         | `JINA_API_KEY`                                       | Bearer header      | Required for search; optional for read |
-| Mojeek       | `MOJEEK_API_KEY`                                     | Query param        | Limited free trial                     |
-| OpenAI Codex | Existing login; optional `OPENAI_CODEX_ACCESS_TOKEN` | OAuth Bearer       | Codex account access and usage limits  |
-| SearXNG      | -                                                    | None               | Self-hosted                            |
-| SerpAPI      | `SERPAPI_API_KEY`                                    | Query param        | 100 queries/mo; Google Lens supported  |
-| SerpBase     | `SERPBASE_API_KEY`                                   | `X-API-Key` header | 100 searches to start                  |
-| Tavily       | `TAVILY_API_KEY`                                     | Body               | 1k queries/mo                          |
-| TinyFish     | `TINYFISH_API_KEY`                                   | `X-API-Key` header | Free at $0; Search access required     |
-
-### Result shape
-
-All search providers always return `{ url, title, snippet }`. OpenAI Codex leaves `snippet` empty and puts a requested generated answer in response `metadata.answer`, never in a source excerpt. Optional fields depend on what each provider's native API exposes; `@agntn/web` passes them through without flattening:
-
-| Provider     | Optional fields populated                                                                                                                               |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Context.dev  | `metadata.{relevance, markdownCode}`                                                                                                                    |
-| Exa          | `highlights[]` by default; requested `text` (full page) and `summary`; `score`, `publishedDate`, `author`, `image`, `favicon`                           |
-| Firecrawl    | `text` (markdown from the scraped page)                                                                                                                 |
-| Jina         | `text` (`content`/`text`), `publishedDate`, `image`, `metadata`                                                                                         |
-| Mojeek       | `score`, `publishedDate`, `image`, `metadata.{confidence, documentSize, lastModifiedDate, crawledDate, moreResultsFromDomain, imageWidth, imageHeight}` |
-| OpenAI Codex | None on results; response metadata carries model, request ID, usage and requested answer                                                                |
-| Tavily       | requested `text` (`raw_content`); `score`, `publishedDate`                                                                                              |
-| TinyFish     | `publishedDate`, `author`, `metadata.{position, siteName, publisher, authors, venue, year, citedByCount, pdfUrl}`                                       |
-| Brave        | `text` (joined `extra_snippets`), `favicon`                                                                                                             |
-| SerpAPI      | `image` (thumbnail), `publishedDate`, `favicon`, `metadata.{position, source, displayedLink}`                                                           |
-| SerpBase     | `image` (SERP thumbnail/image), `publishedDate`, `favicon`, `metadata.{position, rank, searchType, requestId, elapsedMs, creditsCharged}`               |
-| SearXNG      | `image`, `score`, `publishedDate`, `metadata.{engine, engines, category}`                                                                               |
-
-Pick the provider that fits the shape you want. Firecrawl returns page passages relevant to the query in `snippet` by default, including Markdown when the source passage contains it. Exa returns highlights by default and can add generated summaries or full text when requested. Tavily can add a query answer in response metadata or raw page content through the same controls. TinyFish carries useful news and research metadata. Jina returns page content with its search results. Brave, Mojeek, SerpAPI, SerpBase, and SearXNG return classic SERP metadata.
-
-SerpBase uses Google SERP endpoints. `category: "images"`, `"news"`, or `"videos"` selects the matching SerpBase endpoint; `maxResults` is applied client-side to the returned page. TinyFish also applies `maxResults` client-side to one result page.
-
-SearXNG requires no API key. It's a self-hosted metasearch engine. By default `@agntn/web` connects to `http://localhost:8080`. Override with `baseURL`:
-
-```typescript
-const searx = create("searxng", { baseURL: "https://searx.example.com" });
-```
-
-## Errors
-
-All providers throw the same error types:
-
-```typescript
-import { AuthError, RateLimitError, HTTPError, UnknownProviderError } from "@agntn/web";
-
-try {
-  const results = await provider.search("query");
-} catch (err) {
-  if (err instanceof AuthError) {
-    // Missing or invalid API key
-  }
-  if (err instanceof RateLimitError) {
-    console.log(`Retry after ${err.retryAfter}s`);
-  }
-  if (err instanceof UnknownProviderError) {
-    // Provider name not recognized
+```json
+{
+  "mcpServers": {
+    "web": { "command": "npx", "args": ["-y", "@agntn/web", "mcp"] }
   }
 }
 ```
 
-A 401 normally becomes `AuthError`. Spent credits are a different story, whatever status they hide behind: Context.dev's `USAGE_EXCEEDED` on a 401, Tavily's 432 and 433 usage limits and SerpBase's `status: 1020` inside a 200 all become `PaymentError`, an `HTTPError` subclass that keeps the original status, URL and body and allows automatic fallback. A 429 becomes `RateLimitError` with a `retryAfter` value. Everything else is `HTTPError` or the base `WebError`. No response at all, DNS failure, refused connection or a timeout, is `HTTPError` with `statusCode` 0. `body` names the transport cause and `cause` keeps the original error.
+Four tools, `web_search`, `web_search_image`, `web_read` and `web_providers`, the same four on the AI SDK (`@agntn/web/ai`), MCP, Pi and OMP. Reads stop at 20 000 characters unless the model asks for more, so nobody stuffs a whole site into a context window by accident. Pi also gets `/web` and `/web-providers`. Schemas and envelopes for each host: [Agents guide](https://web.agntn.dev/guide/agents).
 
-For safety, `HTTPError.url` redacts sensitive query params and URL userinfo credentials before surfacing the URL in error messages.
+## 🚫 What this does not do
 
-## Data model
+No browser. Nothing here renders JavaScript, crawls a site or takes a screenshot, and `search-image` sends a URL and gets pages back, there is no OCR or image analysis behind it. Yesterday's version of a page is [@agntn/archives](https://github.com/agntn/archives).
 
-Every search provider returns the same normalized type:
+## 🧩 Adding a provider
 
-```typescript
-interface SearchResult {
-  url: string;
-  title: string;
-  snippet: string;
-  score?: number;
-  publishedDate?: string;
-  author?: string;
-  image?: string;
-  favicon?: string;
-  text?: string;
-  highlights?: string[];
-  summary?: string;
-  metadata?: Record<string, unknown>;
-}
+Missing your favourite engine? Extend `Provider`, implement `search`, `read` or `searchByImage`, call `register()`, and the CLI, the tools and `all` see it without a name tuple to edit. A built in one also needs its line in `builtinProviders`, and `test/index.test.ts` will tell you if you forgot. Step by step, with the contract spelled out: [Custom providers](https://web.agntn.dev/guide/custom).
 
-interface SearchAllEvidence extends SearchResult {
-  provider: string;
-}
-
-interface SearchAllResult extends SearchAllEvidence {
-  providers: string[];
-  evidence: SearchAllEvidence[];
-}
-```
-
-Optional fields depend on what the provider returns. Firecrawl uses page passages relevant to the query for `snippet` by default. Exa provides `score` and highlights by default, then adds `text` or `summary` when requested. Tavily adds `text` when requested; its generated query answer stays in response `metadata.answer` rather than being assigned to one result. TinyFish provides publisher and research metadata. Jina provides result `text` and metadata when available. Mojeek provides ranking, date, image, and crawl metadata. Brave provides `favicon`. Not all providers populate all fields.
-
-Reverse image results keep page and image identity separate:
-
-```typescript
-interface ImageSearchResult {
-  pageUrl: string;
-  imageUrl: string;
-  title: string;
-  provider: string;
-  source?: string;
-  thumbnailUrl?: string;
-  imageWidth?: number;
-  imageHeight?: number;
-  thumbnailWidth?: number;
-  thumbnailHeight?: number;
-  position?: number;
-  exactMatch?: boolean;
-}
-```
-
-Read results use the same naming for URL-to-content:
-
-```typescript
-interface ReadResult {
-  url: string;
-  title?: string;
-  description?: string;
-  content: string;
-  text?: string;
-  html?: string;
-  publishedDate?: string;
-  image?: string;
-  links?: string[];
-  images?: string[];
-  metadata?: Record<string, unknown>;
-}
-```
-
-Every network operation accepts the same execution controls:
-
-```typescript
-interface ExecutionOptions {
-  signal?: AbortSignal;
-  deadline?: number; // absolute Unix timestamp in milliseconds
-  concurrency?: number; // batch and fan-out only; default 3, maximum 10
-}
-```
-
-`signal` cancels in-flight provider requests. `deadline` is shared by the whole operation, including fallback, batch, and provider fan-out, so waiting for earlier work does not reset the budget. Batch and fan-out helpers stop launching queued requests after cancellation or deadline expiry. A batch with `provider: "all"` shares one scheduler across its outer queries and inner provider fan-out, keeping total request concurrency within the selected limit. Execution controls do not change continuation fingerprints.
-
-Search request options you can pass to `.search()` or the detailed core helpers:
-
-```typescript
-interface SearchRequestOptions extends ExecutionOptions {
-  readonly maxResults?: number;
-  highlights?: boolean;
-  summary?: boolean;
-  fullText?: boolean;
-  includeDomains?: string[];
-  excludeDomains?: string[];
-  sources?: string[];
-  categories?: string[];
-  startPublishedDate?: string;
-  endPublishedDate?: string;
-  category?: string;
-}
-
-type SearchPageOptions = SearchRequestOptions & {
-  continuation?: string;
-};
-```
-
-Provider `.search()` remains a list API for the first page. The detailed core helpers accept `SearchPageOptions` and return normalized pagination state. `maxResults` defaults to 10 and caps the final result list, including `searchAll` output after URL deduplication. Each provider also receives it as the requested result count. `highlights` defaults to `true`; Firecrawl and Exa honor `false`, while providers that already return plain descriptions need no special handling. Generated content and full page text default to false and must be requested through `summary` and `fullText`; Exa uses `summary` for result summaries, while Tavily and OpenAI Codex use it for a query answer. The remaining filters are specific to each provider:
-
-| Provider     | Domain filters   | Source values           | Category values                              | Date bounds |
-| ------------ | ---------------- | ----------------------- | -------------------------------------------- | ----------- |
-| Brave        | none             | none                    | none                                         | none        |
-| Context.dev  | include, exclude | none                    | none                                         | none        |
-| Exa          | include, exclude | none                    | forwarded as given                           | start, end  |
-| Firecrawl    | include, exclude | `web`, `news`, `images` | `research`, `pdf`, `developer`               | none        |
-| Jina         | include          | none                    | `web`, `images`, `news`                      | none        |
-| Mojeek       | include, exclude | none                    | none                                         | start, end  |
-| OpenAI Codex | none             | none                    | none                                         | none        |
-| SearXNG      | none             | none                    | forwarded as given                           | none        |
-| SerpAPI      | none             | none                    | none                                         | none        |
-| SerpBase     | none             | none                    | `image`, `images`, `news`, `video`, `videos` | none        |
-| Tavily       | include, exclude | none                    | none                                         | none        |
-| TinyFish     | include, exclude | none                    | `news`, `research_paper`                     | start, end  |
-
-Firecrawl uses the plural array filters from its API: `sources` selects result groups, while `categories` narrows web results. Its singular `category` option is not forwarded.
-
-`searchProviderDetailed()` and `searchWithFallback()` return the effective provider plus `ignoredFilters`, `undeclaredFilters`, `pagination`, and optional metadata for the whole response. Automatic `searchWithFallback()` responses also retain ordered `attempts` and serializable `failures`. `searchAllDetailed()` keeps filter diagnostics in `filterReports`, independent continuation states in `providerPagination`, pairs response metadata with provider names in optional `providerMetadata`, and lists every fulfilled provider in `successfulProviders`, including providers with no retained result after deduplication. Each deduplicated result keeps a stable representative, ordered `providers`, and complete `evidence` for each provider. Metadata for the whole response is separate from each `SearchResult.metadata`. Providers without detailed response metadata omit these optional fields. Custom providers without filter capability metadata report requested filters as undeclared instead of guessing. `web_providers` exposes native provider support under `providers[].capabilities` and provider-independent guarantees under `packageCapabilities`; the legacy `searchFilters` and `searchCategories` fields remain available for compatibility.
-
-Read options you can pass to `readUrl` or `readUrlDetailed`:
-
-```typescript
-interface ReadUrlOptions extends ExecutionOptions {
-  provider?: string;
-  format?: "markdown" | "text" | "html";
-  maxTokens?: number;
-  maxChars?: number;
-  continuation?: string;
-  targetSelector?: string;
-  removeSelector?: string;
-  timeout?: number;
-  noCache?: boolean;
-}
-```
-
-The built in read providers are `jina`, `context`, `firecrawl`, and `tinyfish`. Custom registered providers work in explicit agent calls and join automatic fallback when configured. `maxChars` and `continuation` are package options removed before calling any provider. Firecrawl supports `targetSelector` and `removeSelector` as CSS filters but rejects the native `maxTokens` option instead of silently ignoring it.
-
-## Development
+## 🛠️ Development
 
 ```bash
 pnpm install
-pnpm typecheck   # tsc --noEmit
+pnpm lint        # builds first, then oxlint and oxfmt --check
+pnpm lint:fix
+pnpm typecheck   # src, the build config and both extensions
+pnpm test:run
 pnpm build       # obuild
-pnpm test        # vitest (watch mode)
-pnpm test:run    # vitest --run
+pnpm docs        # the Docus site, needs a build first
 ```
 
-## License
+## 💛 Thanks
+
+This package exists thanks to two open source programs, [Claude for Open Source](https://claude.com/contact-sales/claude-for-oss) at Anthropic and [Codex for Open Source](https://developers.openai.com/community/codex-for-oss) at OpenAI.
+
+## 📄 License
 
 [MIT](./LICENSE)
