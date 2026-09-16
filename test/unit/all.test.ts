@@ -822,6 +822,58 @@ describe("searchAllDetailed", () => {
     }
   });
 
+  it("searches reachable providers while a probe hangs past the deadline", async () => {
+    const fastName = `fanout-probe-fast-${Math.random().toString(36).slice(2)}`;
+    const hangingName = `fanout-probe-hang-${Math.random().toString(36).slice(2)}`;
+    class FastProvider extends Provider {
+      static readonly providerName = fastName;
+      static readonly defaultBaseURL = "https://fast.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, FastProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com/fast", title: "Fast", snippet: "finished" }];
+      }
+    }
+    class HangingProbeProvider extends Provider {
+      static readonly providerName = hangingName;
+      static readonly defaultBaseURL = "https://hanging-probe.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, HangingProbeProvider);
+      }
+
+      isAvailable(signal?: Readonly<AbortSignal>): Promise<boolean> {
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [];
+      }
+    }
+    const cleanups = [register(FastProvider), register(HangingProbeProvider)];
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+
+    try {
+      const response = await searchAllDetailed("test", { deadline: Date.now() + 25 });
+
+      expect(response.results.map((result) => result.url)).toEqual(["https://example.com/fast"]);
+      expect(response.successfulProviders).toEqual([fastName]);
+      expect(response.errors).toMatchObject([
+        { provider: hangingName, error: { name: "TimeoutError" } },
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  });
+
   it("publishes bounds that accommodate provider-native continuation state", () => {
     const continuation = encodeSearchContinuation(
       "custom",

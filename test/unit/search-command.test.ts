@@ -36,6 +36,7 @@ vi.mock("../../src/core/registry.ts", () => ({
 vi.mock("../../src/core/resolve.ts", () => ({
   detectAvailableProviders: () => mockDetectAvailableProviders(),
   detectAvailableProvidersAsync: () => mockDetectAvailableProvidersAsync(),
+  probeConfiguredProvider: async () => undefined,
 }));
 
 vi.mock("../../src/providers/index.ts", () => ({}));

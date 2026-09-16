@@ -29,7 +29,11 @@ import {
 import { createSearchProvider, has } from "./registry.ts";
 import { isDetailedSearchProvider, isPaginatedSearchProvider } from "./provider.ts";
 import { decodeSearchContinuation, encodeSearchContinuation } from "./search-continuation.ts";
-import { detectAvailableProviders, detectAvailableProvidersAsync } from "./resolve.ts";
+import {
+  detectAvailableProviders,
+  detectAvailableProvidersAsync,
+  probeConfiguredProvider,
+} from "./resolve.ts";
 import {
   providerRequestOptions,
   settleWithConcurrency,
@@ -120,7 +124,8 @@ export async function searchAll(
  * Like {@link searchAll}, but also returns successful provider names,
  * filter diagnostics, and errors for each provider. A `deadline` keeps the
  * providers that finished and lists the rest in `errors`. A cancelled
- * `signal` still rejects.
+ * `signal` still rejects. Automatic selection probes reachability inside each
+ * provider's slot, so a hanging endpoint costs only that provider.
  * @param {string} query - Search query.
  * @param {SearchAllOptions} options - Provider and result options.
  * @returns {Promise<SearchAllResponse>} Results and provider failures.
@@ -139,11 +144,15 @@ export async function searchAllDetailed(
   const maxResults = searchOptions.maxResults ?? DEFAULT_MAX_RESULTS;
   const effectiveSearchOptions = withExecutionBudget({ ...searchOptions, maxResults });
   throwIfAborted(effectiveSearchOptions.signal);
-  const providerNames = await resolveProviderNames(requestedProviders, effectiveSearchOptions);
-  throwIfAborted(effectiveSearchOptions.signal);
-  const settled = await searchProviders(providerNames, query, effectiveSearchOptions);
+  const providerNames = fanoutProviderNames(requestedProviders);
+  const settled = await searchProviders(
+    providerNames,
+    query,
+    effectiveSearchOptions,
+    requestedProviders === undefined,
+  );
   throwIfCancelled(effectiveSearchOptions);
-  return collectProviderResults(providerNames, settled, maxResults);
+  return collectProviderResults(reachableAttempts(providerNames, settled), maxResults);
 }
 
 /**
@@ -249,15 +258,10 @@ function validateProviderNames(providerNames?: readonly string[]): void {
   if (unknown) throw new UnknownProviderError(unknown);
 }
 
-async function resolveProviderNames(
-  requestedProviders?: readonly string[],
-  options?: Readonly<SearchRequestOptions>,
-): Promise<readonly string[]> {
-  if (requestedProviders !== undefined) {
-    if (requestedProviders.length > 0) return requestedProviders;
-    throw new NoProviderConfiguredError();
-  }
-  return resolveAutomaticProviderNames(options);
+function fanoutProviderNames(requestedProviders?: readonly string[]): readonly string[] {
+  const providerNames = requestedProviders ?? detectAvailableProviders();
+  if (providerNames.length === 0) throw new NoProviderConfiguredError();
+  return providerNames;
 }
 
 async function resolveAutomaticProviderNames(
@@ -359,21 +363,44 @@ type ProviderSearchOutcome =
   | { readonly status: "fulfilled"; readonly value: ReadonlySearchProviderResult }
   | { readonly status: "rejected"; readonly reason: unknown };
 
+type ProviderSearchSettlement =
+  | { readonly status: "fulfilled"; readonly value: ReadonlySearchProviderResult | null }
+  | { readonly status: "rejected"; readonly reason: unknown };
+
+type ProviderSearchAttempt = readonly [provider: string, outcome: ProviderSearchOutcome];
+
 function searchProviders(
   providerNames: readonly string[],
   query: string,
   options: Readonly<SearchRequestOptions>,
-): Promise<readonly ProviderSearchOutcome[]> {
+  probeReachability: boolean,
+): Promise<readonly ProviderSearchSettlement[]> {
   return settleWithConcurrency(
     providerNames,
-    (name) => searchProvider(name, query, options),
+    async (name, _index, signal) => {
+      if (probeReachability && (await probeConfiguredProvider(name, signal)) === false) return null;
+      return searchProvider(name, query, options);
+    },
     options,
   );
 }
 
-function collectProviderResults(
+function reachableAttempts(
   providerNames: readonly string[],
-  settled: readonly ProviderSearchOutcome[],
+  settled: readonly ProviderSearchSettlement[],
+): readonly ProviderSearchAttempt[] {
+  const attempts = settled.flatMap((outcome, index): ProviderSearchAttempt[] => {
+    if (outcome.status === "rejected") return [[providerNames[index], outcome]];
+    return outcome.value === null
+      ? []
+      : [[providerNames[index], { status: "fulfilled", value: outcome.value }]];
+  });
+  if (attempts.length === 0) throw new NoProviderAvailableError(providerNames);
+  return attempts;
+}
+
+function collectProviderResults(
+  attempts: readonly ProviderSearchAttempt[],
   maxResults?: number,
 ): SearchAllResponse {
   const results: SearchAllEvidence[] = [];
@@ -382,7 +409,7 @@ function collectProviderResults(
   const filterReports: SearchFilterReport[] = [];
   const providerMetadata: SearchProviderMetadata[] = [];
   const providerPagination: SearchProviderPagination[] = [];
-  for (const [index, outcome] of settled.entries()) {
+  for (const [provider, outcome] of attempts) {
     if (outcome.status === "fulfilled") {
       successfulProviders.add(outcome.value.provider);
       results.push(
@@ -406,7 +433,7 @@ function collectProviderResults(
       }
     } else {
       errors.push({
-        provider: providerNames[index],
+        provider,
         error: outcome.reason instanceof Error ? outcome.reason : new Error(String(outcome.reason)),
       });
     }
