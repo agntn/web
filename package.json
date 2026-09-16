@@ -31,9 +31,7 @@
     "src/tui.ts"
   ],
   "type": "module",
-  "sideEffects": [
-    "./dist/_chunks/providers.mjs"
-  ],
+  "sideEffects": true,
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "exports": {

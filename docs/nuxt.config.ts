@@ -1,9 +1,16 @@
-import { fileURLToPath } from "node:url";
+import { resolve } from "node:path";
+import { createSourceBuildId } from "../src/build-id.ts";
+
+/** Bundled from the checkout's sources: a deploy needs neither dist/ nor the root node_modules. */
+const librarySource = resolve(import.meta.dirname, "../src");
 
 export default defineNuxtConfig({
   extends: ["docus"],
   /** The repo root is its own pnpm workspace; Nuxt must not treat it as this site's. */
-  workspaceDir: fileURLToPath(new URL("./", import.meta.url)),
+  workspaceDir: import.meta.dirname,
+  alias: {
+    "@agntn/web": resolve(librarySource, "index.ts"),
+  },
   devtools: { enabled: false },
   telemetry: false,
   site: {
@@ -74,6 +81,10 @@ export default defineNuxtConfig({
     cloudflare: {
       deployConfig: true,
       nodeCompat: true,
+    },
+    /** obuild defines this for dist/; the sources otherwise hash the package root at load time, which the bundle cannot reach. */
+    replace: {
+      __AGNTN_WEB_BUILD_ID__: JSON.stringify(createSourceBuildId(resolve(librarySource, ".."))),
     },
   },
   compatibilityDate: "2026-09-03",

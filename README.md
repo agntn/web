@@ -179,7 +179,7 @@ pnpm lint:fix
 pnpm typecheck   # src, the build config and both extensions
 pnpm test:run
 pnpm build       # obuild
-pnpm docs        # the Docus site, needs a build first
+pnpm docs        # the Docus site, bundles src/ itself
 ```
 
 ## 💛 Thanks

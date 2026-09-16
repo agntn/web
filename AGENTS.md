@@ -100,6 +100,6 @@ pnpm typecheck
 pnpm build
 pnpm test:run
 pnpm release
-pnpm docs         # Docus site + explorer on :3000 (after pnpm build)
+pnpm docs         # Docus site + explorer on :3000, bundles src/ itself
 pnpm docs:build   # Cloudflare Workers build of the docs
 ```

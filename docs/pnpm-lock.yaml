@@ -8,9 +8,6 @@ importers:
 
   .:
     dependencies:
-      '@agntn/web':
-        specifier: file:..
-        version: file:..(ai@7.0.90(zod@4.5.4))(zod@4.5.4)
       better-sqlite3:
         specifier: 12.11.1
         version: 12.11.1
@@ -20,6 +17,12 @@ importers:
       nuxt:
         specifier: 4.5.2
         version: 4.5.2(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7))(@oxc-project/types@0.148.0)(@types/node@26.4.1)(@vue/compiler-sfc@3.5.42)(better-sqlite3@12.11.1)(db0@0.3.4(better-sqlite3@12.11.1))(esbuild@0.28.2)(eslint@10.9.1(jiti@2.7.0))(ioredis@5.11.1)(lightningcss@1.33.0)(magicast@0.5.4)(optionator@0.9.4)(oxc-parser@0.143.0)(rolldown@1.2.7)(rollup-plugin-visualizer@7.1.1(rolldown@1.2.7)(rollup@4.63.1))(rollup@4.63.1)(srvx@0.11.22)(terser@5.51.2)(typescript@5.9.3)(vite@8.2.2(@types/node@26.4.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(yaml@2.9.0))(yaml@2.9.0)
+      ofetch:
+        specifier: 1.5.1
+        version: 1.5.1
+      zod:
+        specifier: 4.5.4
+        version: 4.5.4
     devDependencies:
       '@iconify-json/lucide':
         specifier: 1.2.128
@@ -35,31 +38,6 @@ importers:
         version: 4.128.0
 
 packages:
-
-  '@agntn/web@file:..':
-    resolution: {directory: .., type: directory}
-    engines: {node: '>=22'}
-    hasBin: true
-    peerDependencies:
-      '@earendil-works/pi-coding-agent': '*'
-      '@earendil-works/pi-tui': '*'
-      '@oh-my-pi/pi-coding-agent': '>=18.0.0 <19'
-      ai: ^6.0.116
-      typebox: ^1.1.33
-      zod: ^4.3.6
-    peerDependenciesMeta:
-      '@earendil-works/pi-coding-agent':
-        optional: true
-      '@earendil-works/pi-tui':
-        optional: true
-      '@oh-my-pi/pi-coding-agent':
-        optional: true
-      ai:
-        optional: true
-      typebox:
-        optional: true
-      zod:
-        optional: true
 
   '@ai-sdk/gateway@4.0.72':
     resolution: {integrity: sha512-iNNgagJ0+Ow1kdOFSyKPRk8kTh7qwhLZPLFdbXw4KMbMMF7JLzWlBSkyMSjh6U4O6D4D+76xj0HGws4JTLNeYA==}
@@ -7302,20 +7280,6 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
-
-  '@agntn/web@file:..(ai@7.0.90(zod@4.5.4))(zod@4.5.4)':
-    dependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.5.4)
-      citty: 0.2.2
-      consola: 3.4.2
-      ofetch: 1.5.1
-      string-width: 8.2.2
-    optionalDependencies:
-      ai: 7.0.90(zod@4.5.4)
-      zod: 4.5.4
-    transitivePeerDependencies:
-      - '@cfworker/json-schema'
-      - supports-color
 
   '@ai-sdk/gateway@4.0.72(zod@4.5.4)':
     dependencies:

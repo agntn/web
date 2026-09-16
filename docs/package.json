@@ -10,10 +10,11 @@
     "deploy": "pnpm build && wrangler deploy"
   },
   "dependencies": {
-    "@agntn/web": "file:..",
     "better-sqlite3": "12.11.1",
     "docus": "5.13.0",
-    "nuxt": "4.5.2"
+    "nuxt": "4.5.2",
+    "ofetch": "1.5.1",
+    "zod": "4.5.4"
   },
   "packageManager": "pnpm@11.3.0",
   "devDependencies": {
