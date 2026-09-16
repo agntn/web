@@ -255,6 +255,47 @@ describe("web MCP server", () => {
     );
   });
 
+  it("keeps a Tavily hit without raw content inside the output schema", async () => {
+    vi.stubEnv("TAVILY_API_KEY", "test-key");
+    mockPostJSON.mockReset();
+    mockPostJSON.mockResolvedValue({
+      query: "test query",
+      results: [
+        {
+          title: "Test Result",
+          url: "https://example.com",
+          content: "A test snippet",
+          score: 0.5,
+          raw_content: null,
+        },
+      ],
+    });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search",
+      arguments: { query: "test query", provider: "tavily", maxResults: 1 },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(response.structuredContent).toEqual({
+      result: {
+        provider: "tavily",
+        ignoredFilters: [],
+        undeclaredFilters: [],
+        results: [
+          {
+            title: "Test Result",
+            url: "https://example.com",
+            snippet: "A test snippet",
+            score: 0.5,
+          },
+        ],
+        pagination: { status: "unsupported" },
+      },
+    });
+  });
+
   it("continues one provider search with the returned opaque token", async () => {
     vi.stubEnv("BRAVE_API_KEY", "test-key");
     mockGetJSON.mockReset();

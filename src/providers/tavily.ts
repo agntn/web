@@ -32,7 +32,7 @@ interface TavilyResult {
   readonly content: string;
   readonly score: number;
   readonly published_date?: string;
-  readonly raw_content?: string;
+  readonly raw_content?: string | null;
 }
 
 interface TavilySearchResponse {
@@ -116,6 +116,11 @@ function normalizeTavilyError(error: unknown): WebError {
   return normalizeError(error, "tavily");
 }
 
+/**
+ * Tavily sends `raw_content: null` unless `include_raw_content` is on, so `text` is left out.
+ * @param result - One Tavily search hit.
+ * @returns {SearchResult} Normalized search result.
+ */
 function mapResult(result: TavilyResult): SearchResult {
   return {
     url: result.url,
@@ -123,7 +128,7 @@ function mapResult(result: TavilyResult): SearchResult {
     snippet: result.content,
     score: result.score,
     publishedDate: result.published_date,
-    text: result.raw_content,
+    ...(typeof result.raw_content === "string" ? { text: result.raw_content } : {}),
   };
 }
 

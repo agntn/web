@@ -116,6 +116,18 @@ describe("tavily provider", () => {
       expect(result.text).toBe("Full raw content from the page");
     });
 
+    it("leaves text out when raw_content is null", async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        ...tavilyResponse,
+        results: [{ ...tavilyResponse.results[0], raw_content: null }],
+      });
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const results = await provider.search("test query");
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).not.toHaveProperty("text");
+    });
+
     it("keeps the generated answer in response metadata", async () => {
       mockPostJSON.mockResolvedValueOnce(richTavilyResponse);
       const provider = createSearchProvider("tavily", { apiKey: "test-key" });
