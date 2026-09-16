@@ -13,10 +13,8 @@ type BudgetedExecutionOptions = ExecutionOptions & {
   readonly [executionBudget]: ExecutionBudget;
 };
 
-type DeadlineController = {
-  readonly signal: Readonly<AbortSignal>;
-  abort(reason?: unknown): void;
-};
+/** Ties each deadline controller to its signal, so only the running operation keeps it alive. */
+const deadlineControllers = new WeakMap<AbortSignal, AbortController>();
 
 /**
  * Creates one signal and concurrency budget for an operation and all nested work.
@@ -232,14 +230,23 @@ function deadlineSignal(deadline?: number): AbortSignal | undefined {
   if (!Number.isFinite(deadline)) throw new RangeError("deadline must be a finite Unix timestamp");
 
   const controller = new AbortController();
-  scheduleDeadline(controller, deadline);
+  deadlineControllers.set(controller.signal, controller);
+  scheduleDeadline(new WeakRef(controller), deadline);
   return controller.signal;
 }
 
-function scheduleDeadline(controller: Readonly<DeadlineController>, deadline: number): void {
+/**
+ * Arms the deadline timer through a weak reference, so a finished operation drops its
+ * controller and signal graph before the timer fires.
+ * @param controller - Weakly held controller of the deadline signal.
+ * @param deadline - Absolute Unix timestamp in milliseconds.
+ */
+function scheduleDeadline(controller: Readonly<WeakRef<AbortController>>, deadline: number): void {
   const remaining = Math.ceil(deadline - Date.now());
   if (remaining <= 0) {
-    controller.abort(new DOMException("The operation deadline was exceeded", "TimeoutError"));
+    controller
+      .deref()
+      ?.abort(new DOMException("The operation deadline was exceeded", "TimeoutError"));
     return;
   }
   const timer = setTimeout(
