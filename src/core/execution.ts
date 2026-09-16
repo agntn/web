@@ -3,6 +3,9 @@ import type { ExecutionOptions } from "./types.ts";
 export const DEFAULT_CONCURRENCY = 3;
 export const MAX_CONCURRENCY = 10;
 
+/** Longest time budget an agent surface accepts through `timeoutSeconds`. */
+export const MAX_AGENT_TIMEOUT_SECONDS = 3_600;
+
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const executionBudget = Symbol("executionBudget");
 
@@ -10,10 +13,8 @@ type BudgetedExecutionOptions = ExecutionOptions & {
   readonly [executionBudget]: ExecutionBudget;
 };
 
-type DeadlineController = {
-  readonly signal: Readonly<AbortSignal>;
-  abort(reason?: unknown): void;
-};
+/** Ties each deadline controller to the signal an operation holds, composed or not. */
+const deadlineControllers = new WeakMap<AbortSignal, AbortController>();
 
 /**
  * Creates one signal and concurrency budget for an operation and all nested work.
@@ -34,7 +35,11 @@ export function withExecutionBudget<TOptions extends ExecutionOptions>(
   }
 
   const signal = operationSignal(options);
-  const budget = new ExecutionBudget(normalizedConcurrency(options?.concurrency), signal);
+  const budget = new ExecutionBudget(
+    normalizedConcurrency(options?.concurrency),
+    signal,
+    options?.signal,
+  );
   return { ...options, signal, deadline: undefined, [executionBudget]: budget } as TOptions &
     BudgetedExecutionOptions;
 }
@@ -51,9 +56,13 @@ export function operationSignal(
   if (existing) return existing.signal;
   normalizedConcurrency(options?.concurrency);
 
-  const timeoutSignal = deadlineSignal(options?.deadline);
-  if (!timeoutSignal) return options?.signal;
-  return options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+  const controller = deadlineController(options?.deadline);
+  if (!controller) return options?.signal;
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, controller.signal])
+    : controller.signal;
+  deadlineControllers.set(signal, controller);
+  return signal;
 }
 
 /**
@@ -86,6 +95,30 @@ export function throwIfAborted(signal?: Readonly<AbortSignal>): void {
 }
 
 /**
+ * Throws when the caller cancelled the operation, not when only its deadline passed.
+ * @param options - Options carrying the operation budget.
+ */
+export function throwIfCancelled(options?: Readonly<ExecutionOptions>): void {
+  const budget = (options as Readonly<BudgetedExecutionOptions> | undefined)?.[executionBudget];
+  throwIfAborted(budget === undefined ? options?.signal : budget.callerSignal);
+}
+
+/**
+ * Turns the time budget an agent passes into the absolute deadline the library takes.
+ * @param seconds - Whole seconds from now, or undefined for no deadline.
+ * @returns {number | undefined} Unix timestamp in milliseconds.
+ */
+export function deadlineAfterSeconds(seconds: number | undefined): number | undefined {
+  if (seconds === undefined) return undefined;
+  if (!Number.isSafeInteger(seconds) || seconds < 1 || seconds > MAX_AGENT_TIMEOUT_SECONDS) {
+    throw new RangeError(
+      `timeoutSeconds must be an integer between 1 and ${MAX_AGENT_TIMEOUT_SECONDS}`,
+    );
+  }
+  return Date.now() + seconds * 1000;
+}
+
+/**
  * Runs ordered work through the operation's shared concurrency budget.
  * @param items - Ordered work inputs.
  * @param worker - Function that performs one bounded unit of work.
@@ -107,6 +140,7 @@ export async function settleWithConcurrency<T, TResult>(
 
 class ExecutionBudget {
   readonly signal: Readonly<AbortSignal> | undefined;
+  readonly callerSignal: Readonly<AbortSignal> | undefined;
   readonly #concurrency: number;
   readonly #queue: Array<{
     run: () => Promise<unknown>;
@@ -116,9 +150,14 @@ class ExecutionBudget {
   #active = 0;
   #listeningForAbort = false;
 
-  constructor(concurrency: number, signal?: Readonly<AbortSignal>) {
+  constructor(
+    concurrency: number,
+    signal?: Readonly<AbortSignal>,
+    callerSignal?: Readonly<AbortSignal>,
+  ) {
     this.#concurrency = concurrency;
     this.signal = signal;
+    this.callerSignal = callerSignal;
   }
 
   run<TResult>(task: () => Promise<TResult>): Promise<TResult> {
@@ -190,19 +229,27 @@ class ExecutionBudget {
   }
 }
 
-function deadlineSignal(deadline?: number): AbortSignal | undefined {
+function deadlineController(deadline?: number): AbortController | undefined {
   if (deadline === undefined) return undefined;
   if (!Number.isFinite(deadline)) throw new RangeError("deadline must be a finite Unix timestamp");
 
   const controller = new AbortController();
-  scheduleDeadline(controller, deadline);
-  return controller.signal;
+  scheduleDeadline(new WeakRef(controller), deadline);
+  return controller;
 }
 
-function scheduleDeadline(controller: Readonly<DeadlineController>, deadline: number): void {
+/**
+ * Arms the deadline timer through a weak reference, so a finished operation drops its
+ * controller and signal graph before the timer fires.
+ * @param controller - Weakly held controller of the deadline signal.
+ * @param deadline - Absolute Unix timestamp in milliseconds.
+ */
+function scheduleDeadline(controller: Readonly<WeakRef<AbortController>>, deadline: number): void {
   const remaining = Math.ceil(deadline - Date.now());
   if (remaining <= 0) {
-    controller.abort(new DOMException("The operation deadline was exceeded", "TimeoutError"));
+    controller
+      .deref()
+      ?.abort(new DOMException("The operation deadline was exceeded", "TimeoutError"));
     return;
   }
   const timer = setTimeout(

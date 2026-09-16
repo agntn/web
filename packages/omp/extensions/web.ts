@@ -36,6 +36,7 @@ const MAX_BATCH_ITEMS = 10;
 const MAX_SEARCH_CONTINUATION_CHARACTERS = 4_096;
 const DEFAULT_READ_MAX_CHARS = 20_000;
 const MAX_READ_MAX_CHARS = 200_000;
+const MAX_TIMEOUT_SECONDS = 3_600;
 
 function toolResult<T>(details: T): AgentToolResult<T> {
   return {
@@ -135,6 +136,14 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     endPublishedDate: Type.Optional(
       Type.String({ description: "Only return results published before this ISO date." }),
     ),
+    timeoutSeconds: Type.Optional(
+      Type.Integer({
+        description:
+          "Give up after this many seconds. Fan-out and batch return what finished by then and report the rest as errors.",
+        minimum: 1,
+        maximum: MAX_TIMEOUT_SECONDS,
+      }),
+    ),
   });
 
   const imageSearchParameters = Type.Object({
@@ -191,6 +200,14 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
       Type.Integer({ description: "Provider timeout in seconds when supported.", minimum: 1 }),
     ),
     noCache: Type.Optional(Type.Boolean({ description: "Bypass provider cache when supported." })),
+    timeoutSeconds: Type.Optional(
+      Type.Integer({
+        description:
+          "Give up after this many seconds. A batch returns the URLs that finished by then and reports the rest as errors.",
+        minimum: 1,
+        maximum: MAX_TIMEOUT_SECONDS,
+      }),
+    ),
   });
 
   pi.registerTool({
@@ -221,7 +238,11 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
             startPublishedDate: params.startPublishedDate,
             endPublishedDate: params.endPublishedDate,
           };
-          const executionOptions = { ...options, signal };
+          const executionOptions = {
+            ...options,
+            signal,
+            deadline: web.deadlineAfterSeconds(params.timeoutSeconds),
+          };
 
           if (Array.isArray(params.query)) {
             if (params.continuation !== undefined) {
@@ -317,13 +338,14 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
       if (Array.isArray(params.url) && params.continuation !== undefined) {
         throw new TypeError("continuation is only supported for a single URL");
       }
+      const deadline = web.deadlineAfterSeconds(params.timeoutSeconds);
       if (Array.isArray(params.url)) {
-        const outcomes = await web.readBatchDetailed(params.url, { ...options, signal });
+        const outcomes = await web.readBatchDetailed(params.url, { ...options, signal, deadline });
         return toolResult({ mode: "batch" as const, provider: providerLabel, options, outcomes });
       }
       const url = params.url.trim();
       if (!url) throw new TypeError("URL cannot be empty");
-      const response = await web.readUrlDetailed(url, { ...options, signal });
+      const response = await web.readUrlDetailed(url, { ...options, signal, deadline });
       return toolResult({
         mode: "read" as const,
         url,

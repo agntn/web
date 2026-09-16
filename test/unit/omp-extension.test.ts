@@ -58,6 +58,7 @@ function renderedText(component: unknown, width = 240): string {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
   resetDefaultClientForTests();
 });
@@ -348,6 +349,78 @@ describe("OMP extension", () => {
     }
 
     expect(receivedSignals).toEqual([signal, signal, signal]);
+  });
+
+  it("gives up after timeoutSeconds through web_search and web_read", async () => {
+    vi.useFakeTimers();
+    const providerName = `omptimeoutprovider${Math.random().toString(36).slice(2)}`;
+    class HangingProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://hanging.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, HangingProvider);
+      }
+
+      search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+
+      read(
+        _url: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<{ url: string; content: string }> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    customProviderCleanups.push(register(HangingProvider));
+    const tools = captureOmpExtension().tools;
+    const search = requiredTool(tools, "web_search");
+    const read = requiredTool(tools, "web_read");
+    const searchSchema = search.parameters as unknown as ompTypebox.TSchema;
+    const readSchema = read.parameters as unknown as ompTypebox.TSchema;
+    expect(searchSchema.safeParse({ query: "valid", timeoutSeconds: 30 }).success).toBe(true);
+    expect(searchSchema.safeParse({ query: "valid", timeoutSeconds: 0 }).success).toBe(false);
+    expect(
+      readSchema.safeParse({ url: "https://example.com", timeoutSeconds: 3_600 }).success,
+    ).toBe(true);
+    expect(
+      readSchema.safeParse({ url: "https://example.com", timeoutSeconds: 3_601 }).success,
+    ).toBe(false);
+
+    const pendingSearch = expect(
+      search.execute(
+        "timeout-call",
+        { query: "test", provider: providerName, timeoutSeconds: 1 },
+        undefined,
+        undefined,
+        {} as never,
+      ),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    const pendingRead = expect(
+      read.execute(
+        "timeout-call",
+        { url: "https://example.com", provider: providerName, timeoutSeconds: 1 },
+        undefined,
+        undefined,
+        {} as never,
+      ),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await pendingSearch;
+    await pendingRead;
   });
 
   it("keeps detailed search metadata in OMP results", async () => {

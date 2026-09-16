@@ -153,7 +153,13 @@ function providerStatus(name: string, configured: boolean): ProviderStatus {
   };
 }
 
-async function probeConfiguredProvider(
+/**
+ * Runs the provider's reachability probe when it has one.
+ * @param name - Registered provider name.
+ * @param signal - Effective operation signal.
+ * @returns {Promise<boolean | undefined>} Probe verdict, undefined without a probe.
+ */
+export async function probeConfiguredProvider(
   name: string,
   signal?: Readonly<AbortSignal>,
 ): Promise<boolean | undefined> {

@@ -145,7 +145,12 @@ export {
 } from "./core/read.ts";
 export type { ReadProviderName, ReadUrlOptions, ReadUrlDetailedResult } from "./core/read.ts";
 
-export { DEFAULT_CONCURRENCY, MAX_CONCURRENCY } from "./core/execution.ts";
+export {
+  DEFAULT_CONCURRENCY,
+  MAX_AGENT_TIMEOUT_SECONDS,
+  MAX_CONCURRENCY,
+  deadlineAfterSeconds,
+} from "./core/execution.ts";
 export { MAX_BATCH_ITEMS, searchBatch, readBatch, readBatchDetailed } from "./core/batch.ts";
 export type {
   SearchBatchOptions,
