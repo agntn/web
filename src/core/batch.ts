@@ -218,7 +218,7 @@ async function searchAllForBatch(
   options: Readonly<SearchRequestOptions>,
 ): Promise<BatchSearchResult> {
   const response = await searchAllDetailed(query, options);
-  if (response.results.length === 0 && response.errors.length > 0) {
+  if (response.successfulProviders.length === 0 && response.errors.length > 0) {
     const errors = response.errors.map(({ provider, error }) => `${provider}: ${error.message}`);
     throw new Error(`Search providers failed: ${errors.join("; ")}`);
   }

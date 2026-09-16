@@ -874,6 +874,62 @@ describe("searchAllDetailed", () => {
     }
   });
 
+  it("keeps an empty answer beside a timed out provider in a fanout batch", async () => {
+    const emptyName = `fanout-batch-empty-${Math.random().toString(36).slice(2)}`;
+    const slowName = `fanout-batch-slow-${Math.random().toString(36).slice(2)}`;
+    class EmptyProvider extends Provider {
+      static readonly providerName = emptyName;
+      static readonly defaultBaseURL = "https://empty.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, EmptyProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [];
+      }
+    }
+    class SlowProvider extends Provider {
+      static readonly providerName = slowName;
+      static readonly defaultBaseURL = "https://slow.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, SlowProvider);
+      }
+
+      search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    const cleanups = [register(EmptyProvider), register(SlowProvider)];
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")));
+
+    try {
+      const outcomes = await searchBatch(["one"], { provider: "all", deadline: Date.now() + 25 });
+
+      expect(outcomes).toEqual([
+        expect.objectContaining({
+          query: "one",
+          provider: "all",
+          results: [],
+          errors: [{ provider: slowName, error: "The operation deadline was exceeded" }],
+        }),
+      ]);
+    } finally {
+      vi.unstubAllGlobals();
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  });
+
   it("publishes bounds that accommodate provider-native continuation state", () => {
     const continuation = encodeSearchContinuation(
       "custom",
