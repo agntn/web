@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.5.4
+
+[compare changes](https://github.com/agntn/web/compare/v0.5.3...v0.5.4)
+
+### 🚀 Enhancements
+
+- Agents set a deadline on search and read ([#143](https://github.com/agntn/web/pull/143))
+
+### 🩹 Fixes
+
+- **docs:** Workers Builds has no dist/ to import ([#141](https://github.com/agntn/web/pull/141))
+- **tavily:** Null raw_content breaks MCP output ([#142](https://github.com/agntn/web/pull/142))
+- **read:** Links slip past the output bound ([#144](https://github.com/agntn/web/pull/144))
+
+### 📖 Documentation
+
+- Rewrite the README as a conversation ([#140](https://github.com/agntn/web/pull/140))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.5.3
 
 [compare changes](https://github.com/agntn/web/compare/v0.5.2...v0.5.3)
