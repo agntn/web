@@ -453,6 +453,7 @@ describe("searchTool", () => {
         results: [],
         filterReports: [],
         providerPagination: [{ provider: "firecrawl", pagination: { status: "unsupported" } }],
+        errors: [],
         providerMetadata: [
           {
             provider: "firecrawl",

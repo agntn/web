@@ -40,6 +40,7 @@ export type SearchBatchItem =
       readonly pagination?: SearchPagination;
       readonly providerPagination?: readonly SearchProviderPagination[];
       readonly providerMetadata?: readonly SearchProviderMetadata[];
+      readonly errors?: readonly { readonly provider: string; readonly error: string }[];
       readonly attempts?: readonly string[];
       readonly failures?: readonly ProviderFailure[];
     }
@@ -201,6 +202,7 @@ interface BatchSearchResult {
   readonly pagination?: SearchPagination;
   readonly providerPagination?: readonly SearchProviderPagination[];
   readonly providerMetadata?: readonly SearchProviderMetadata[];
+  readonly errors?: readonly { readonly provider: string; readonly error: string }[];
   readonly attempts?: readonly string[];
   readonly failures?: readonly ProviderFailure[];
 }
@@ -225,6 +227,10 @@ async function searchAllForBatch(
     results: response.results,
     filterReports: response.filterReports,
     providerPagination: response.providerPagination,
+    errors: response.errors.map(({ provider, error }) => ({
+      provider,
+      error: errorMessage(error),
+    })),
     ...(response.providerMetadata === undefined
       ? {}
       : { providerMetadata: response.providerMetadata }),
@@ -304,17 +310,7 @@ function mapSearchOutcomes(
               : mutableSearchResult(result),
           ),
           filterReports: outcome.value.filterReports,
-          ...(outcome.value.pagination === undefined
-            ? {}
-            : { pagination: outcome.value.pagination }),
-          ...(outcome.value.providerPagination === undefined
-            ? {}
-            : { providerPagination: outcome.value.providerPagination }),
-          ...(outcome.value.providerMetadata === undefined
-            ? {}
-            : { providerMetadata: outcome.value.providerMetadata }),
-          ...(outcome.value.attempts === undefined ? {} : { attempts: outcome.value.attempts }),
-          ...(outcome.value.failures === undefined ? {} : { failures: outcome.value.failures }),
+          ...batchSearchDiagnostics(outcome.value),
         }
       : {
           query: outcome.input,
@@ -323,6 +319,21 @@ function mapSearchOutcomes(
           ...(outcome.failures === undefined ? {} : { failures: outcome.failures }),
         },
   );
+}
+
+function batchSearchDiagnostics(
+  value: Readonly<BatchSearchResult>,
+): Omit<BatchSearchResult, "provider" | "results" | "filterReports"> {
+  return {
+    ...(value.pagination === undefined ? {} : { pagination: value.pagination }),
+    ...(value.providerPagination === undefined
+      ? {}
+      : { providerPagination: value.providerPagination }),
+    ...(value.providerMetadata === undefined ? {} : { providerMetadata: value.providerMetadata }),
+    ...(value.errors === undefined ? {} : { errors: value.errors }),
+    ...(value.attempts === undefined ? {} : { attempts: value.attempts }),
+    ...(value.failures === undefined ? {} : { failures: value.failures }),
+  };
 }
 
 function mutableSearchResult(result: ReadonlySearchResult): SearchResult {

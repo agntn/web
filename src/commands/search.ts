@@ -175,6 +175,7 @@ type ReadonlySearchBatchItem =
       readonly pagination?: SearchPagination;
       readonly providerPagination?: readonly Readonly<SearchProviderPagination>[];
       readonly providerMetadata?: readonly Readonly<SearchProviderMetadata>[];
+      readonly errors?: readonly { readonly provider: string; readonly error: string }[];
     }
   | { readonly query: string; readonly error: string };
 
@@ -299,6 +300,7 @@ function writeHumanSearchBatch(outcomes: readonly ReadonlySearchBatchItem[]): vo
       continue;
     }
     writeHumanSearchResults(outcome.results);
+    if (outcome.errors !== undefined) reportProviderErrors(outcome.errors);
     for (const report of outcome.filterReports) {
       reportFilterWarning(report.provider, report.ignoredFilters, report.undeclaredFilters);
     }

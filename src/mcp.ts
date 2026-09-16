@@ -120,6 +120,7 @@ const searchBatchItemSchema = Type.Union([
     filterReports: Type.Array(searchFilterReportSchema),
     providerPagination: Type.Array(searchProviderPaginationSchema),
     providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
+    errors: Type.Optional(Type.Array(providerFailureSchema)),
   }),
   strictObject({
     query: Type.String(),

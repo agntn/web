@@ -906,11 +906,13 @@ describe("web MCP executors", () => {
         query: "one",
         provider: "all",
         results: [expect.objectContaining({ url: "https://example.com/fast" })],
+        errors: [{ provider: "brave", error: "The operation deadline was exceeded" }],
       }),
       expect.objectContaining({
         query: "two",
         provider: "all",
         results: [expect.objectContaining({ url: "https://example.com/fast" })],
+        errors: [{ provider: "brave", error: "The operation deadline was exceeded" }],
       }),
     ]);
 

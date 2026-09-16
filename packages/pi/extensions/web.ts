@@ -948,6 +948,7 @@ type SearchBatchItemView =
       readonly pagination?: SearchPagination;
       readonly providerPagination?: readonly SearchProviderPagination[];
       readonly providerMetadata?: readonly SearchProviderMetadata[];
+      readonly errors?: readonly { readonly provider: string; readonly error: string }[];
     };
 type ReadBatchItemView =
   | { readonly url: string; readonly error: string }
@@ -1139,10 +1140,18 @@ function formatSearchBatch(outcomes: readonly SearchBatchItemView[]): string {
         ...(outcome.pagination === undefined ? [] : formatPagination(outcome.pagination)),
         ...formatProviderPaginations(outcome.providerPagination ?? []),
         ...formatProviderMetadata(outcome.providerMetadata ?? []),
+        ...formatBatchErrors(outcome.errors ?? []),
       ];
       return withHeader(`${header} [provider=${outcome.provider}]`, lines);
     })
     .join("\n\n");
+}
+
+function formatBatchErrors(
+  errors: readonly { readonly provider: string; readonly error: string }[],
+): readonly string[] {
+  if (errors.length === 0) return [];
+  return ["", "Provider errors:", ...errors.map((e) => `  ${e.provider}: ${e.error}`)];
 }
 
 function formatFilterReports(reports: readonly SearchFilterReport[]): readonly string[] {
