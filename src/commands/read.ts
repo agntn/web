@@ -42,6 +42,14 @@ export default defineCommand({
       type: "string",
       description: "Opaque token returned by a truncated read",
     },
+    links: {
+      type: "boolean",
+      description: "Keep the page's links in a bounded read",
+    },
+    images: {
+      type: "boolean",
+      description: "Keep the page's image URLs in a bounded read",
+    },
     json: {
       type: "boolean",
       description: "Output as JSON",
@@ -77,6 +85,8 @@ type ReadCommandArgs = {
   readonly "max-tokens"?: string;
   readonly "max-chars"?: string;
   readonly continuation?: string;
+  readonly links?: boolean;
+  readonly images?: boolean;
   readonly json: boolean;
 };
 
@@ -88,6 +98,8 @@ type ParsedReadArguments = {
     readonly maxTokens?: number;
     readonly maxChars?: number;
     readonly continuation?: string;
+    readonly links?: boolean;
+    readonly images?: boolean;
   };
 };
 
@@ -114,7 +126,17 @@ function parseReadArguments(args: ReadCommandArgs, maxBatchItems: number): Parse
       maxTokens: maxTokens.value,
       maxChars: maxChars.value,
       continuation: args.continuation,
+      ...pageFieldOptions(args),
     },
+  };
+}
+
+function pageFieldOptions(
+  args: ReadCommandArgs,
+): Pick<ParsedReadArguments["options"], "links" | "images"> {
+  return {
+    ...(args.links ? { links: true } : {}),
+    ...(args.images ? { images: true } : {}),
   };
 }
 

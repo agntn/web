@@ -207,6 +207,14 @@ export const readTool = tool({
       .max(1024)
       .optional()
       .describe("Opaque token returned by a truncated read."),
+    links: z
+      .boolean()
+      .optional()
+      .describe("Include the links found on the page. Defaults to false."),
+    images: z
+      .boolean()
+      .optional()
+      .describe("Include the image URLs found on the page. Defaults to false."),
     targetSelector: z
       .string()
       .optional()
@@ -240,6 +248,8 @@ export const readTool = tool({
       maxTokens,
       maxChars,
       continuation,
+      links,
+      images,
       targetSelector,
       removeSelector,
       timeout,
@@ -258,6 +268,8 @@ export const readTool = tool({
       maxTokens,
       maxChars: maxChars ?? DEFAULT_AGENT_READ_MAX_CHARS,
       continuation,
+      links,
+      images,
       targetSelector,
       removeSelector,
       timeout,

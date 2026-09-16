@@ -995,6 +995,30 @@ describe("readTool", () => {
     expect(mockGetJSON.mock.calls[0]?.[1]).not.toHaveProperty("maxChars");
   });
 
+  it("keeps links and images out of a read unless asked", async () => {
+    const page = {
+      url: "https://example.com/",
+      content: "page",
+      links: ["https://example.com/a"],
+      images: ["https://example.com/hero.png"],
+    };
+    mockGetJSON.mockResolvedValue({ code: 200, status: 20000, data: page });
+
+    const bounded = await readTool.execute!(
+      { url: "https://example.com" },
+      { toolCallId: "read-links-default", messages: [] },
+    );
+    const requested = await readTool.execute!(
+      { url: "https://example.com", links: true, images: true },
+      { toolCallId: "read-links-requested", messages: [] },
+    );
+
+    expect(bounded).toMatchObject({ result: { content: "page", truncated: false } });
+    expect(bounded).not.toHaveProperty("result.links");
+    expect(bounded).not.toHaveProperty("result.images");
+    expect(requested).toMatchObject({ result: { links: page.links, images: page.images } });
+  });
+
   it("reads a URL with Jina by default", async () => {
     mockGetJSON.mockResolvedValueOnce({
       code: 200,

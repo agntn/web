@@ -146,6 +146,16 @@ describe("read command", () => {
     });
   });
 
+  it("passes the link and image opt-ins", async () => {
+    await runRead({ "max-chars": "2000", links: true, images: true });
+
+    expect(mockReadUrlDetailed).toHaveBeenCalledWith("https://example.com", {
+      maxChars: 2000,
+      links: true,
+      images: true,
+    });
+  });
+
   it("outputs effective provider provenance in JSON", async () => {
     await runRead({ json: true });
 

@@ -268,6 +268,12 @@ const readParameters = Type.Object({
   continuation: Type.Optional(
     Type.String({ description: "Opaque token returned by a truncated read.", maxLength: 1024 }),
   ),
+  links: Type.Optional(
+    Type.Boolean({ description: "Include the links found on the page. Defaults to false." }),
+  ),
+  images: Type.Optional(
+    Type.Boolean({ description: "Include the image URLs found on the page. Defaults to false." }),
+  ),
   targetSelector: Type.Optional(
     Type.String({ description: "CSS selector to target when supported." }),
   ),
@@ -571,6 +577,8 @@ export default function webExtension(pi: ExtensionAPI) {
         maxTokens: params.maxTokens,
         maxChars: params.maxChars ?? DEFAULT_READ_MAX_CHARS,
         continuation: params.continuation,
+        links: params.links,
+        images: params.images,
         targetSelector: params.targetSelector,
         removeSelector: params.removeSelector,
         timeout: params.timeout,
@@ -862,10 +870,18 @@ function stripUndefinedRead(input: Readonly<ReadUrlOptions>): ReadUrlOptions {
     ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
     ...(input.maxChars === undefined ? {} : { maxChars: input.maxChars }),
     ...(input.continuation === undefined ? {} : { continuation: input.continuation }),
+    ...pageFieldOptions(input),
     ...(input.targetSelector === undefined ? {} : { targetSelector: input.targetSelector }),
     ...(input.removeSelector === undefined ? {} : { removeSelector: input.removeSelector }),
     ...(input.timeout === undefined ? {} : { timeout: input.timeout }),
     ...(input.noCache === undefined ? {} : { noCache: input.noCache }),
+  };
+}
+
+function pageFieldOptions(input: Readonly<ReadUrlOptions>): ReadUrlOptions {
+  return {
+    ...(input.links === undefined ? {} : { links: input.links }),
+    ...(input.images === undefined ? {} : { images: input.images }),
   };
 }
 
