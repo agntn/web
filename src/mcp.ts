@@ -20,6 +20,7 @@ import {
   readUrlDetailed,
 } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
+import { deadlineAfterSeconds, MAX_AGENT_TIMEOUT_SECONDS } from "./core/execution.ts";
 import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
 import { MAX_SEARCH_CONTINUATION_LENGTH } from "./core/search-continuation.ts";
@@ -232,6 +233,9 @@ const packageCapabilitiesSchema = strictObject({
     deadline: strictObject({
       option: Type.Literal("deadline"),
       unit: Type.Literal("unix-ms"),
+      agentOption: Type.Literal("timeoutSeconds"),
+      agentUnit: Type.Literal("seconds"),
+      agentMaximum: Type.Integer({ minimum: 1 }),
     }),
     concurrency: strictObject({
       option: Type.Literal("concurrency"),
@@ -371,6 +375,14 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         endPublishedDate: Type.Optional(
           Type.String({ description: "Filter results published before this date (ISO 8601)" }),
         ),
+        timeoutSeconds: Type.Optional(
+          Type.Integer({
+            description:
+              "Give up after this many seconds. Fan-out and batch return what finished by then and report the rest as errors.",
+            minimum: 1,
+            maximum: MAX_AGENT_TIMEOUT_SECONDS,
+          }),
+        ),
       }),
       outputSchema: searchOutputSchema,
       annotations: {
@@ -472,6 +484,14 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         noCache: Type.Optional(
           Type.Boolean({ description: "Bypass provider cache when supported." }),
         ),
+        timeoutSeconds: Type.Optional(
+          Type.Integer({
+            description:
+              "Give up after this many seconds. A batch returns the URLs that finished by then and reports the rest as errors.",
+            minimum: 1,
+            maximum: MAX_AGENT_TIMEOUT_SECONDS,
+          }),
+        ),
       }),
       outputSchema: readOutputSchema,
       annotations: {
@@ -550,6 +570,7 @@ export async function executeSearch(
     category: stringArg("category", args.category),
     startPublishedDate: stringArg("startPublishedDate", args.startPublishedDate),
     endPublishedDate: stringArg("endPublishedDate", args.endPublishedDate),
+    deadline: deadlineAfterSeconds(intArg("timeoutSeconds", args.timeoutSeconds)),
     signal,
   };
 
@@ -631,6 +652,7 @@ export async function executeRead(
     removeSelector: stringArg("removeSelector", args.removeSelector),
     timeout: intArg("timeout", args.timeout),
     noCache: boolArg("noCache", args.noCache),
+    deadline: deadlineAfterSeconds(intArg("timeoutSeconds", args.timeoutSeconds)),
     signal,
   };
   return urls === undefined

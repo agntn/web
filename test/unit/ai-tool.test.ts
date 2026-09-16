@@ -41,6 +41,7 @@ import { runtimeInfo } from "../../src/version.ts";
 
 const customProviderCleanups: Array<() => void> = [];
 afterEach(() => {
+  vi.useRealTimers();
   for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
 });
 
@@ -208,6 +209,57 @@ describe("searchTool", () => {
 
     expect(mockPostJSON.mock.calls[0]?.[3]).toBe(abortSignal);
     expect(mockGetJSON.mock.calls.map((call) => call[2])).toEqual([abortSignal, abortSignal]);
+  });
+
+  it("gives up after timeoutSeconds through searchTool and readTool", async () => {
+    vi.useFakeTimers();
+    const providerName = `aitimeoutprovider${Math.random().toString(36).slice(2)}`;
+    class HangingProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://hanging.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, HangingProvider);
+      }
+
+      search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+
+      read(
+        _url: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<ReadResult> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    customProviderCleanups.push(register(HangingProvider));
+    const context = { toolCallId: "call-timeout", messages: [] };
+
+    const search = expect(
+      searchTool.execute!({ query: "test", provider: providerName, timeoutSeconds: 1 }, context),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    const read = expect(
+      readTool.execute!(
+        { url: "https://example.com", provider: providerName, timeoutSeconds: 1 },
+        context,
+      ),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await search;
+    await read;
   });
 
   it("accepts registered custom providers for each implemented capability", async () => {

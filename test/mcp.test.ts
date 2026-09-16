@@ -56,6 +56,16 @@ async function connectTestClient(): Promise<Client> {
   return client;
 }
 
+function untilAborted(
+  _url: string,
+  _headers?: Readonly<Record<string, string>>,
+  signal?: Readonly<AbortSignal>,
+): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
+}
+
 beforeEach(() => {
   for (const key of providerEnvKeys) vi.stubEnv(key, "");
 });
@@ -63,6 +73,7 @@ beforeEach(() => {
 afterEach(async () => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
   await Promise.all(openConnections.splice(0).map((connection) => connection.close()));
 });
@@ -149,6 +160,24 @@ describe("web MCP server", () => {
       maximum: 200_000,
     });
     expect(readInput.properties.continuation).toMatchObject({ type: "string", maxLength: 1024 });
+  });
+
+  it("advertises a time budget on web_search and web_read", async () => {
+    const client = await connectTestClient();
+
+    const response = await client.listTools();
+
+    for (const name of ["web_search", "web_read"]) {
+      const tool = response.tools.find((candidate) => candidate.name === name);
+      const input = tool?.inputSchema as {
+        readonly properties: Readonly<Record<string, unknown>>;
+      };
+      expect(input.properties.timeoutSeconds).toMatchObject({
+        type: "integer",
+        minimum: 1,
+        maximum: 3_600,
+      });
+    }
   });
 
   it("advertises output schemas that reject malformed tool results", async () => {
@@ -644,6 +673,15 @@ describe("web MCP server", () => {
     });
     expect(payload.runtime.buildId).toMatch(/^[a-f0-9]{12}$/);
     expect(payload.packageCapabilities).toMatchObject({
+      execution: {
+        deadline: {
+          option: "deadline",
+          unit: "unix-ms",
+          agentOption: "timeoutSeconds",
+          agentUnit: "seconds",
+          agentMaximum: 3_600,
+        },
+      },
       search: {
         continuation: {
           option: "continuation",
@@ -841,6 +879,67 @@ describe("web MCP executors", () => {
     expect(mockPostJSON.mock.calls[0]?.[3]).toBe(signal);
     expect(mockGetJSON.mock.calls[0]?.[2]).toBe(signal);
     expect(mockGetJSON.mock.calls[1]?.[2]).toBe(signal);
+  });
+
+  it("returns what finished when timeoutSeconds cuts a fanout", async () => {
+    vi.useFakeTimers();
+    vi.stubEnv("EXA_API_KEY", "test-exa");
+    vi.stubEnv("BRAVE_API_KEY", "test-brave");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
+    mockPostJSON.mockResolvedValue({
+      requestId: "fast-request",
+      results: [{ title: "Fast", url: "https://example.com/fast", text: "finished" }],
+    });
+    mockGetJSON.mockImplementation(untilAborted);
+
+    const single = expect(
+      executeSearch({ query: "one", provider: "all", timeoutSeconds: 1 }),
+    ).resolves.toMatchObject({
+      results: [expect.objectContaining({ url: "https://example.com/fast", provider: "exa" })],
+      successfulProviders: ["exa"],
+      errors: [{ provider: "brave", error: "The operation deadline was exceeded" }],
+    });
+    const batch = expect(
+      executeSearch({ query: ["one", "two"], provider: "all", timeoutSeconds: 1 }),
+    ).resolves.toEqual([
+      expect.objectContaining({
+        query: "one",
+        provider: "all",
+        results: [expect.objectContaining({ url: "https://example.com/fast" })],
+      }),
+      expect.objectContaining({
+        query: "two",
+        provider: "all",
+        results: [expect.objectContaining({ url: "https://example.com/fast" })],
+      }),
+    ]);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await single;
+    await batch;
+  });
+
+  it("gives up a read after timeoutSeconds", async () => {
+    vi.useFakeTimers();
+    mockGetJSON.mockImplementation(untilAborted);
+
+    const pending = expect(
+      executeRead({ url: "https://example.com", provider: "jina", timeoutSeconds: 1 }),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await pending;
+  });
+
+  it("rejects a time budget outside the schema when a host skips validation", async () => {
+    await expect(
+      executeSearch({ query: "test", provider: "exa", timeoutSeconds: 0 }),
+    ).rejects.toBeInstanceOf(TypeError);
+    await expect(
+      executeRead({ url: "https://example.com", provider: "jina", timeoutSeconds: 3_601 }),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(mockPostJSON).not.toHaveBeenCalled();
+    expect(mockGetJSON).not.toHaveBeenCalled();
   });
 
   it("guards the empty-query contract when a host skips validation", async () => {

@@ -21,6 +21,7 @@ import { completedEvents, sse } from "../fixtures/codex.ts";
 
 const customProviderCleanups: Array<() => void> = [];
 afterEach(() => {
+  vi.useRealTimers();
   for (const unregister of customProviderCleanups.splice(0).reverse()) unregister();
 });
 
@@ -52,6 +53,11 @@ describe("Pi extension", () => {
       maximum: 200_000,
     });
     expect(schema.properties?.continuation).toMatchObject({ type: "string", maxLength: 1024 });
+    expect(schema.properties?.timeoutSeconds).toMatchObject({
+      type: "integer",
+      minimum: 1,
+      maximum: 3_600,
+    });
   });
 
   it("gives every tool a compact call and result renderer", () => {
@@ -263,6 +269,69 @@ describe("Pi extension", () => {
     }
 
     expect(receivedSignals).toEqual([signal, signal, signal]);
+  });
+
+  it("gives up after timeoutSeconds through web_search and web_read", async () => {
+    vi.useFakeTimers();
+    const providerName = `timeoutprovider${Math.random().toString(36).slice(2)}`;
+    class HangingProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://hanging.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, HangingProvider);
+      }
+
+      search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+
+      read(
+        _url: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<{ url: string; content: string }> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    customProviderCleanups.push(register(HangingProvider));
+    const tools = captureTools();
+    const searchTool = tools.get("web_search");
+    const readTool = tools.get("web_read");
+    if (!searchTool || !readTool) throw new Error("Web tool was not registered");
+
+    const search = expect(
+      Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
+        "timeout-call",
+        { query: "test", provider: providerName, timeoutSeconds: 1 },
+        undefined,
+        undefined,
+        undefined,
+      ]),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+    const read = expect(
+      Reflect.apply(readTool.execute.bind(readTool), undefined, [
+        "timeout-call",
+        { url: "https://example.com", provider: providerName, timeoutSeconds: 1 },
+        undefined,
+        undefined,
+        undefined,
+      ]),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await search;
+    await read;
   });
 
   it("executes reverse image search through the live SerpAPI provider", async () => {

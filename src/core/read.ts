@@ -17,6 +17,7 @@ import { createReadProvider, has, readProviders } from "./registry.ts";
 import { isProviderConfigured } from "./resolve.ts";
 import {
   DEFAULT_CONCURRENCY,
+  MAX_AGENT_TIMEOUT_SECONDS,
   MAX_CONCURRENCY,
   providerRequestOptions,
   throwIfAborted,
@@ -40,7 +41,13 @@ export const MAX_AGENT_READ_CHARS = 200_000;
 export const packageCapabilities = {
   execution: {
     cancellation: { option: "signal" },
-    deadline: { option: "deadline", unit: "unix-ms" },
+    deadline: {
+      option: "deadline",
+      unit: "unix-ms",
+      agentOption: "timeoutSeconds",
+      agentUnit: "seconds",
+      agentMaximum: MAX_AGENT_TIMEOUT_SECONDS,
+    },
     concurrency: {
       option: "concurrency",
       default: DEFAULT_CONCURRENCY,

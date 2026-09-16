@@ -145,6 +145,7 @@ const DEFAULT_MAX_RESULTS = 10;
 const MAX_SEARCH_CONTINUATION_CHARACTERS = 4_096;
 const DEFAULT_READ_MAX_CHARS = 20_000;
 const MAX_READ_MAX_CHARS = 200_000;
+const MAX_TIMEOUT_SECONDS = 3_600;
 const MODEL_RESULT_MAX_CHARACTERS = 4_000;
 const MODEL_FIELD_MAX_CHARACTERS = 300;
 const MODEL_TEXT_MAX_CHARACTERS = 900;
@@ -221,6 +222,14 @@ const searchParameters = Type.Object({
       description: "ISO date filter: only results published before this date.",
     }),
   ),
+  timeoutSeconds: Type.Optional(
+    Type.Integer({
+      description:
+        "Give up after this many seconds. Fan-out and batch return what finished by then and report the rest as errors.",
+      minimum: 1,
+      maximum: MAX_TIMEOUT_SECONDS,
+    }),
+  ),
 });
 
 const imageSearchParameters = Type.Object({
@@ -269,6 +278,14 @@ const readParameters = Type.Object({
     Type.Integer({ description: "Provider timeout in seconds when supported.", minimum: 1 }),
   ),
   noCache: Type.Optional(Type.Boolean({ description: "Bypass provider cache when supported." })),
+  timeoutSeconds: Type.Optional(
+    Type.Integer({
+      description:
+        "Give up after this many seconds. A batch returns the URLs that finished by then and reports the rest as errors.",
+      minimum: 1,
+      maximum: MAX_TIMEOUT_SECONDS,
+    }),
+  ),
 });
 
 const emptyParameters = Type.Object({});
@@ -344,7 +361,11 @@ export default function webExtension(pi: ExtensionAPI) {
             startPublishedDate: params.startPublishedDate,
             endPublishedDate: params.endPublishedDate,
           });
-          const executionOptions = { ...searchOptions, signal };
+          const executionOptions = {
+            ...searchOptions,
+            signal,
+            deadline: web.deadlineAfterSeconds(params.timeoutSeconds),
+          };
 
           if (Array.isArray(params.query)) {
             const outcomes = await web.searchBatch(params.query, {
@@ -559,11 +580,13 @@ export default function webExtension(pi: ExtensionAPI) {
       if (Array.isArray(params.url) && params.continuation !== undefined) {
         throw new TypeError("continuation is only supported for a single URL");
       }
+      const deadline = web.deadlineAfterSeconds(params.timeoutSeconds);
       if (Array.isArray(params.url)) {
         const outcomes = await web.readBatchDetailed(params.url, {
           provider: readProvider,
           ...readOptions,
           signal,
+          deadline,
         });
         return {
           content: [{ type: "text", text: formatReadBatch(outcomes) }],
@@ -585,6 +608,7 @@ export default function webExtension(pi: ExtensionAPI) {
         provider: readProvider,
         ...readOptions,
         signal,
+        deadline,
       });
       const header = `[provider=${response.provider} requested=${response.requestedProvider}] read ${truncateSingleLine(response.result.url, 200)}`;
       return {

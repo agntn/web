@@ -34,6 +34,7 @@ import {
   providerRequestOptions,
   settleWithConcurrency,
   throwIfAborted,
+  throwIfCancelled,
   withExecutionBudget,
 } from "./execution.ts";
 
@@ -117,7 +118,9 @@ export async function searchAll(
 
 /**
  * Like {@link searchAll}, but also returns successful provider names,
- * filter diagnostics, and errors for each provider.
+ * filter diagnostics, and errors for each provider. A `deadline` keeps the
+ * providers that finished and lists the rest in `errors`. A cancelled
+ * `signal` still rejects.
  * @param {string} query - Search query.
  * @param {SearchAllOptions} options - Provider and result options.
  * @returns {Promise<SearchAllResponse>} Results and provider failures.
@@ -139,7 +142,7 @@ export async function searchAllDetailed(
   const providerNames = await resolveProviderNames(requestedProviders, effectiveSearchOptions);
   throwIfAborted(effectiveSearchOptions.signal);
   const settled = await searchProviders(providerNames, query, effectiveSearchOptions);
-  throwIfAborted(effectiveSearchOptions.signal);
+  throwIfCancelled(effectiveSearchOptions);
   return collectProviderResults(providerNames, settled, maxResults);
 }
 

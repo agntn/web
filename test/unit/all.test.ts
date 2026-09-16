@@ -731,6 +731,97 @@ describe("searchAllDetailed", () => {
     }
   });
 
+  it("keeps the providers that finished when the deadline cuts a fanout", async () => {
+    const fastName = `fanout-finished-${Math.random().toString(36).slice(2)}`;
+    const slowName = `fanout-cut-${Math.random().toString(36).slice(2)}`;
+    class FastProvider extends Provider {
+      static readonly providerName = fastName;
+      static readonly defaultBaseURL = "https://fast.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, FastProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com/fast", title: "Fast", snippet: "finished" }];
+      }
+    }
+    class SlowProvider extends Provider {
+      static readonly providerName = slowName;
+      static readonly defaultBaseURL = "https://slow.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, SlowProvider);
+      }
+
+      search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    const cleanups = [register(FastProvider), register(SlowProvider)];
+
+    try {
+      const response = await searchAllDetailed("test", {
+        providers: [fastName, slowName],
+        deadline: Date.now() + 25,
+      });
+
+      expect(response.results.map((result) => result.url)).toEqual(["https://example.com/fast"]);
+      expect(response.successfulProviders).toEqual([fastName]);
+      expect(response.errors).toMatchObject([
+        { provider: slowName, error: { name: "TimeoutError" } },
+      ]);
+    } finally {
+      for (const cleanup of cleanups.reverse()) cleanup();
+    }
+  });
+
+  it("still rejects a fanout when the caller cancels it", async () => {
+    const providerName = `fanout-cancel-${Math.random().toString(36).slice(2)}`;
+    class HangingProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://hanging.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, HangingProvider);
+      }
+
+      search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    const cleanup = register(HangingProvider);
+    const controller = new AbortController();
+    const reason = new DOMException("cancelled by host", "AbortError");
+
+    try {
+      const pending = searchAllDetailed("test", {
+        providers: [providerName],
+        deadline: Date.now() + 60_000,
+        signal: controller.signal,
+      });
+      controller.abort(reason);
+
+      await expect(pending).rejects.toBe(reason);
+    } finally {
+      cleanup();
+    }
+  });
+
   it("publishes bounds that accommodate provider-native continuation state", () => {
     const continuation = encodeSearchContinuation(
       "custom",

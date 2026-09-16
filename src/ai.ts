@@ -11,6 +11,7 @@ import {
   readUrlDetailed,
 } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
+import { deadlineAfterSeconds, MAX_AGENT_TIMEOUT_SECONDS } from "./core/execution.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
 import { listProviders } from "./core/resolve.ts";
 import { MAX_SEARCH_CONTINUATION_LENGTH } from "./core/search-continuation.ts";
@@ -77,6 +78,15 @@ export const searchTool = tool({
       .string()
       .optional()
       .describe("Filter results published before this date (ISO 8601)"),
+    timeoutSeconds: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_AGENT_TIMEOUT_SECONDS)
+      .optional()
+      .describe(
+        "Give up after this many seconds. Fan-out and batch return what finished by then and report the rest as errors.",
+      ),
   }),
   execute: async (
     {
@@ -94,6 +104,7 @@ export const searchTool = tool({
       category,
       startPublishedDate,
       endPublishedDate,
+      timeoutSeconds,
     },
     { abortSignal },
   ) => {
@@ -111,6 +122,7 @@ export const searchTool = tool({
       category,
       startPublishedDate,
       endPublishedDate,
+      deadline: deadlineAfterSeconds(timeoutSeconds),
       signal: abortSignal,
     };
 
@@ -210,6 +222,15 @@ export const readTool = tool({
       .optional()
       .describe("Provider timeout in seconds when supported."),
     noCache: z.boolean().optional().describe("Bypass provider cache when supported."),
+    timeoutSeconds: z
+      .number()
+      .int()
+      .min(1)
+      .max(MAX_AGENT_TIMEOUT_SECONDS)
+      .optional()
+      .describe(
+        "Give up after this many seconds. A batch returns the URLs that finished by then and reports the rest as errors.",
+      ),
   }),
   execute: async (
     {
@@ -223,6 +244,7 @@ export const readTool = tool({
       removeSelector,
       timeout,
       noCache,
+      timeoutSeconds,
     },
     { abortSignal },
   ) => {
@@ -240,6 +262,7 @@ export const readTool = tool({
       removeSelector,
       timeout,
       noCache,
+      deadline: deadlineAfterSeconds(timeoutSeconds),
       signal: abortSignal,
     };
     if (Array.isArray(url)) {

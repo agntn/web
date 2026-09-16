@@ -3,6 +3,9 @@ import type { ExecutionOptions } from "./types.ts";
 export const DEFAULT_CONCURRENCY = 3;
 export const MAX_CONCURRENCY = 10;
 
+/** Longest time budget an agent surface accepts through `timeoutSeconds`. */
+export const MAX_AGENT_TIMEOUT_SECONDS = 3_600;
+
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const executionBudget = Symbol("executionBudget");
 
@@ -34,7 +37,11 @@ export function withExecutionBudget<TOptions extends ExecutionOptions>(
   }
 
   const signal = operationSignal(options);
-  const budget = new ExecutionBudget(normalizedConcurrency(options?.concurrency), signal);
+  const budget = new ExecutionBudget(
+    normalizedConcurrency(options?.concurrency),
+    signal,
+    options?.signal,
+  );
   return { ...options, signal, deadline: undefined, [executionBudget]: budget } as TOptions &
     BudgetedExecutionOptions;
 }
@@ -86,6 +93,30 @@ export function throwIfAborted(signal?: Readonly<AbortSignal>): void {
 }
 
 /**
+ * Throws when the caller cancelled the operation, not when only its deadline passed.
+ * @param options - Options carrying the operation budget.
+ */
+export function throwIfCancelled(options?: Readonly<ExecutionOptions>): void {
+  const budget = (options as Readonly<BudgetedExecutionOptions> | undefined)?.[executionBudget];
+  throwIfAborted(budget === undefined ? options?.signal : budget.callerSignal);
+}
+
+/**
+ * Turns the time budget an agent passes into the absolute deadline the library takes.
+ * @param seconds - Whole seconds from now, or undefined for no deadline.
+ * @returns {number | undefined} Unix timestamp in milliseconds.
+ */
+export function deadlineAfterSeconds(seconds: number | undefined): number | undefined {
+  if (seconds === undefined) return undefined;
+  if (!Number.isSafeInteger(seconds) || seconds < 1 || seconds > MAX_AGENT_TIMEOUT_SECONDS) {
+    throw new RangeError(
+      `timeoutSeconds must be an integer between 1 and ${MAX_AGENT_TIMEOUT_SECONDS}`,
+    );
+  }
+  return Date.now() + seconds * 1000;
+}
+
+/**
  * Runs ordered work through the operation's shared concurrency budget.
  * @param items - Ordered work inputs.
  * @param worker - Function that performs one bounded unit of work.
@@ -107,6 +138,7 @@ export async function settleWithConcurrency<T, TResult>(
 
 class ExecutionBudget {
   readonly signal: Readonly<AbortSignal> | undefined;
+  readonly callerSignal: Readonly<AbortSignal> | undefined;
   readonly #concurrency: number;
   readonly #queue: Array<{
     run: () => Promise<unknown>;
@@ -116,9 +148,14 @@ class ExecutionBudget {
   #active = 0;
   #listeningForAbort = false;
 
-  constructor(concurrency: number, signal?: Readonly<AbortSignal>) {
+  constructor(
+    concurrency: number,
+    signal?: Readonly<AbortSignal>,
+    callerSignal?: Readonly<AbortSignal>,
+  ) {
     this.#concurrency = concurrency;
     this.signal = signal;
+    this.callerSignal = callerSignal;
   }
 
   run<TResult>(task: () => Promise<TResult>): Promise<TResult> {
