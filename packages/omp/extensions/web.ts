@@ -190,6 +190,14 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
     continuation: Type.Optional(
       Type.String({ description: "Opaque token returned by a truncated read.", maxLength: 1024 }),
     ),
+    links: Type.Optional(
+      Type.Boolean({ description: "Include the links found on the page. Defaults to false." }),
+    ),
+    images: Type.Optional(
+      Type.Boolean({
+        description: "Include the image URLs found on the page. Defaults to false.",
+      }),
+    ),
     targetSelector: Type.Optional(
       Type.String({ description: "CSS selector to target when supported." }),
     ),
@@ -330,6 +338,8 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         maxTokens: params.maxTokens,
         maxChars: params.maxChars ?? DEFAULT_READ_MAX_CHARS,
         continuation: params.continuation,
+        links: params.links,
+        images: params.images,
         targetSelector: params.targetSelector,
         removeSelector: params.removeSelector,
         timeout: params.timeout,

@@ -473,6 +473,14 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
             maxLength: 1024,
           }),
         ),
+        links: Type.Optional(
+          Type.Boolean({ description: "Include the links found on the page. Defaults to false." }),
+        ),
+        images: Type.Optional(
+          Type.Boolean({
+            description: "Include the image URLs found on the page. Defaults to false.",
+          }),
+        ),
         targetSelector: Type.Optional(
           Type.String({ description: "CSS selector to target when supported by the provider." }),
         ),
@@ -649,6 +657,8 @@ export async function executeRead(
     maxTokens: intArg("maxTokens", args.maxTokens),
     maxChars: readMaxCharsArg(args.maxChars),
     continuation,
+    links: boolArg("links", args.links),
+    images: boolArg("images", args.images),
     targetSelector: stringArg("targetSelector", args.targetSelector),
     removeSelector: stringArg("removeSelector", args.removeSelector),
     timeout: intArg("timeout", args.timeout),

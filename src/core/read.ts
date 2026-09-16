@@ -80,6 +80,10 @@ export interface ReadUrlOptions extends ReadOptions {
   readonly provider?: string;
   readonly maxChars?: number;
   readonly continuation?: string;
+  /** Keeps the page's links in a bounded read. Defaults to false. */
+  readonly links?: boolean;
+  /** Keeps the page's image URLs in a bounded read. Defaults to false. */
+  readonly images?: boolean;
 }
 
 /** Read result with requested mode, effective provider, and provider-attempt diagnostics. */
@@ -110,6 +114,12 @@ type ReadResultInput = Readonly<Omit<ReadResult, "links" | "images" | "metadata"
   readonly images?: readonly string[];
   readonly metadata?: Readonly<Record<string, unknown>>;
 };
+
+/** Optional page fields a bounded read keeps only on request. */
+interface PageFields {
+  readonly links: boolean;
+  readonly images: boolean;
+}
 
 const DEFAULT_READ_PROVIDER: ReadProviderName = "jina";
 const MAX_CONTINUATION_LENGTH = 1_024;
@@ -144,6 +154,8 @@ export async function readUrlDetailed(
     provider: requestedProviderInput,
     maxChars: maxCharsInput,
     continuation,
+    links,
+    images,
     ...readOptions
   } = options ?? {};
   const maxChars = readMaxChars(maxCharsInput);
@@ -151,6 +163,7 @@ export async function readUrlDetailed(
   throwIfAborted(effectiveReadOptions.signal);
   const requestedProviderName = requestedProviderInput?.trim();
   const requestedProvider = requestedProviderName || "auto";
+  const pageFields = { links: links === true, images: images === true };
 
   if (continuation !== undefined) {
     return continueRead(
@@ -159,6 +172,7 @@ export async function readUrlDetailed(
       effectiveReadOptions,
       maxChars,
       continuation,
+      pageFields,
     );
   }
 
@@ -175,6 +189,7 @@ export async function readUrlDetailed(
       offset: 0,
       provider: response.provider,
       requestedProvider: response.requestedProvider,
+      ...pageFields,
     }),
   };
 }
@@ -200,6 +215,7 @@ async function continueRead(
   readOptions: Readonly<ReadOptions>,
   maxChars: number | undefined,
   continuation: string,
+  pageFields: Readonly<PageFields>,
 ): Promise<ReadUrlDetailedResult> {
   const payload = decodeContinuation(continuation);
   if (
@@ -223,6 +239,7 @@ async function continueRead(
       offset: payload.offset,
       provider,
       requestedProvider: payload.requestedProvider,
+      ...pageFields,
     }),
     requestedProvider: payload.requestedProvider,
     provider,
@@ -313,16 +330,26 @@ function readMaxChars(value: number | undefined): number | undefined {
   return value;
 }
 
+/**
+ * Slices one page to the bound and drops what would smuggle the page past it: the
+ * `text` and `html` duplicates always, `links` and `images` unless asked for, since a
+ * long page carries thousands of links for a few thousand words.
+ * @param result - Page as the reader returned it.
+ * @param context - Bound, offset, reader provenance, and the optional fields to keep.
+ * @returns {ReadResult} Bounded page with a continuation when more remained.
+ */
 function pageReadResult(
   result: ReadResultInput,
-  context: Readonly<{
-    url: string;
-    readOptions: Readonly<ReadOptions>;
-    maxChars: number | undefined;
-    offset: number;
-    provider: string;
-    requestedProvider: string;
-  }>,
+  context: Readonly<
+    PageFields & {
+      url: string;
+      readOptions: Readonly<ReadOptions>;
+      maxChars: number | undefined;
+      offset: number;
+      provider: string;
+      requestedProvider: string;
+    }
+  >,
 ): ReadResult {
   const page = sliceContent(result.content, context.offset, context.maxChars);
   const {
@@ -350,8 +377,8 @@ function pageReadResult(
     content: page.content,
     truncated: page.truncated,
     ...(continuation === undefined ? {} : { continuation }),
-    ...(links === undefined ? {} : { links: [...links] }),
-    ...(images === undefined ? {} : { images: [...images] }),
+    ...(context.links && links !== undefined ? { links: [...links] } : {}),
+    ...(context.images && images !== undefined ? { images: [...images] } : {}),
     ...(metadata === undefined ? {} : { metadata: { ...metadata } }),
   };
 }

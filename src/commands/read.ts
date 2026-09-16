@@ -42,6 +42,14 @@ export default defineCommand({
       type: "string",
       description: "Opaque token returned by a truncated read",
     },
+    links: {
+      type: "boolean",
+      description: "Keep the page's links in a bounded read",
+    },
+    images: {
+      type: "boolean",
+      description: "Keep the page's image URLs in a bounded read",
+    },
     json: {
       type: "boolean",
       description: "Output as JSON",
@@ -77,6 +85,8 @@ type ReadCommandArgs = {
   readonly "max-tokens"?: string;
   readonly "max-chars"?: string;
   readonly continuation?: string;
+  readonly links?: boolean;
+  readonly images?: boolean;
   readonly json: boolean;
 };
 
@@ -88,6 +98,8 @@ type ParsedReadArguments = {
     readonly maxTokens?: number;
     readonly maxChars?: number;
     readonly continuation?: string;
+    readonly links?: boolean;
+    readonly images?: boolean;
   };
 };
 
@@ -114,7 +126,17 @@ function parseReadArguments(args: ReadCommandArgs, maxBatchItems: number): Parse
       maxTokens: maxTokens.value,
       maxChars: maxChars.value,
       continuation: args.continuation,
+      ...pageFieldOptions(args),
     },
+  };
+}
+
+function pageFieldOptions(
+  args: ReadCommandArgs,
+): Pick<ParsedReadArguments["options"], "links" | "images"> {
+  return {
+    ...(args.links ? { links: true } : {}),
+    ...(args.images ? { images: true } : {}),
   };
 }
 
@@ -123,13 +145,18 @@ function parseProviderOption(input: string | undefined): { readonly provider?: s
   return !provider || provider === "auto" ? {} : { provider };
 }
 
+type ReadResultView = Readonly<
+  Pick<
+    import("../core/types.ts").ReadResult,
+    "url" | "title" | "description" | "content" | "truncated" | "continuation"
+  >
+> & {
+  readonly links?: readonly string[];
+  readonly images?: readonly string[];
+};
+
 type ReadDetailedResultView = {
-  readonly result: Readonly<
-    Pick<
-      import("../core/types.ts").ReadResult,
-      "url" | "title" | "description" | "content" | "truncated" | "continuation"
-    >
-  >;
+  readonly result: ReadResultView;
   readonly requestedProvider: string;
   readonly provider: string;
   readonly attempts: readonly string[];
@@ -146,15 +173,7 @@ function writeReadDetailedResult(response: ReadDetailedResultView, json: boolean
   writeReadResult(response.result, false);
 }
 
-function writeReadResult(
-  result: Readonly<
-    Pick<
-      import("../core/types.ts").ReadResult,
-      "url" | "title" | "description" | "content" | "truncated" | "continuation"
-    >
-  >,
-  json: boolean,
-): void {
+function writeReadResult(result: ReadResultView, json: boolean): void {
   if (json) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     return;
@@ -171,6 +190,15 @@ function writeReadResult(
     consola.log("");
     consola.log(`[truncated; continuation=${sanitizeHeaderText(result.continuation)}]`);
   }
+  writeUrlList("Links", result.links);
+  writeUrlList("Images", result.images);
+}
+
+function writeUrlList(label: string, urls: readonly string[] | undefined): void {
+  if (urls === undefined || urls.length === 0) return;
+  consola.log("");
+  consola.log(`${label} (${urls.length}):`);
+  for (const url of urls) consola.log(`  ${sanitizeTerminalText(url, 2048)}`);
 }
 
 type ReadBatchItemView =
@@ -180,12 +208,7 @@ type ReadBatchItemView =
       readonly requestedProvider: string;
       readonly provider: string;
       readonly attempts: readonly string[];
-      readonly result: Readonly<
-        Pick<
-          import("../core/types.ts").ReadResult,
-          "url" | "title" | "description" | "content" | "truncated" | "continuation"
-        >
-      >;
+      readonly result: ReadResultView;
     };
 
 function writeReadBatch(outcomes: readonly ReadBatchItemView[], json: boolean): void {

@@ -160,7 +160,7 @@ omp install @agntn/web
 }
 ```
 
-Four tools, `web_search`, `web_search_image`, `web_read` and `web_providers`, the same four on the AI SDK (`@agntn/web/ai`), MCP, Pi and OMP. Reads stop at 20 000 characters unless the model asks for more, so nobody stuffs a whole site into a context window by accident. Pi also gets `/web` and `/web-providers`. Schemas and envelopes for each host: [Agents guide](https://web.agntn.dev/guide/agents).
+Four tools, `web_search`, `web_search_image`, `web_read` and `web_providers`, the same four on the AI SDK (`@agntn/web/ai`), MCP, Pi and OMP. Reads stop at 20 000 characters unless the model asks for more, and the page's link list stays out unless it asks for that too, so nobody stuffs a whole site into a context window by accident. Pi also gets `/web` and `/web-providers`. Schemas and envelopes for each host: [Agents guide](https://web.agntn.dev/guide/agents).
 
 ## 🚫 What this does not do
 

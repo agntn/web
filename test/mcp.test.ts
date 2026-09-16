@@ -160,6 +160,8 @@ describe("web MCP server", () => {
       maximum: 200_000,
     });
     expect(readInput.properties.continuation).toMatchObject({ type: "string", maxLength: 1024 });
+    expect(readInput.properties.links).toMatchObject({ type: "boolean" });
+    expect(readInput.properties.images).toMatchObject({ type: "boolean" });
   });
 
   it("advertises a time budget on web_search and web_read", async () => {
@@ -608,6 +610,43 @@ describe("web MCP server", () => {
         provider: "jina",
         attempts: ["jina"],
         failures: [],
+      },
+    });
+  });
+
+  it("keeps links and images out of a read unless asked", async () => {
+    mockGetJSON.mockReset();
+    mockGetJSON.mockResolvedValue({
+      code: 200,
+      status: 20000,
+      data: {
+        url: "https://example.com",
+        content: "page",
+        links: ["https://example.com/a"],
+        images: ["https://example.com/hero.png"],
+      },
+    });
+    const client = await connectTestClient();
+
+    const bounded = await client.callTool({
+      name: "web_read",
+      arguments: { url: "https://example.com" },
+    });
+    const requested = await client.callTool({
+      name: "web_read",
+      arguments: { url: "https://example.com", links: true, images: true },
+    });
+
+    expect(bounded.isError).toBeUndefined();
+    expect(bounded.structuredContent).toMatchObject({
+      result: { result: { content: "page", truncated: false } },
+    });
+    expect(bounded.structuredContent).not.toHaveProperty("result.result.links");
+    expect(bounded.structuredContent).not.toHaveProperty("result.result.images");
+    expect(requested.isError).toBeUndefined();
+    expect(requested.structuredContent).toMatchObject({
+      result: {
+        result: { links: ["https://example.com/a"], images: ["https://example.com/hero.png"] },
       },
     });
   });

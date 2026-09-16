@@ -146,6 +146,46 @@ describe("read command", () => {
     });
   });
 
+  it("passes the link and image opt-ins", async () => {
+    await runRead({ "max-chars": "2000", links: true, images: true });
+
+    expect(mockReadUrlDetailed).toHaveBeenCalledWith("https://example.com", {
+      maxChars: 2000,
+      links: true,
+      images: true,
+    });
+  });
+
+  it("prints requested links and images in human output", async () => {
+    mockReadUrlDetailed.mockResolvedValueOnce({
+      result: {
+        url: "https://example.com",
+        content: "page",
+        links: ["https://example.com/a", "https://example.com/\x1B[31mb"],
+        images: ["https://example.com/hero.png"],
+      },
+      requestedProvider: "auto",
+      provider: "jina",
+      attempts: ["jina"],
+    });
+
+    await runRead({ links: true, images: true });
+
+    expect(mockLog.mock.calls.map(([message]) => String(message))).toEqual([
+      "[provider=jina requested=auto] read https://example.com",
+      "  https://example.com",
+      "",
+      "page",
+      "",
+      "Links (2):",
+      "  https://example.com/a",
+      "  https://example.com/b",
+      "",
+      "Images (1):",
+      "  https://example.com/hero.png",
+    ]);
+  });
+
   it("outputs effective provider provenance in JSON", async () => {
     await runRead({ json: true });
 

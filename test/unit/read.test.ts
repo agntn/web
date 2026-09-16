@@ -388,6 +388,44 @@ describe("readUrl", () => {
     expect(result).not.toHaveProperty("html");
   });
 
+  it("keeps links and images out of a bounded read unless asked", async () => {
+    const providerName = `linked-reader-${Math.random().toString(36).slice(2)}`;
+    const page = {
+      url: "https://example.com",
+      content: "abcdefgh",
+      links: ["https://example.com/a", "https://example.com/b"],
+      images: ["https://example.com/hero.png"],
+    };
+    const read = vi
+      .fn<(url: string, options?: Readonly<ReadOptions>) => Promise<ReadResult>>()
+      .mockResolvedValue(page);
+    registerReader(providerName, read);
+
+    const bounded = await readUrl("https://example.com", { provider: providerName, maxChars: 5 });
+    const requested = await readUrl("https://example.com", {
+      provider: providerName,
+      maxChars: 5,
+      links: true,
+      images: true,
+    });
+    const next = await readUrl("https://example.com", {
+      provider: providerName,
+      maxChars: 5,
+      continuation: requested.continuation,
+      links: true,
+    });
+    const unbounded = await readUrl("https://example.com", { provider: providerName });
+
+    expect(read.mock.calls.map(([, options]) => options)).toEqual([{}, {}, {}, {}]);
+    expect(bounded).toMatchObject({ content: "abcde", truncated: true });
+    expect(bounded).not.toHaveProperty("links");
+    expect(bounded).not.toHaveProperty("images");
+    expect(requested).toMatchObject({ content: "abcde", links: page.links, images: page.images });
+    expect(next).toMatchObject({ content: "fgh", truncated: false, links: page.links });
+    expect(next).not.toHaveProperty("images");
+    expect(unbounded).toMatchObject({ links: page.links, images: page.images });
+  });
+
   it("continues on Unicode boundaries and detects changed content", async () => {
     const providerName = `continuable-reader-${Math.random().toString(36).slice(2)}`;
     let content = "ab😀cdef";

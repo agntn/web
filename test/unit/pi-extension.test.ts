@@ -53,6 +53,8 @@ describe("Pi extension", () => {
       maximum: 200_000,
     });
     expect(schema.properties?.continuation).toMatchObject({ type: "string", maxLength: 1024 });
+    expect(schema.properties?.links).toMatchObject({ type: "boolean" });
+    expect(schema.properties?.images).toMatchObject({ type: "boolean" });
     expect(schema.properties?.timeoutSeconds).toMatchObject({
       type: "integer",
       minimum: 1,
@@ -702,6 +704,61 @@ describe("Pi extension", () => {
       result: { content: "Cus", truncated: true },
     });
     expect(bounded.details.result.continuation).toBeTypeOf("string");
+  });
+
+  it("keeps links and images out of a read unless asked", async () => {
+    const providerName = `linkedprovider${Math.random().toString(36).slice(2)}`;
+    const page = {
+      content: "Linked page",
+      links: ["https://example.com/a"],
+      images: ["https://example.com/hero.png"],
+    };
+    class LinkedProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://linked.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, LinkedProvider);
+      }
+
+      async read(url: string) {
+        return { url, ...page };
+      }
+    }
+    customProviderCleanups.push(register(LinkedProvider));
+    const readTool = captureTools().get("web_read");
+    if (!readTool) throw new Error("web_read was not registered");
+    const execute = (params: Readonly<Record<string, unknown>>) =>
+      Reflect.apply(readTool.execute.bind(readTool), undefined, [
+        "read-call",
+        params,
+        undefined,
+        undefined,
+        undefined,
+      ]) as Promise<{
+        readonly content: readonly { readonly text: string }[];
+        readonly details: { readonly result: unknown };
+      }>;
+
+    const bounded = await execute({ url: "https://example.com", provider: providerName });
+    const requested = await execute({
+      url: "https://example.com",
+      provider: providerName,
+      links: true,
+      images: true,
+    });
+
+    expect(bounded.details).toMatchObject({ result: { content: "Linked page" } });
+    expect(bounded.details.result).not.toHaveProperty("links");
+    expect(bounded.details.result).not.toHaveProperty("images");
+    expect(bounded.content[0]?.text).not.toContain("Links");
+    expect(requested.details).toMatchObject({
+      options: { maxChars: 20_000, links: true, images: true },
+      result: { links: page.links, images: page.images },
+    });
+    expect(requested.content[0]?.text).toContain(
+      "Linked page\n\nLinks (1):\n  https://example.com/a\n\nImages (1):\n  https://example.com/hero.png",
+    );
   });
 
   it("counts providers whose results were deduplicated from an all search", async () => {

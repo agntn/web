@@ -603,6 +603,52 @@ describe("OMP extension", () => {
     });
   });
 
+  it("keeps links and images out of a read unless asked", async () => {
+    const providerName = `omplinked${Math.random().toString(36).slice(2)}`;
+    const page = {
+      content: "Linked page",
+      links: ["https://example.com/a"],
+      images: ["https://example.com/hero.png"],
+    };
+    class LinkedProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://linked.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, LinkedProvider);
+      }
+
+      async read(url: string) {
+        return { url, ...page };
+      }
+    }
+    customProviderCleanups.push(register(LinkedProvider));
+    const read = requiredTool(captureOmpExtension().tools, "web_read");
+
+    const bounded = await read.execute(
+      "read-call",
+      { url: "https://example.com", provider: providerName },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const requested = await read.execute(
+      "read-call",
+      { url: "https://example.com", provider: providerName, links: true, images: true },
+      undefined,
+      undefined,
+      {} as never,
+    );
+
+    expect(bounded.details).toMatchObject({ result: { content: "Linked page" } });
+    expect(bounded.details).not.toHaveProperty("result.links");
+    expect(bounded.details).not.toHaveProperty("result.images");
+    expect(requested.details).toMatchObject({
+      options: { maxChars: 20_000, links: true, images: true },
+      result: { links: page.links, images: page.images },
+    });
+  });
+
   it("executes provider discovery through the live package", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("unreachable")));
     const providers = requiredTool(captureOmpExtension().tools, "web_providers");
