@@ -731,6 +731,46 @@ describe("searchAllDetailed", () => {
     }
   });
 
+  it("fires the deadline beside a caller signal that never aborts", async () => {
+    const providerName = `fanout-combined-${Math.random().toString(36).slice(2)}`;
+    class HangingProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://hanging.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, HangingProvider);
+      }
+
+      search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    const cleanup = register(HangingProvider);
+    const caller = new AbortController();
+
+    try {
+      const response = await searchAllDetailed("test", {
+        providers: [providerName],
+        signal: caller.signal,
+        deadline: Date.now() + 25,
+      });
+
+      expect(response.results).toEqual([]);
+      expect(response.errors).toMatchObject([
+        { provider: providerName, error: { name: "TimeoutError" } },
+      ]);
+    } finally {
+      cleanup();
+    }
+  });
+
   it("keeps the providers that finished when the deadline cuts a fanout", async () => {
     const fastName = `fanout-finished-${Math.random().toString(36).slice(2)}`;
     const slowName = `fanout-cut-${Math.random().toString(36).slice(2)}`;

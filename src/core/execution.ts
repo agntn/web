@@ -13,7 +13,7 @@ type BudgetedExecutionOptions = ExecutionOptions & {
   readonly [executionBudget]: ExecutionBudget;
 };
 
-/** Ties each deadline controller to its signal, so only the running operation keeps it alive. */
+/** Ties each deadline controller to the signal an operation holds, composed or not. */
 const deadlineControllers = new WeakMap<AbortSignal, AbortController>();
 
 /**
@@ -56,9 +56,13 @@ export function operationSignal(
   if (existing) return existing.signal;
   normalizedConcurrency(options?.concurrency);
 
-  const timeoutSignal = deadlineSignal(options?.deadline);
-  if (!timeoutSignal) return options?.signal;
-  return options?.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal;
+  const controller = deadlineController(options?.deadline);
+  if (!controller) return options?.signal;
+  const signal = options?.signal
+    ? AbortSignal.any([options.signal, controller.signal])
+    : controller.signal;
+  deadlineControllers.set(signal, controller);
+  return signal;
 }
 
 /**
@@ -225,14 +229,13 @@ class ExecutionBudget {
   }
 }
 
-function deadlineSignal(deadline?: number): AbortSignal | undefined {
+function deadlineController(deadline?: number): AbortController | undefined {
   if (deadline === undefined) return undefined;
   if (!Number.isFinite(deadline)) throw new RangeError("deadline must be a finite Unix timestamp");
 
   const controller = new AbortController();
-  deadlineControllers.set(controller.signal, controller);
   scheduleDeadline(new WeakRef(controller), deadline);
-  return controller.signal;
+  return controller;
 }
 
 /**
