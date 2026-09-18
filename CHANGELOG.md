@@ -1,5 +1,30 @@
 # Changelog
 
+## v0.5.5
+
+[compare changes](https://github.com/agntn/web/compare/v0.5.4...v0.5.5)
+
+### 🚀 Enhancements
+
+- **tavily:** Read pages with Extract ([#157](https://github.com/agntn/web/pull/157))
+
+### 🩹 Fixes
+
+- **cli:** Search-image runs on an empty registry ([#145](https://github.com/agntn/web/pull/145))
+- **serpapi:** Lens with no matches throws ([#146](https://github.com/agntn/web/pull/146))
+- **brave:** Snippets come back as HTML ([#147](https://github.com/agntn/web/pull/147))
+- **serpapi:** Cut the page to maxResults ([#151](https://github.com/agntn/web/pull/151))
+- **cli:** A failed provider ends in a stack trace ([#154](https://github.com/agntn/web/pull/154))
+
+### 🏡 Chore
+
+- Add `renovate.json` ([ab77c39](https://github.com/agntn/web/commit/ab77c39))
+
+### ❤️ Contributors
+
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+- Ori ([@oritwoen](https://github.com/oritwoen))
+
 ## v0.5.4
 
 [compare changes](https://github.com/agntn/web/compare/v0.5.3...v0.5.4)
