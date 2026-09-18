@@ -41,6 +41,7 @@ export default defineCommand({
   async run({ args }) {
     const maxResults = parseMaxResults(args["max-results"]);
     try {
+      await import("../providers/index.ts");
       const results = await searchByImage(args.url, {
         provider: args.provider?.trim() || undefined,
         maxResults,
