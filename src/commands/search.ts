@@ -189,6 +189,8 @@ function parseSearchArguments(args: SearchCommandArgs): ParsedSearchArguments {
   if (queries.some((query) => !query.trim())) {
     return exitWithError("Search query cannot be empty.");
   }
+  const continuation = continuationError(args.continuation, queries, args.provider);
+  if (continuation !== undefined) return exitWithError(continuation);
   const maxResults = parseMaxResults(args["max-results"]);
   if (!maxResults.ok) return exitWithError(maxResults.message);
 
@@ -198,6 +200,24 @@ function parseSearchArguments(args: SearchCommandArgs): ParsedSearchArguments {
     options: parseSearchOptions(args, maxResults.value),
     json: args.json,
   };
+}
+
+/**
+ * A continuation token names one page of one provider, so a batch or a fan-out cannot take it.
+ * @param continuation - Token from the previous search, when any.
+ * @param queries - Queries the command is about to run.
+ * @param provider - Requested provider name, when any.
+ * @returns {string | undefined} The refusal to print, or undefined when the token can be used.
+ */
+function continuationError(
+  continuation: string | undefined,
+  queries: readonly string[],
+  provider: string | undefined,
+): string | undefined {
+  if (continuation === undefined) return undefined;
+  if (queries.length > 1) return "--continuation is only supported for a single query.";
+  if (provider === "all") return "--continuation is not supported with --provider all.";
+  return undefined;
 }
 
 function parseSearchOptions(args: SearchCommandArgs, maxResults: number): SearchPageOptions {
