@@ -99,14 +99,20 @@ function braveSearchUrl(
 }
 
 /**
- * `freshness=YYYY-MM-DDtoYYYY-MM-DD`, one side may be empty; any other spelling Brave ignores.
+ * Brave documents only the closed `freshness=YYYY-MM-DDtoYYYY-MM-DD` and drops any other spelling
+ * without a word, so a lone bound is closed with the epoch or today's UTC date.
  * @param options - Search options requested by the caller.
  * @returns {string} The `freshness` query parameter, or nothing without a date bound.
  */
 function freshnessParam(options: SearchRequestOptions): string {
-  const start = options.startPublishedDate?.slice(0, 10) ?? "";
-  const end = options.endPublishedDate?.slice(0, 10) ?? "";
-  return start === "" && end === "" ? "" : `&freshness=${start}to${end}`;
+  const start = day(options.startPublishedDate);
+  const end = day(options.endPublishedDate);
+  if (start === undefined && end === undefined) return "";
+  return `&freshness=${start ?? FRESHNESS_FLOOR}to${end ?? day(new Date().toISOString())}`;
+}
+
+function day(value?: string): string | undefined {
+  return value ? value.slice(0, 10) : undefined;
 }
 
 function braveContinuation(
@@ -138,6 +144,8 @@ function mapResult(result: BraveResult): SearchResult {
     text: extraSnippetText(result.extra_snippets),
   };
 }
+
+const FRESHNESS_FLOOR = "1970-01-01";
 
 const HTML_ENTITY = /&(?:#x([0-9a-f]+)|#([0-9]+)|([a-z]+));/giu;
 

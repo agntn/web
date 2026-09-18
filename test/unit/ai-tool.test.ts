@@ -733,7 +733,9 @@ describe("searchTool", () => {
     const [, body] = mockPostJSON.mock.calls[0];
     expect(body.includeDomains).toEqual(["github.com"]);
     expect(body.startPublishedDate).toBe("2024-01-01");
-    expect(mockGetJSON.mock.calls[0]?.[0]).toContain("&freshness=2024-01-01to");
+    expect(new URL(String(mockGetJSON.mock.calls[0]?.[0])).searchParams.get("freshness")).toMatch(
+      /^2024-01-01to\d{4}-\d{2}-\d{2}$/u,
+    );
     expect(body.numResults).toBe(5);
   });
 
