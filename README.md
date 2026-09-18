@@ -139,7 +139,7 @@ That's most of it, really. `create("brave")` instead of `create("exa")` and noth
 | **searxng**      | None, your own instance                              | search              | category                     | yes   |
 | **serpapi**      | `SERPAPI_API_KEY`                                    | search, searchImage | none                         | yes   |
 | **serpbase**     | `SERPBASE_API_KEY`                                   | search              | category                     | yes   |
-| **tavily**       | `TAVILY_API_KEY`                                     | search, read        | domains                      |       |
+| **tavily**       | `TAVILY_API_KEY`                                     | search, read        | domains, category, dates     |       |
 | **tinyfish**     | `TINYFISH_API_KEY`                                   | search, read        | domains, category, dates     | yes   |
 
 Codex is the odd one out: no key, it borrows the login you already have in Codex, Pi, OMP or OpenCode, and `snippet` comes back empty because the model's answer is not a page excerpt. What each one fills in, which filters it honours and where it bites: [Providers](https://web.agntn.dev/providers).
