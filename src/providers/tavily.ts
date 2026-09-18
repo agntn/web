@@ -3,16 +3,12 @@ import type {
   SearchResult,
   SearchRequestOptions,
   SearchResponse,
+  ReadOptions,
+  ReadResult,
   ProviderConfig,
 } from "../core/types.ts";
 import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
-import {
-  AuthError,
-  HTTPError,
-  PaymentError,
-  normalizeError,
-  type WebError,
-} from "../core/errors.ts";
+import { AuthError, HTTPError, PaymentError, WebError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface TavilySearchRequest {
@@ -41,7 +37,35 @@ interface TavilySearchResponse {
   readonly query: string;
 }
 
+type TavilyExtractFormat = "markdown" | "text";
+
+interface TavilyExtractRequest {
+  readonly urls: readonly string[];
+  readonly extract_depth: "basic" | "advanced";
+  readonly format: TavilyExtractFormat;
+  readonly timeout?: number;
+}
+
+interface TavilyExtractResult {
+  readonly url: string;
+  readonly title?: string | null;
+  readonly raw_content?: string | null;
+}
+
+interface TavilyExtractFailure {
+  readonly url: string;
+  readonly error: string;
+}
+
+interface TavilyExtractResponse {
+  readonly results?: readonly TavilyExtractResult[];
+  readonly failed_results?: readonly TavilyExtractFailure[];
+  readonly request_id?: string;
+}
+
 const TAVILY_USAGE_LIMIT_STATUS_CODES = new Set([432, 433]);
+const TAVILY_MIN_EXTRACT_TIMEOUT_SECONDS = 1;
+const TAVILY_MAX_EXTRACT_TIMEOUT_SECONDS = 60;
 
 class TavilyProvider extends Provider {
   static readonly providerName = "tavily";
@@ -51,6 +75,10 @@ class TavilyProvider extends Provider {
       contentOptions: ["summary", "fullText"],
       resultLimit: { default: 10, maximum: 20 },
       resultFields: ["score", "publishedDate", "text"],
+    },
+    read: {
+      options: ["format", "timeout"],
+      formats: ["markdown", "text"],
     },
   } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
@@ -102,6 +130,23 @@ class TavilyProvider extends Provider {
       throw normalizeTavilyError(error);
     }
   }
+
+  async read(url: string, options?: Readonly<ReadOptions>): Promise<ReadResult> {
+    const format = normalizeReadFormat(options?.format);
+    try {
+      const response = await this.client.postJSON<TavilyExtractResponse>(
+        `${this.baseURL}/extract`,
+        extractBody(url, format, options?.timeout),
+        { Authorization: `Bearer ${this.apiKey}` },
+        options?.signal,
+      );
+      const result = response.results?.[0];
+      if (result) return mapExtractResult(result, format, response.request_id);
+      throw extractFailure(response.failed_results?.[0]);
+    } catch (error) {
+      throw normalizeTavilyError(error);
+    }
+  }
 }
 
 /**
@@ -130,6 +175,61 @@ function mapResult(result: TavilyResult): SearchResult {
     publishedDate: result.published_date,
     ...(typeof result.raw_content === "string" ? { text: result.raw_content } : {}),
   };
+}
+
+function extractBody(
+  url: string,
+  format: TavilyExtractFormat,
+  timeout?: number,
+): Record<string, unknown> {
+  return {
+    urls: [url],
+    extract_depth: "basic",
+    format,
+    ...(timeout === undefined ? {} : { timeout: clampExtractTimeout(timeout) }),
+  } satisfies TavilyExtractRequest;
+}
+
+function clampExtractTimeout(timeout: number): number {
+  return Math.min(
+    Math.max(timeout, TAVILY_MIN_EXTRACT_TIMEOUT_SECONDS),
+    TAVILY_MAX_EXTRACT_TIMEOUT_SECONDS,
+  );
+}
+
+function normalizeReadFormat(format?: ReadOptions["format"]): TavilyExtractFormat {
+  return format === "text" ? "text" : "markdown";
+}
+
+/**
+ * Extract echoes the requested URL, so `url` stays the one asked for even after a redirect.
+ * @param result - One extracted page.
+ * @param format - Format the page was requested in.
+ * @param requestId - Tavily request id for support.
+ * @returns {ReadResult} Normalized page result.
+ */
+function mapExtractResult(
+  result: Readonly<TavilyExtractResult>,
+  format: TavilyExtractFormat,
+  requestId?: string,
+): ReadResult {
+  const content = result.raw_content ?? "";
+  return {
+    url: result.url,
+    ...(result.title ? { title: result.title } : {}),
+    content,
+    ...(format === "text" ? { text: content } : {}),
+    ...(requestId === undefined ? {} : { metadata: { requestId } }),
+  };
+}
+
+/**
+ * A page Extract could not fetch comes back inside HTTP 200 as a `failed_results` row with the reason.
+ * @param failure - Failed row for the requested URL, when Tavily sent one.
+ * @returns {WebError} Provider error carrying Tavily's reason.
+ */
+function extractFailure(failure?: Readonly<TavilyExtractFailure>): WebError {
+  return new WebError(`Tavily extract failed: ${failure?.error ?? "no result returned"}`);
 }
 
 register(TavilyProvider);

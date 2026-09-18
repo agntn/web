@@ -51,7 +51,12 @@ const jinaConflict = async (): Promise<ReadResult> => {
 };
 
 describe("readUrl", () => {
-  const fallbackEnvKeys = ["CONTEXT_DEV_API_KEY", "FIRECRAWL_API_KEY", "TINYFISH_API_KEY"] as const;
+  const fallbackEnvKeys = [
+    "CONTEXT_DEV_API_KEY",
+    "FIRECRAWL_API_KEY",
+    "TINYFISH_API_KEY",
+    "TAVILY_API_KEY",
+  ] as const;
   const savedEnv = Object.fromEntries(fallbackEnvKeys.map((key) => [key, process.env[key]]));
 
   beforeEach(() => {
@@ -187,9 +192,13 @@ describe("readUrl", () => {
   it("preserves built in fallback order independently of registration order", async () => {
     const attempts: string[] = [];
     registerReader("jina", paymentRequired);
+    registerReader("tavily", async () => {
+      attempts.push("tavily");
+      return { url: "https://example.com", content: "ok" };
+    });
     registerReader("tinyfish", async () => {
       attempts.push("tinyfish");
-      return { url: "https://example.com", content: "ok" };
+      throw new HTTPError(502, "https://tinyfish.example.com", "TinyFish unavailable");
     });
     registerReader("firecrawl", async () => {
       attempts.push("firecrawl");
@@ -202,9 +211,10 @@ describe("readUrl", () => {
     process.env.CONTEXT_DEV_API_KEY = "test-key";
     process.env.FIRECRAWL_API_KEY = "test-key";
     process.env.TINYFISH_API_KEY = "test-key";
+    process.env.TAVILY_API_KEY = "test-key";
 
     await expect(readUrl("https://example.com")).resolves.toMatchObject({ content: "ok" });
-    expect(attempts).toEqual(["context", "firecrawl", "tinyfish"]);
+    expect(attempts).toEqual(["context", "firecrawl", "tinyfish", "tavily"]);
   });
 
   it("treats a whitespace provider as the default and falls back", async () => {
