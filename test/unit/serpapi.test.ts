@@ -124,11 +124,27 @@ describe("serpapi provider", () => {
     });
 
     it("surfaces API errors instead of returning an empty match list", async () => {
-      mockGetJSON.mockResolvedValueOnce({ error: "Google Lens could not fetch the image" });
+      mockGetJSON.mockResolvedValueOnce({
+        search_metadata: { id: "lens-id", status: "Error" },
+        error: "Google Lens could not fetch the image",
+      });
       const provider = createImageSearchProvider("serpapi", { apiKey: "test-key" });
 
       await expect(provider.searchByImage("https://images.example.com/input.jpg")).rejects.toThrow(
         "Google Lens could not fetch the image",
+      );
+    });
+
+    it("returns no matches when Google Lens has nothing for the image", async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        search_metadata: { id: "lens-id", status: "Success" },
+        search_information: { images_results_state: "Fully empty" },
+        error: "Google Lens hasn't returned any results for this query.",
+      });
+      const provider = createImageSearchProvider("serpapi", { apiKey: "test-key" });
+
+      await expect(provider.searchByImage("https://images.example.com/input.jpg")).resolves.toEqual(
+        [],
       );
     });
 

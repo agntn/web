@@ -11,7 +11,12 @@ import {
   type ProviderCapabilityDetails,
   type ProviderSearchPage,
 } from "../core/provider.ts";
-import { AuthError, InvalidSearchContinuationError, normalizeError } from "../core/errors.ts";
+import {
+  AuthError,
+  InvalidSearchContinuationError,
+  WebError,
+  normalizeError,
+} from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
 interface SerpApiResult {
@@ -129,8 +134,7 @@ class SerpApiProvider extends Provider {
         undefined,
         options?.signal,
       );
-      if (response.error) throw new Error(response.error);
-      return (response.visual_matches ?? [])
+      return visualMatches(response)
         .flatMap(mapImageResult)
         .slice(0, options?.maxResults ?? 10);
     } catch (error) {
@@ -155,6 +159,18 @@ function serpApiContinuation(next?: string): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+/**
+ * Lens reports an empty page as `error` under a `Success` status, so only a failed search throws.
+ * @param response - Google Lens response body.
+ * @returns {readonly SerpApiVisualMatch[]} Visual matches, empty when Lens found none.
+ */
+function visualMatches(response: SerpApiImageSearchResponse): readonly SerpApiVisualMatch[] {
+  if (response.error && response.search_metadata?.status !== "Success") {
+    throw new WebError(response.error);
+  }
+  return response.visual_matches ?? [];
 }
 
 function mapImageResult(result: SerpApiVisualMatch): ImageSearchResult[] {
