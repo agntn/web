@@ -21,7 +21,7 @@ const mockReadPostJSON =
 const mockReadClient = {
   postJSON: mockReadPostJSON,
   getJSON: vi.fn(),
-  maxRetries: 5,
+  maxRetries: 0,
   baseDelay: 50,
   timeout: 70000,
   userAgent: "agntn-web/0.0.1",
@@ -243,10 +243,10 @@ describe("tavily provider", () => {
       expect(() => createReadProvider("tavily", { apiKey: "test-key" })).not.toThrow();
     });
 
-    it("reads through a client that outlasts Tavily's longest timeout", () => {
+    it("reads through a client that outlasts Tavily's longest timeout and never re-posts", () => {
       createReadProvider("tavily", { apiKey: "test-key" });
 
-      expect(Client).toHaveBeenCalledWith({ timeout: 70_000 });
+      expect(Client).toHaveBeenCalledWith({ maxRetries: 0, timeout: 70_000 });
     });
 
     it("posts one URL to /extract with a bearer header", async () => {

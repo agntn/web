@@ -88,7 +88,7 @@ class TavilyProvider extends Provider {
   } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
-  /** Extract waits up to 60 s on request, longer than the shared client allows. */
+  /** Extract waits up to 60 s on request and bills every attempt, so no retries and a longer window. */
   private readonly readClient: Client;
 
   constructor(config: Readonly<ProviderConfig>) {
@@ -98,7 +98,7 @@ class TavilyProvider extends Provider {
     }
 
     this.apiKey = config.apiKey;
-    this.readClient = new Client({ timeout: TAVILY_EXTRACT_CLIENT_TIMEOUT_MS });
+    this.readClient = new Client({ maxRetries: 0, timeout: TAVILY_EXTRACT_CLIENT_TIMEOUT_MS });
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
