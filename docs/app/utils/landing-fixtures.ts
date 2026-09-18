@@ -51,31 +51,31 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
       {
         "url": "https://www.infoq.com/news/2026/08/typescript-7-released/",
         "title": "Microsoft Releases TypeScript 7.0 with a Native Go Compiler, Delivering 10x Faster Builds - InfoQ",
-        "snippet": "Microsoft has released TypeScript 7.0, <strong>the first stable version of the language to ship its long-in-development native compiler</strong>, a faithful port of the toolset from TypeScript into Go that the team says…",
+        "snippet": "Microsoft has released TypeScript 7.0, the first stable version of the language to ship its long-in-development native compiler, a faithful port of the toolset from TypeScript into Go that the team says…",
         "favicon": "https://imgs.search.brave.com/G6IT14wSYNsaoomudWi9ALGTP48RLa7EdIiSbTIY6jA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZGJhMDI3NTkx/NjQ2MmE4YmI4N2Ni/OGEwMTE5NzI5NzU5/OTY4MzU1NzY4ZDMw/ODU5NzNhZDA0MWI1/MjRkNTQ0NC93d3cu/aW5mb3EuY29tLw"
       },
       {
         "url": "https://www.developersdigest.tech/blog/typescript-7-native-compiler-migration-guide",
         "title": "TypeScript 7.0 Native Compiler: What Breaks, What Gets 10x Faster, and How to Migrate - Developers Digest",
-        "snippet": "A practical migration guide for TypeScript 7.0&#x27;s Go-based native compiler. Verified perf numbers, the full breaking-changes list, real npm commands for...",
+        "snippet": "A practical migration guide for TypeScript 7.0's Go-based native compiler. Verified perf numbers, the full breaking-changes list, real npm commands for...",
         "favicon": "https://imgs.search.brave.com/P1gDi7A_EcKCwJnMGwTtQCONmo_iDZQ-hVZbMmSPcs4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMmU2ZWU3YTMw/MDA2ZWU5OWJlNGJj/MGQ2MDUwYzRmMTdj/ODNiMjM5ZjgyMmJk/ZjE4N2IwNGVmMzAy/MjhkYTk5Mi93d3cu/ZGV2ZWxvcGVyc2Rp/Z2VzdC50ZWNoLw"
       },
       {
         "url": "https://www.prisma.io/blog/typescript-7-native-compiler-faster-type-checking",
         "title": "TypeScript 7 Native Compiler: 3x Faster Type Checks in a Real Monorepo",
-        "snippet": "<strong>TypeScript 7 ships the compiler as a native Go port</strong>. We migrated a large TypeScript monorepo to it: whole-repo type checking went from ~74s to ~24s with no memory tuning. Here are the numbers, the exact…",
+        "snippet": "TypeScript 7 ships the compiler as a native Go port. We migrated a large TypeScript monorepo to it: whole-repo type checking went from ~74s to ~24s with no memory tuning. Here are the numbers, the exact…",
         "favicon": "https://imgs.search.brave.com/I-jd6urhzxDeJweFcLQQS8i4DAGcL2uijL91tjcjF3k/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWNkZmVlYmUy/NmE0MzkxMmVhNDBh/OGQzN2UwNWRmNWQw/YWQ5NmQyNDU0ZDI4/OTRiOWEwZjY0NjBh/YWUyNGIzMi93d3cu/cHJpc21hLmlvLw"
       },
       {
         "url": "https://believemy.com/en/r/typescript-7-native-go-compiler",
         "title": "TypeScript 7: The Native Compiler 10x Faster",
-        "snippet": "TypeScript 7 is <strong>the first major version to ship a native compiler written in Go</strong>, delivering speed gains of 8x to 12x on full builds. Concretely, a project like VS Code goes from 125 seconds to about 10…",
+        "snippet": "TypeScript 7 is the first major version to ship a native compiler written in Go, delivering speed gains of 8x to 12x on full builds. Concretely, a project like VS Code goes from 125 seconds to about 10…",
         "favicon": "https://imgs.search.brave.com/nwdPtShJq4bzVcUh0_n_dOl3m_YwRbxXxHXvlkz8SZs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMzM2Y2JlMTE5/MWMzYTAwMTYzNTgz/YjVkNTNhY2U1MGRj/NzhkMTgzNDYyMGI5/OWJhNmMyYmMwNzI4/ZDRjMmFiYy9iZWxp/ZXZlbXkuY29tLw"
       },
       {
         "url": "https://pas7.com.ua/blog/en/typescript-7-native-compiler-2026",
         "title": "TypeScript 7.0: the native compiler, benchmarks, and what it changes for the web | PAS7 STUDIO",
-        "snippet": "<strong>TypeScript 7.0 is a production native release, not another preview build</strong>. The official announcement reports over 80% fewer failed language-server commands and over 60% fewer server crashes compared with…",
+        "snippet": "TypeScript 7.0 is a production native release, not another preview build. The official announcement reports over 80% fewer failed language-server commands and over 60% fewer server crashes compared with…",
         "favicon": "https://imgs.search.brave.com/YYnFOdqi0akkYQlncXBfwdoRtyIAb_eRCJICsHX4HNA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWFkMjg0Yjhi/YzdkZmMxMzJlNDA1/YjIyYWNlZDVkZGQy/N2VhMTBhZTlhMTNi/NTc5MTIxZmYxOTEw/Mjg2MDNiOC9wYXM3/LmNvbS51YS8"
       }
     ],
@@ -86,7 +86,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://www.infoq.com/news/2026/08/typescript-7-released/",
           "title": "Microsoft Releases TypeScript 7.0 with a Native Go Compiler, Delivering 10x Faster Builds - InfoQ",
-          "snippet": "Microsoft has released TypeScript 7.0, <strong>the first stable version of the language to ship its long-in-development native compiler</strong>, a faithful port of the toolset from TypeScript into Go that the team says…",
+          "snippet": "Microsoft has released TypeScript 7.0, the first stable version of the language to ship its long-in-development native compiler, a faithful port of the toolset from TypeScript into Go that the team says…",
           "favicon": "https://imgs.search.brave.com/G6IT14wSYNsaoomudWi9ALGTP48RLa7EdIiSbTIY6jA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZGJhMDI3NTkx/NjQ2MmE4YmI4N2Ni/OGEwMTE5NzI5NzU5/OTY4MzU1NzY4ZDMw/ODU5NzNhZDA0MWI1/MjRkNTQ0NC93d3cu/aW5mb3EuY29tLw",
           "providers": [
             "brave",
@@ -96,7 +96,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://www.developersdigest.tech/blog/typescript-7-native-compiler-migration-guide",
           "title": "TypeScript 7.0 Native Compiler: What Breaks, What Gets 10x Faster, and How to Migrate - Developers Digest",
-          "snippet": "A practical migration guide for TypeScript 7.0&#x27;s Go-based native compiler. Verified perf numbers, the full breaking-changes list, real npm commands for...",
+          "snippet": "A practical migration guide for TypeScript 7.0's Go-based native compiler. Verified perf numbers, the full breaking-changes list, real npm commands for...",
           "favicon": "https://imgs.search.brave.com/P1gDi7A_EcKCwJnMGwTtQCONmo_iDZQ-hVZbMmSPcs4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMmU2ZWU3YTMw/MDA2ZWU5OWJlNGJj/MGQ2MDUwYzRmMTdj/ODNiMjM5ZjgyMmJk/ZjE4N2IwNGVmMzAy/MjhkYTk5Mi93d3cu/ZGV2ZWxvcGVyc2Rp/Z2VzdC50ZWNoLw",
           "providers": [
             "brave",
@@ -108,7 +108,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://www.prisma.io/blog/typescript-7-native-compiler-faster-type-checking",
           "title": "TypeScript 7 Native Compiler: 3x Faster Type Checks in a Real Monorepo",
-          "snippet": "<strong>TypeScript 7 ships the compiler as a native Go port</strong>. We migrated a large TypeScript monorepo to it: whole-repo type checking went from ~74s to ~24s with no memory tuning. Here are the numbers, the exact…",
+          "snippet": "TypeScript 7 ships the compiler as a native Go port. We migrated a large TypeScript monorepo to it: whole-repo type checking went from ~74s to ~24s with no memory tuning. Here are the numbers, the exact…",
           "favicon": "https://imgs.search.brave.com/I-jd6urhzxDeJweFcLQQS8i4DAGcL2uijL91tjcjF3k/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWNkZmVlYmUy/NmE0MzkxMmVhNDBh/OGQzN2UwNWRmNWQw/YWQ5NmQyNDU0ZDI4/OTRiOWEwZjY0NjBh/YWUyNGIzMi93d3cu/cHJpc21hLmlvLw",
           "providers": [
             "brave"
@@ -117,7 +117,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://believemy.com/en/r/typescript-7-native-go-compiler",
           "title": "TypeScript 7: The Native Compiler 10x Faster",
-          "snippet": "TypeScript 7 is <strong>the first major version to ship a native compiler written in Go</strong>, delivering speed gains of 8x to 12x on full builds. Concretely, a project like VS Code goes from 125 seconds to about 10…",
+          "snippet": "TypeScript 7 is the first major version to ship a native compiler written in Go, delivering speed gains of 8x to 12x on full builds. Concretely, a project like VS Code goes from 125 seconds to about 10…",
           "favicon": "https://imgs.search.brave.com/nwdPtShJq4bzVcUh0_n_dOl3m_YwRbxXxHXvlkz8SZs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMzM2Y2JlMTE5/MWMzYTAwMTYzNTgz/YjVkNTNhY2U1MGRj/NzhkMTgzNDYyMGI5/OWJhNmMyYmMwNzI4/ZDRjMmFiYy9iZWxp/ZXZlbXkuY29tLw",
           "providers": [
             "brave"
@@ -126,7 +126,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://pas7.com.ua/blog/en/typescript-7-native-compiler-2026",
           "title": "TypeScript 7.0: the native compiler, benchmarks, and what it changes for the web | PAS7 STUDIO",
-          "snippet": "<strong>TypeScript 7.0 is a production native release, not another preview build</strong>. The official announcement reports over 80% fewer failed language-server commands and over 60% fewer server crashes compared with…",
+          "snippet": "TypeScript 7.0 is a production native release, not another preview build. The official announcement reports over 80% fewer failed language-server commands and over 60% fewer server crashes compared with…",
           "favicon": "https://imgs.search.brave.com/YYnFOdqi0akkYQlncXBfwdoRtyIAb_eRCJICsHX4HNA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWFkMjg0Yjhi/YzdkZmMxMzJlNDA1/YjIyYWNlZDVkZGQy/N2VhMTBhZTlhMTNi/NTc5MTIxZmYxOTEw/Mjg2MDNiOC9wYXM3/LmNvbS51YS8",
           "providers": [
             "brave"
@@ -135,7 +135,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://www.nazarboyko.com/articles/typescript-7-native-compiler-what-changes",
           "title": "TypeScript 7 Native Compiler Explained - Nazar Boyko",
-          "snippet": "Microsoft announced the port in March 2025 with Anders Hejlsberg TypeScript&#x27;s lead architect fronting the effort and shipped it as TypeScript 7.0 on July 8, 2026. So when you read &quot;native TypeScript,&quot; exp…",
+          "snippet": "Microsoft announced the port in March 2025 with Anders Hejlsberg TypeScript's lead architect fronting the effort and shipped it as TypeScript 7.0 on July 8, 2026. So when you read \"native TypeScript,\" exp…",
           "favicon": "https://imgs.search.brave.com/8GUao_dR9-_yxaGGKUnAsnbu0mPWeoHRGrCzzkBKTMk/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMTdhMDQ3Y2Nm/MDM3YjU3NGE0M2Vk/YmI0MzA3OTIxNDcw/YTVkZTYwZGFiZjQ2/ZDFlNDhkZWI0YzQ1/ZWQzYzY3NS93d3cu/bmF6YXJib3lrby5j/b20v",
           "providers": [
             "brave"
@@ -248,7 +248,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools",
           "title": "AI SDK Core: Model Context Protocol (MCP)",
-          "snippet": "When MCP servers return structuredContent (per the MCP specification), you can define an outputSchema to get typed tool results: ... If the server doesn&#x27;t return structuredContent, the client falls back to parsing…",
+          "snippet": "When MCP servers return structuredContent (per the MCP specification), you can define an outputSchema to get typed tool results: ... If the server doesn't return structuredContent, the client falls back to parsing…",
           "favicon": "https://imgs.search.brave.com/SgkeI_2K9xJ5Wcw6FVh-mAVPLLFKY-3sEK4T_7ZiDkI/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvNWNlNTg0MTdh/YTkzYzBjMDIwODMw/NWM1YWUzMzk4NTg2/MGQ1YjY2YTYzOTQz/ZGE4MjlhMDY3Nzhl/NTZlYmM5NS9haS1z/ZGsuZGV2Lw",
           "providers": [
             "brave"
@@ -359,7 +359,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://nitro.build/deploy/providers/cloudflare",
           "title": "Cloudflare - Nitro",
-          "snippet": "Cloudflare Workers is <strong>the new recommended preset for deployments</strong>.",
+          "snippet": "Cloudflare Workers is the new recommended preset for deployments.",
           "favicon": "https://imgs.search.brave.com/GDw_FesANlXT3hGg2mVS-7aTfue76lGBelQKN45OEkk/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYWM5MWM0ZjY3/YmJmMDA2ODVjZWVi/ZTE5MDIwM2YzMGU2/N2M3ZjA2ODQzOGMx/ZWFhNDRhYmRiNzFj/YjFhNjhmYy9uaXRy/by5idWlsZC8",
           "providers": [
             "brave",
@@ -384,7 +384,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://nitro-docs.pages.dev/deploy/providers/cloudflare/",
           "title": "Cloudflare Workers - Nitro",
-          "snippet": "Login to your Cloudflare Workers account and obtain your account_id from the sidebar. ... name = &quot;playground&quot; main = &quot;./.output/server/index.mjs&quot; workers_dev = true compatibility_date = &quot;2022-09…",
+          "snippet": "Login to your Cloudflare Workers account and obtain your account_id from the sidebar. ... name = \"playground\" main = \"./.output/server/index.mjs\" workers_dev = true compatibility_date = \"2022-09…",
           "favicon": "https://imgs.search.brave.com/dRhCiSSLNrZW2UMyY3ksqG4MlSfWVEvogloiJfN7v3Y/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMmRjMmIyNGUx/NDg2NjA1ZjBiODAw/Mzc2OTJjMDhhMjg0/ZGYyMmM5ZTI3Y2Yz/MTY5N2YzMzMzNDNl/MmRkOWVlZS9uaXRy/by1kb2NzLnBhZ2Vz/LmRldi8",
           "providers": [
             "brave",
@@ -405,7 +405,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://github.com/nitrojs/nitro/discussions/2214",
           "title": "Why is cloudflare module workers preset not recommended? · nitrojs/nitro · Discussion #2214",
-          "snippet": "Workers Sites is practically unofficially deprecated in favour of Pages so that&#x27;s the reason why <strong>the module workers preset is not recommended</strong> (not because we specifically want people not to use wor…",
+          "snippet": "Workers Sites is practically unofficially deprecated in favour of Pages so that's the reason why the module workers preset is not recommended (not because we specifically want people not to use wor…",
           "favicon": "https://imgs.search.brave.com/xxsA4YxzaR0cl-DBsH9-lpv2gsif3KMYgM87p26bs_o/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYWQyNWM1NjA5/ZjZmZjNlYzI2MDNk/N2VkNmJhYjE2MzZl/MDY5ZTMxMDUzZmY1/NmU3NWIzNWVmMjk0/NTBjMjJjZi9naXRo/dWIuY29tLw",
           "providers": [
             "brave"
@@ -414,7 +414,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://deepwiki.com/huang-julien/nitro-opentelemetry/4.4-cloudflare-worker-preset",
           "title": "Cloudflare Worker Preset | huang-julien/nitro-opentelemetry | DeepWiki",
-          "snippet": "The Cloudflare Worker preset implementation is <strong>minimal but critical, serving as a wrapper around the application&#x27;s main handler</strong>. ... runtime/presets/cf-worker.ts ├── import instrument from @microla…",
+          "snippet": "The Cloudflare Worker preset implementation is minimal but critical, serving as a wrapper around the application's main handler. ... runtime/presets/cf-worker.ts ├── import instrument from @microla…",
           "favicon": "https://imgs.search.brave.com/HJkhFaX_DbIorFWn0JxBTQ4cUEWc8_tIf0-UJ5OyYXM/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvYjA3YmY5YmI1/YjhkZTQ5NTA1ZTcx/MTVmNzZkZjE3NjM0/MzdiNDY3MzUxZjVh/MGU3ODJlZGVhYTk1/ZWRmOTU3ZC9kZWVw/d2lraS5jb20v",
           "providers": [
             "brave"
@@ -491,7 +491,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://vercel.com/docs/ai-sdk",
           "title": "AI SDK",
-          "snippet": "<strong>Let models interact with external systems · Streaming first. Stream text, objects, and UI to your frontend · Framework support. Works with React, Next.js, Vue, Svelte, and Node.js · At the center of the AI SDK i…",
+          "snippet": "Let models interact with external systems · Streaming first. Stream text, objects, and UI to your frontend · Framework support. Works with React, Next.js, Vue, Svelte, and Node.js · At the center of the AI SDK i…",
           "favicon": "https://imgs.search.brave.com/BNSQrXn2bmeJXUV454rdF3_0T8nAzszmcKdxq9LZbwQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZDQ5YzljMTg4/MmJjMjJkYzEzMWZi/YmYyODM3ZjEyYzEw/MjY5OWFlM2I5YTY1/YmZhNTJlY2EwM2Iz/N2RhMWIxOC92ZXJj/ZWwuY29tLw",
           "providers": [
             "brave"
@@ -500,7 +500,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://vercel.com/academy/ai-sdk/tool-use",
           "title": "Tool Use | Vercel Academy",
-          "snippet": "Model Generates Tool Call: <strong>Outputs structured request to call specific tool with inferred parameters</strong>. SDK Executes Tool: API route receives call, SDK invokes execute function.",
+          "snippet": "Model Generates Tool Call: Outputs structured request to call specific tool with inferred parameters. SDK Executes Tool: API route receives call, SDK invokes execute function.",
           "favicon": "https://imgs.search.brave.com/BNSQrXn2bmeJXUV454rdF3_0T8nAzszmcKdxq9LZbwQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZDQ5YzljMTg4/MmJjMjJkYzEzMWZi/YmYyODM3ZjEyYzEw/MjY5OWFlM2I5YTY1/YmZhNTJlY2EwM2Iz/N2RhMWIxOC92ZXJj/ZWwuY29tLw",
           "providers": [
             "brave",
@@ -526,7 +526,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://www.aihero.dev/tool-calls-with-vercel-ai-sdk",
           "title": "Tool Calling With Vercel's AI SDK",
-          "snippet": "The way they do that is by calling tools or functions that we provide them. And Vercel&#x27;s AI SDK has a first-class solution for that.",
+          "snippet": "The way they do that is by calling tools or functions that we provide them. And Vercel's AI SDK has a first-class solution for that.",
           "favicon": "https://imgs.search.brave.com/tG7pNYkpnQafcc3IOrv0o5pef_nJEcQG9hMO6qgLpwo/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMzc5NzkzZjQ0/MjBkMzQ3NTcwMWRi/YWYyMGMwNzdmODcy/YTg5YzAyNmZiOWZh/NmIwNjg4Y2I5Mjcx/YjNiNTliNy93d3cu/YWloZXJvLmRldi8",
           "providers": [
             "brave",
@@ -547,7 +547,7 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
         {
           "url": "https://vercel.com/templates/next.js/ai-sdk-roundtrips",
           "title": "Automatic Tool Call Roundtrips with Vercel AI SDK - Vercel",
-          "snippet": "A Next.js chatbot using the Vercel AI SDK&#x27;s streamText function to automatically handle multiple tool call roundtrips.",
+          "snippet": "A Next.js chatbot using the Vercel AI SDK's streamText function to automatically handle multiple tool call roundtrips.",
           "favicon": "https://imgs.search.brave.com/BNSQrXn2bmeJXUV454rdF3_0T8nAzszmcKdxq9LZbwQ/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZDQ5YzljMTg4/MmJjMjJkYzEzMWZi/YmYyODM3ZjEyYzEw/MjY5OWFlM2I5YTY1/YmZhNTJlY2EwM2Iz/N2RhMWIxOC92ZXJj/ZWwuY29tLw",
           "providers": [
             "brave",

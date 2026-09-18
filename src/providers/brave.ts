@@ -15,7 +15,7 @@ import { register } from "../core/registry.ts";
 interface BraveResult {
   readonly title: string;
   readonly url: string;
-  readonly description: string;
+  readonly description?: string | null;
   readonly extra_snippets?: readonly string[];
   readonly age?: string;
   readonly language?: string;
@@ -94,7 +94,7 @@ function braveSearchUrl(
   offset: number,
 ): string {
   const offsetParam = offset === 0 ? "" : `&offset=${offset}`;
-  return `${baseURL}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults ?? 10}&extra_snippets=true${offsetParam}`;
+  return `${baseURL}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults ?? 10}&extra_snippets=true&text_decorations=false${offsetParam}`;
 }
 
 function braveContinuation(
@@ -115,10 +115,49 @@ function mapResult(result: BraveResult): SearchResult {
   return {
     url: result.url,
     title: result.title,
-    snippet: result.description,
+    snippet: decodeHtml(result.description ?? ""),
     favicon: result.meta_url?.favicon,
     text: extraSnippetText(result.extra_snippets),
   };
+}
+
+const HTML_ENTITY = /&(?:#x([0-9a-f]+)|#([0-9]+)|([a-z]+));/giu;
+
+const NAMED_ENTITIES: ReadonlyMap<string, string> = new Map([
+  ["amp", "&"],
+  ["lt", "<"],
+  ["gt", ">"],
+  ["quot", '"'],
+  ["apos", "'"],
+]);
+
+/**
+ * Brave escapes `description` like an HTML fragment, `title` and `extra_snippets` come as text.
+ * @param text - Description as Brave sends it.
+ * @returns {string} The description as text. An unknown entity stays as written.
+ */
+function decodeHtml(text: string): string {
+  return text.replaceAll(
+    HTML_ENTITY,
+    (
+      entity: string,
+      hex: string | undefined,
+      decimal: string | undefined,
+      name: string | undefined,
+    ) => {
+      if (name !== undefined) return NAMED_ENTITIES.get(name.toLowerCase()) ?? entity;
+      const codePoint = Number.parseInt(hex ?? decimal ?? "", hex === undefined ? 10 : 16);
+      return isScalarValue(codePoint) ? String.fromCodePoint(codePoint) : entity;
+    },
+  );
+}
+
+/**
+ * @param codePoint - Number parsed from a numeric character reference.
+ * @returns {boolean} Whether `String.fromCodePoint` can encode it as one well formed character.
+ */
+function isScalarValue(codePoint: number): boolean {
+  return codePoint <= 0x10ffff && (codePoint < 0xd800 || codePoint > 0xdfff);
 }
 
 function extraSnippetText(snippets?: readonly string[]): string | undefined {

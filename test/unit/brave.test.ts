@@ -120,6 +120,52 @@ describe("brave provider", () => {
       expect(url).toContain("extra_snippets=true");
     });
 
+    it("asks Brave to leave query term highlighting out of descriptions", async () => {
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      await provider.search("test query");
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(url).toContain("text_decorations=false");
+    });
+
+    it("decodes the HTML escapes Brave writes into descriptions", async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        web: {
+          results: [
+            {
+              title: "AT&T vs T-Mobile: Which is better?",
+              url: "https://example.com",
+              description:
+                "AT&amp;T doesn&#x27;t map &quot;5G&quot; the same way; see &lt;Option&gt; and &#8212; or &#x1F600; but keep &unknown; &constructor; and &#xD800;",
+              extra_snippets: ["Plain text & unescaped 'quotes' stay as they are"],
+            },
+          ],
+        },
+      });
+
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const results = await provider.search("query");
+
+      expect(results[0].title).toBe("AT&T vs T-Mobile: Which is better?");
+      expect(results[0].snippet).toBe(
+        'AT&T doesn\'t map "5G" the same way; see <Option> and \u2014 or \u{1F600} but keep &unknown; &constructor; and &#xD800;',
+      );
+      expect(results[0].text).toBe("Plain text & unescaped 'quotes' stay as they are");
+    });
+
+    it("maps a missing description to an empty snippet", async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        web: {
+          results: [{ title: "No description", url: "https://example.com", description: null }],
+        },
+      });
+
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const results = await provider.search("query");
+
+      expect(results[0].snippet).toBe("");
+    });
+
     it("returns empty array when web.results is undefined", async () => {
       mockGetJSON.mockResolvedValueOnce({
         web: undefined,
