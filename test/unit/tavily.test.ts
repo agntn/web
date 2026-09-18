@@ -69,7 +69,7 @@ const tavilyResponse = {
       url: "https://example.com",
       content: "Tavily search result content",
       score: 0.92,
-      published_date: "2024-06-15",
+      published_date: "Sat, 15 Jun 2024 09:30:00 GMT",
     },
   ],
   query: "test query",
@@ -147,7 +147,11 @@ describe("tavily provider", () => {
         query: "test query",
         max_results: 10,
         search_depth: "basic",
+        include_published_date: true,
       });
+      expect(body).not.toHaveProperty("topic");
+      expect(body).not.toHaveProperty("start_date");
+      expect(body).not.toHaveProperty("end_date");
     });
 
     it("maps result fields correctly", async () => {
@@ -161,8 +165,31 @@ describe("tavily provider", () => {
       expect(result.title).toBe("Test Result");
       expect(result.snippet).toBe("Tavily search result content");
       expect(result.score).toBe(0.92);
-      expect(result.publishedDate).toBe("2024-06-15");
+      expect(result.publishedDate).toBe("2024-06-15T09:30:00.000Z");
       expect(result.text).toBe("Full raw content from the page");
+    });
+
+    it("keeps a date it cannot parse as Tavily sent it", async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        ...tavilyResponse,
+        results: [{ ...tavilyResponse.results[0], published_date: "last spring" }],
+      });
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const results = await provider.search("test query");
+
+      expect(results[0].publishedDate).toBe("last spring");
+    });
+
+    it("leaves publishedDate out when Tavily found no date", async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        ...tavilyResponse,
+        results: [{ ...tavilyResponse.results[0], published_date: null }],
+      });
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const results = await provider.search("test query");
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).not.toHaveProperty("publishedDate");
     });
 
     it("leaves text out when raw_content is null", async () => {
@@ -222,6 +249,34 @@ describe("tavily provider", () => {
 
       const [, body] = mockPostJSON.mock.calls[0];
       expect(body.exclude_domains).toEqual(["reddit.com"]);
+    });
+
+    it("cuts the date window to the day Tavily takes", async () => {
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      await provider.search("test query", {
+        startPublishedDate: "2026-06-01T00:00:00Z",
+        endPublishedDate: "2026-09-01",
+      });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.start_date).toBe("2026-06-01");
+      expect(body.end_date).toBe("2026-09-01");
+    });
+
+    it.each(["general", "news", "finance"])("passes category %s as topic", async (category) => {
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      await provider.search("test query", { category });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.topic).toBe(category);
+    });
+
+    it("leaves topic out for a category Tavily does not have", async () => {
+      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      await provider.search("test query", { category: "images" });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body).not.toHaveProperty("topic");
     });
 
     it("returns empty array for empty results", async () => {

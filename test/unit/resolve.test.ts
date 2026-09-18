@@ -173,7 +173,16 @@ describe("resolve", () => {
         mojeek: {
           filters: ["includeDomains", "excludeDomains", "startPublishedDate", "endPublishedDate"],
         },
-        tavily: { filters: ["includeDomains", "excludeDomains"] },
+        tavily: {
+          filters: [
+            "includeDomains",
+            "excludeDomains",
+            "category",
+            "startPublishedDate",
+            "endPublishedDate",
+          ],
+          categories: ["general", "news", "finance"],
+        },
         tinyfish: {
           filters: [
             "includeDomains",

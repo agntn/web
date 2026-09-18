@@ -12,15 +12,21 @@ import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { AuthError, HTTPError, PaymentError, WebError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
 
+type TavilyTopic = (typeof TAVILY_SEARCH_TOPICS)[number];
+
 interface TavilySearchRequest {
   readonly api_key: string;
   readonly query: string;
   readonly max_results?: number;
   readonly search_depth?: "basic" | "advanced";
+  readonly topic?: TavilyTopic;
   readonly include_answer?: boolean;
   readonly include_raw_content?: boolean;
+  readonly include_published_date?: boolean;
   readonly include_domains?: readonly string[];
   readonly exclude_domains?: readonly string[];
+  readonly start_date?: string;
+  readonly end_date?: string;
 }
 
 interface TavilyResult {
@@ -28,7 +34,7 @@ interface TavilyResult {
   readonly url: string;
   readonly content: string;
   readonly score: number;
-  readonly published_date?: string;
+  readonly published_date?: string | null;
   readonly raw_content?: string | null;
 }
 
@@ -65,6 +71,7 @@ interface TavilyExtractResponse {
 }
 
 const TAVILY_USAGE_LIMIT_STATUS_CODES = new Set([432, 433]);
+const TAVILY_SEARCH_TOPICS = ["general", "news", "finance"] as const;
 const TAVILY_MIN_EXTRACT_TIMEOUT_SECONDS = 1;
 const TAVILY_MAX_EXTRACT_TIMEOUT_SECONDS = 60;
 const TAVILY_EXTRACT_CLIENT_TIMEOUT_MS = 70_000;
@@ -84,7 +91,14 @@ class TavilyProvider extends Provider {
     },
   } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
-    filters: ["includeDomains", "excludeDomains"],
+    filters: [
+      "includeDomains",
+      "excludeDomains",
+      "category",
+      "startPublishedDate",
+      "endPublishedDate",
+    ],
+    categories: TAVILY_SEARCH_TOPICS,
   } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
@@ -107,23 +121,11 @@ class TavilyProvider extends Provider {
   }
 
   async searchDetailed(query: string, options?: SearchRequestOptions): Promise<SearchResponse> {
-    const searchOptions = options ?? {};
-    const body = {
-      api_key: this.apiKey,
-      query,
-      max_results: searchOptions.maxResults ?? 10,
-      search_depth: "basic",
-      include_answer: searchOptions.summary ?? false,
-      include_raw_content: searchOptions.fullText ?? false,
-      include_domains: searchOptions.includeDomains,
-      exclude_domains: searchOptions.excludeDomains,
-    } satisfies TavilySearchRequest;
-
     try {
       const url = `${this.baseURL}/search`;
       const response = await this.client.postJSON<TavilySearchResponse>(
         url,
-        body,
+        searchBody(this.apiKey, query, options ?? {}),
         undefined,
         options?.signal,
       );
@@ -167,19 +169,67 @@ function normalizeTavilyError(error: unknown): WebError {
 }
 
 /**
- * Tavily sends `raw_content: null` unless `include_raw_content` is on, so `text` is left out.
+ * Tavily dates a hit only when asked, so every body asks; the date bounds are cut to `YYYY-MM-DD`.
+ * @param apiKey - Tavily API key, which search takes in the body.
+ * @param query - Search query.
+ * @param options - Search options requested by the caller.
+ * @returns {Record<string, unknown>} Request body for `POST /search`.
+ */
+function searchBody(
+  apiKey: string,
+  query: string,
+  options: SearchRequestOptions,
+): Record<string, unknown> {
+  return {
+    api_key: apiKey,
+    query,
+    max_results: options.maxResults ?? 10,
+    search_depth: "basic",
+    ...(isTavilyTopic(options.category) ? { topic: options.category } : {}),
+    include_answer: options.summary ?? false,
+    include_raw_content: options.fullText ?? false,
+    include_published_date: true,
+    include_domains: options.includeDomains,
+    exclude_domains: options.excludeDomains,
+    ...(options.startPublishedDate ? { start_date: tavilyDate(options.startPublishedDate) } : {}),
+    ...(options.endPublishedDate ? { end_date: tavilyDate(options.endPublishedDate) } : {}),
+  } satisfies TavilySearchRequest;
+}
+
+function isTavilyTopic(category: string | undefined): category is TavilyTopic {
+  return TAVILY_SEARCH_TOPICS.some((topic) => topic === category);
+}
+
+function tavilyDate(value: string): string {
+  return value.slice(0, 10);
+}
+
+/**
+ * `published_date` and `raw_content` are `null` when Tavily has none, so both are left out.
  * @param result - One Tavily search hit.
  * @returns {SearchResult} Normalized search result.
  */
 function mapResult(result: TavilyResult): SearchResult {
+  const publishedDate = isoDate(result.published_date);
   return {
     url: result.url,
     title: result.title,
     snippet: result.content,
     score: result.score,
-    publishedDate: result.published_date,
+    ...(publishedDate === undefined ? {} : { publishedDate }),
     ...(typeof result.raw_content === "string" ? { text: result.raw_content } : {}),
   };
+}
+
+/**
+ * Tavily writes `Tue, 11 Mar 2025 17:00:00 GMT` where every other provider gives ISO 8601.
+ * @param value - Tavily's `published_date`.
+ * @returns {string | undefined} ISO 8601 date, the raw value when it does not parse, or nothing.
+ */
+function isoDate(value: string | null | undefined): string | undefined {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? value : new Date(time).toISOString();
 }
 
 function extractBody(

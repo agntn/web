@@ -1274,6 +1274,22 @@ describe("searchAllDetailed", () => {
     ).resolves.toMatchObject({ ignoredFilters: [], undeclaredFilters: [] });
   });
 
+  it("reports the date window and topics Tavily forwards", async () => {
+    process.env.TAVILY_API_KEY = "test-tavily";
+    mockPostJSON.mockResolvedValue({ results: [], query: "test" });
+
+    await expect(
+      searchProviderDetailed("tavily", "test", {
+        startPublishedDate: "2026-06-01",
+        endPublishedDate: "2026-09-01",
+        category: "news",
+      }),
+    ).resolves.toMatchObject({ provider: "tavily", ignoredFilters: [], undeclaredFilters: [] });
+    await expect(
+      searchProviderDetailed("tavily", "test", { category: "sports" }),
+    ).resolves.toMatchObject({ ignoredFilters: ["category"], undeclaredFilters: [] });
+  });
+
   it("reports failed providers in errors array", async () => {
     process.env.EXA_API_KEY = "test-exa";
     process.env.BRAVE_API_KEY = "test-brave";
