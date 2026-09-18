@@ -77,7 +77,7 @@ This domain is for use in documentation examples without needing permission. Avo
 [Learn more](https://iana.org/domains/example)
 ```
 
-Reads start at Jina's `r.jina.ai`, which doesn't need a key, and move on to Context.dev, Firecrawl or TinyFish when Jina is out of credit, rate limited, down or answers with its 409. The first line tells you who ended up doing the work.
+Reads start at Jina's `r.jina.ai`, which doesn't need a key, and move on to Context.dev, Firecrawl, TinyFish or Tavily when Jina is out of credit, rate limited, down or answers with its 409. The first line tells you who ended up doing the work.
 
 A handful more, keys permitting:
 
@@ -139,7 +139,7 @@ That's most of it, really. `create("brave")` instead of `create("exa")` and noth
 | **searxng**      | None, your own instance                              | search              | category                     | yes   |
 | **serpapi**      | `SERPAPI_API_KEY`                                    | search, searchImage | none                         | yes   |
 | **serpbase**     | `SERPBASE_API_KEY`                                   | search              | category                     | yes   |
-| **tavily**       | `TAVILY_API_KEY`                                     | search              | domains                      |       |
+| **tavily**       | `TAVILY_API_KEY`                                     | search, read        | domains                      |       |
 | **tinyfish**     | `TINYFISH_API_KEY`                                   | search, read        | domains, category, dates     | yes   |
 
 Codex is the odd one out: no key, it borrows the login you already have in Codex, Pi, OMP or OpenCode, and `snippet` comes back empty because the model's answer is not a page excerpt. What each one fills in, which filters it honours and where it bites: [Providers](https://web.agntn.dev/providers).
