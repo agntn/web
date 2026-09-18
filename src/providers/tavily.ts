@@ -7,6 +7,7 @@ import type {
   ReadResult,
   ProviderConfig,
 } from "../core/types.ts";
+import { Client } from "../core/client.ts";
 import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
 import { AuthError, HTTPError, PaymentError, WebError, normalizeError } from "../core/errors.ts";
 import { register } from "../core/registry.ts";
@@ -66,6 +67,7 @@ interface TavilyExtractResponse {
 const TAVILY_USAGE_LIMIT_STATUS_CODES = new Set([432, 433]);
 const TAVILY_MIN_EXTRACT_TIMEOUT_SECONDS = 1;
 const TAVILY_MAX_EXTRACT_TIMEOUT_SECONDS = 60;
+const TAVILY_EXTRACT_CLIENT_TIMEOUT_MS = 70_000;
 
 class TavilyProvider extends Provider {
   static readonly providerName = "tavily";
@@ -86,6 +88,8 @@ class TavilyProvider extends Provider {
   } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
+  /** Extract waits up to 60 s on request, longer than the shared client allows. */
+  private readonly readClient: Client;
 
   constructor(config: Readonly<ProviderConfig>) {
     super(config, TavilyProvider);
@@ -94,6 +98,7 @@ class TavilyProvider extends Provider {
     }
 
     this.apiKey = config.apiKey;
+    this.readClient = new Client({ timeout: TAVILY_EXTRACT_CLIENT_TIMEOUT_MS });
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
@@ -134,7 +139,7 @@ class TavilyProvider extends Provider {
   async read(url: string, options?: Readonly<ReadOptions>): Promise<ReadResult> {
     const format = normalizeReadFormat(options?.format);
     try {
-      const response = await this.client.postJSON<TavilyExtractResponse>(
+      const response = await this.readClient.postJSON<TavilyExtractResponse>(
         `${this.baseURL}/extract`,
         extractBody(url, format, options?.timeout),
         { Authorization: `Bearer ${this.apiKey}` },

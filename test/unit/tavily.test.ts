@@ -9,8 +9,28 @@ const mockPostJSON =
     ) => Promise<unknown>
   >();
 
+const mockReadPostJSON =
+  vi.fn<
+    (
+      url: string,
+      body: Readonly<Record<string, unknown>>,
+      headers?: Readonly<Record<string, string>>,
+    ) => Promise<unknown>
+  >();
+
+const mockReadClient = {
+  postJSON: mockReadPostJSON,
+  getJSON: vi.fn(),
+  maxRetries: 5,
+  baseDelay: 50,
+  timeout: 70000,
+  userAgent: "agntn-web/0.0.1",
+};
+
 vi.mock("../../src/core/client.ts", () => ({
-  Client: vi.fn(),
+  Client: vi.fn(function ClientMock() {
+    return mockReadClient;
+  }),
   defaultClient: vi.fn(() => ({
     postJSON: mockPostJSON,
     getJSON: vi.fn(),
@@ -21,6 +41,7 @@ vi.mock("../../src/core/client.ts", () => ({
   })),
 }));
 
+import { Client } from "../../src/core/client.ts";
 import {
   createReadProvider,
   createSearchProvider,
@@ -83,6 +104,9 @@ describe("tavily provider", () => {
   beforeEach(() => {
     mockPostJSON.mockReset();
     mockPostJSON.mockResolvedValue(tavilyResponse);
+    mockReadPostJSON.mockReset();
+    mockReadPostJSON.mockResolvedValue(tavilyExtractResponse);
+    vi.mocked(Client).mockClear();
     delete process.env.TAVILY_API_KEY;
   });
 
@@ -214,21 +238,24 @@ describe("tavily provider", () => {
   });
 
   describe("read()", () => {
-    beforeEach(() => {
-      mockPostJSON.mockResolvedValue(tavilyExtractResponse);
-    });
-
     it("registers as a read provider", () => {
       expect(readProviders()).toContain("tavily");
       expect(() => createReadProvider("tavily", { apiKey: "test-key" })).not.toThrow();
+    });
+
+    it("reads through a client that outlasts Tavily's longest timeout", () => {
+      createReadProvider("tavily", { apiKey: "test-key" });
+
+      expect(Client).toHaveBeenCalledWith({ timeout: 70_000 });
     });
 
     it("posts one URL to /extract with a bearer header", async () => {
       const provider = createReadProvider("tavily", { apiKey: "test-key" });
       await provider.read("https://example.com");
 
-      expect(mockPostJSON).toHaveBeenCalledOnce();
-      const [url, body, headers] = mockPostJSON.mock.calls[0];
+      expect(mockPostJSON).not.toHaveBeenCalled();
+      expect(mockReadPostJSON).toHaveBeenCalledOnce();
+      const [url, body, headers] = mockReadPostJSON.mock.calls[0];
       expect(url).toBe("https://api.tavily.com/extract");
       expect(body).toEqual({
         urls: ["https://example.com"],
@@ -251,7 +278,7 @@ describe("tavily provider", () => {
     });
 
     it("requests plain text and mirrors it in text", async () => {
-      mockPostJSON.mockResolvedValueOnce({
+      mockReadPostJSON.mockResolvedValueOnce({
         ...tavilyExtractResponse,
         results: [{ url: "https://example.com", raw_content: "Example Domain\nplain" }],
         request_id: undefined,
@@ -259,7 +286,7 @@ describe("tavily provider", () => {
       const provider = createReadProvider("tavily", { apiKey: "test-key" });
       const result = await provider.read("https://example.com", { format: "text" });
 
-      const [, body] = mockPostJSON.mock.calls[0];
+      const [, body] = mockReadPostJSON.mock.calls[0];
       expect(body.format).toBe("text");
       expect(result).toEqual({
         url: "https://example.com",
@@ -272,7 +299,7 @@ describe("tavily provider", () => {
       const provider = createReadProvider("tavily", { apiKey: "test-key" });
       await provider.read("https://example.com", { format: "html" });
 
-      const [, body] = mockPostJSON.mock.calls[0];
+      const [, body] = mockReadPostJSON.mock.calls[0];
       expect(body.format).toBe("markdown");
     });
 
@@ -284,12 +311,12 @@ describe("tavily provider", () => {
       const provider = createReadProvider("tavily", { apiKey: "test-key" });
       await provider.read("https://example.com", { timeout });
 
-      const [, body] = mockPostJSON.mock.calls[0];
+      const [, body] = mockReadPostJSON.mock.calls[0];
       expect(body.timeout).toBe(expected);
     });
 
     it("throws Tavily's reason when the page could not be fetched", async () => {
-      mockPostJSON.mockResolvedValueOnce({
+      mockReadPostJSON.mockResolvedValueOnce({
         results: [],
         failed_results: [{ url: "https://example.com/missing", error: "404 page not found" }],
         response_time: 0.33,
@@ -307,7 +334,7 @@ describe("tavily provider", () => {
     });
 
     it("throws when the response carries neither a page nor a failure", async () => {
-      mockPostJSON.mockResolvedValueOnce({ results: [], failed_results: [] });
+      mockReadPostJSON.mockResolvedValueOnce({ results: [], failed_results: [] });
       const provider = createReadProvider("tavily", { apiKey: "test-key" });
 
       await expect(provider.read("https://example.com")).rejects.toThrow(
@@ -316,7 +343,7 @@ describe("tavily provider", () => {
     });
 
     it.each([432, 433])("classifies HTTP %i on extract as PaymentError", async (statusCode) => {
-      mockPostJSON.mockRejectedValueOnce(
+      mockReadPostJSON.mockRejectedValueOnce(
         new HTTPError(statusCode, "https://api.tavily.com/extract", "usage limit"),
       );
       const provider = createReadProvider("tavily", { apiKey: "test-key" });
