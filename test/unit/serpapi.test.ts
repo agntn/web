@@ -252,21 +252,55 @@ describe("serpapi provider", () => {
       expect(url).toContain("num=5");
     });
 
-    it("cuts the page to maxResults when Google ignores num", async () => {
+    it("walks a Google page in slices of maxResults", async () => {
       const organic = serpApiResponse.organic_results[0];
-      mockGetJSON.mockResolvedValueOnce({
+      mockGetJSON.mockResolvedValue({
         ...serpApiResponse,
         organic_results: [
           organic,
           { ...organic, position: 2, link: "https://example.com/second" },
           { ...organic, position: 3, link: "https://example.com/third" },
         ],
+        serpapi_pagination: {
+          next: "https://serpapi.com/search?engine=google&q=test&start=10",
+        },
       });
-
       const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
-      const results = await provider.search("test query", { maxResults: 1 });
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
 
-      expect(results.map((result) => result.url)).toEqual(["https://example.com"]);
+      const first = await provider.searchPage("test query", { maxResults: 2 });
+      const second = await provider.searchPage("test query", { maxResults: 2 }, first.continuation);
+
+      expect(first.results.map((result) => result.url)).toEqual([
+        "https://example.com",
+        "https://example.com/second",
+      ]);
+      expect(first.continuation).toBe("0:2");
+      expect(second.results.map((result) => result.url)).toEqual(["https://example.com/third"]);
+      expect(second.continuation).toBe("10");
+      expect(mockGetJSON.mock.calls[1][0]).toBe(mockGetJSON.mock.calls[0][0]);
+    });
+
+    it("never hands out an empty slice", async () => {
+      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
+
+      const page = await provider.searchPage("test query", { maxResults: 0 });
+
+      expect(page.results).toHaveLength(1);
+      expect(page.continuation).toBeUndefined();
+    });
+
+    it("rejects slice tokens that point nowhere", async () => {
+      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
+
+      for (const token of ["0", "3:0", "0:0", "1:2:3"]) {
+        await expect(provider.searchPage("test query", undefined, token)).rejects.toThrow(
+          InvalidSearchContinuationError,
+        );
+      }
+      expect(mockGetJSON).not.toHaveBeenCalled();
     });
 
     it("returns empty array when organic_results is undefined", async () => {

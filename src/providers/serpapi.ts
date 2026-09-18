@@ -103,16 +103,24 @@ class SerpApiProvider extends Provider {
     continuation?: string,
   ): Promise<ProviderSearchPage> {
     try {
-      const start = serpApiStart(continuation);
-      const url = `${this.baseURL}/search?engine=google&q=${encodeURIComponent(query)}&api_key=${this.apiKey}&num=${options?.maxResults ?? 10}${start === undefined ? "" : `&start=${start}`}`;
+      const page = serpApiPage(continuation);
+      const limit = Math.max(options?.maxResults ?? 10, 1);
+      const url = `${this.baseURL}/search?engine=google&q=${encodeURIComponent(query)}&api_key=${this.apiKey}&num=${limit}${page.start === 0 ? "" : `&start=${page.start}`}`;
       const response = await this.client.getJSON<SerpApiSearchResponse>(
         url,
         undefined,
         options?.signal,
       );
+      const organic = response.organic_results ?? [];
+      const results = organic.slice(page.offset, page.offset + limit);
       return {
-        results: organicResults(response, options?.maxResults).map(mapResult),
-        ...serpApiContinuation(response.serpapi_pagination?.next),
+        results: results.map(mapResult),
+        ...serpApiContinuation(
+          page,
+          page.offset + results.length,
+          organic.length,
+          response.serpapi_pagination?.next,
+        ),
       };
     } catch (error) {
       throw normalizeError(error, "serpapi");
@@ -143,35 +151,48 @@ class SerpApiProvider extends Provider {
   }
 }
 
-function serpApiStart(continuation?: string): number | undefined {
-  if (continuation === undefined) return undefined;
-  if (!/^[1-9]\d*$/u.test(continuation)) throw new InvalidSearchContinuationError();
-  const start = Number(continuation);
-  if (!Number.isSafeInteger(start)) throw new InvalidSearchContinuationError();
-  return start;
-}
-
-function serpApiContinuation(next?: string): Record<string, string> {
-  if (next === undefined) return {};
-  try {
-    const start = new URL(next).searchParams.get("start");
-    return start === null ? {} : { continuation: String(serpApiStart(start)) };
-  } catch {
-    return {};
-  }
+/** Google `start` offset of the page plus the position inside it where the next slice begins. */
+interface SerpApiPage {
+  readonly start: number;
+  readonly offset: number;
 }
 
 /**
- * Google pays little attention to `num`, so the requested count is applied to the page here.
- * @param response - Google search response body.
- * @param maxResults - Requested result count, ten by default.
- * @returns {readonly SerpApiResult[]} At most `maxResults` organic results.
+ * Google pays little attention to `num` and hands a different page for an offset off the ten
+ * grid, so a page is walked in slices of `maxResults` and `start` moves only once it is used up.
+ * @param continuation - `start`, or `start:offset` for a slice inside the page.
+ * @returns {SerpApiPage} The page to request and the slice to return from it.
  */
-function organicResults(
-  response: SerpApiSearchResponse,
-  maxResults?: number,
-): readonly SerpApiResult[] {
-  return (response.organic_results ?? []).slice(0, maxResults ?? 10);
+function serpApiPage(continuation?: string): SerpApiPage {
+  if (continuation === undefined) return { start: 0, offset: 0 };
+  const match = /^(?<start>0|[1-9]\d*)(?::(?<offset>[1-9]\d*))?$/u.exec(continuation);
+  if (!match?.groups) throw new InvalidSearchContinuationError();
+  const start = Number(match.groups.start);
+  const offset = match.groups.offset === undefined ? 0 : Number(match.groups.offset);
+  if (start + offset === 0 || !Number.isSafeInteger(start + offset)) {
+    throw new InvalidSearchContinuationError();
+  }
+  return { start, offset };
+}
+
+function serpApiContinuation(
+  page: SerpApiPage,
+  nextOffset: number,
+  pageLength: number,
+  next?: string,
+): Record<string, string> {
+  if (nextOffset < pageLength) return { continuation: `${page.start}:${nextOffset}` };
+  return nextPageContinuation(next);
+}
+
+function nextPageContinuation(next?: string): Record<string, string> {
+  if (next === undefined) return {};
+  try {
+    const start = new URL(next).searchParams.get("start");
+    return start === null ? {} : { continuation: String(serpApiPage(start).start) };
+  } catch {
+    return {};
+  }
 }
 
 /**
