@@ -111,7 +111,7 @@ class SerpApiProvider extends Provider {
         options?.signal,
       );
       return {
-        results: (response.organic_results ?? []).map(mapResult),
+        results: organicResults(response, options?.maxResults).map(mapResult),
         ...serpApiContinuation(response.serpapi_pagination?.next),
       };
     } catch (error) {
@@ -159,6 +159,19 @@ function serpApiContinuation(next?: string): Record<string, string> {
   } catch {
     return {};
   }
+}
+
+/**
+ * Google pays little attention to `num`, so the requested count is applied to the page here.
+ * @param response - Google search response body.
+ * @param maxResults - Requested result count, ten by default.
+ * @returns {readonly SerpApiResult[]} At most `maxResults` organic results.
+ */
+function organicResults(
+  response: SerpApiSearchResponse,
+  maxResults?: number,
+): readonly SerpApiResult[] {
+  return (response.organic_results ?? []).slice(0, maxResults ?? 10);
 }
 
 /**

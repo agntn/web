@@ -252,6 +252,23 @@ describe("serpapi provider", () => {
       expect(url).toContain("num=5");
     });
 
+    it("cuts the page to maxResults when Google ignores num", async () => {
+      const organic = serpApiResponse.organic_results[0];
+      mockGetJSON.mockResolvedValueOnce({
+        ...serpApiResponse,
+        organic_results: [
+          organic,
+          { ...organic, position: 2, link: "https://example.com/second" },
+          { ...organic, position: 3, link: "https://example.com/third" },
+        ],
+      });
+
+      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const results = await provider.search("test query", { maxResults: 1 });
+
+      expect(results.map((result) => result.url)).toEqual(["https://example.com"]);
+    });
+
     it("returns empty array when organic_results is undefined", async () => {
       mockGetJSON.mockResolvedValueOnce({
         search_metadata: {
