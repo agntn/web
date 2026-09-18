@@ -104,7 +104,7 @@ class SerpApiProvider extends Provider {
   ): Promise<ProviderSearchPage> {
     try {
       const page = serpApiPage(continuation);
-      const limit = Math.max(options?.maxResults ?? 10, 1);
+      const limit = resultLimit(options?.maxResults);
       const url = `${this.baseURL}/search?engine=google&q=${encodeURIComponent(query)}&api_key=${this.apiKey}&num=${limit}${page.start === 0 ? "" : `&start=${page.start}`}`;
       const response = await this.client.getJSON<SerpApiSearchResponse>(
         url,
@@ -149,6 +149,16 @@ class SerpApiProvider extends Provider {
       throw normalizeError(error, "serpapi");
     }
   }
+}
+
+/**
+ * Slice size for one call: a positive integer, ten when the caller gave nothing usable.
+ * @param maxResults - Requested result count.
+ * @returns {number} The number of organic results to hand back.
+ */
+function resultLimit(maxResults?: number): number {
+  if (maxResults === undefined || !Number.isFinite(maxResults)) return 10;
+  return Math.max(Math.trunc(maxResults), 1);
 }
 
 /** Google `start` offset of the page plus the position inside it where the next slice begins. */

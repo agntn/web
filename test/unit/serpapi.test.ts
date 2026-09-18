@@ -282,13 +282,30 @@ describe("serpapi provider", () => {
     });
 
     it("never hands out an empty slice", async () => {
+      const organic = serpApiResponse.organic_results[0];
+      mockGetJSON.mockResolvedValue({
+        ...serpApiResponse,
+        organic_results: [
+          organic,
+          { ...organic, position: 2, link: "https://example.com/second" },
+          { ...organic, position: 3, link: "https://example.com/third" },
+        ],
+      });
       const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
       if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
 
-      const page = await provider.searchPage("test query", { maxResults: 0 });
-
-      expect(page.results).toHaveLength(1);
-      expect(page.continuation).toBeUndefined();
+      const cases: readonly (readonly [number, number, string | undefined])[] = [
+        [Number.NaN, 3, undefined],
+        [Number.POSITIVE_INFINITY, 3, undefined],
+        [0, 1, "0:1"],
+        [-4, 1, "0:1"],
+        [2.5, 2, "0:2"],
+      ];
+      for (const [maxResults, count, continuation] of cases) {
+        const page = await provider.searchPage("test query", { maxResults });
+        expect(page.results, `maxResults ${maxResults}`).toHaveLength(count);
+        expect(page.continuation, `maxResults ${maxResults}`).toBe(continuation);
+      }
     });
 
     it("rejects slice tokens that point nowhere", async () => {
