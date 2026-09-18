@@ -51,31 +51,36 @@ export const LANDING_SAMPLES: readonly SearchSample[] = [
       {
         "url": "https://www.infoq.com/news/2026/08/typescript-7-released/",
         "title": "Microsoft Releases TypeScript 7.0 with a Native Go Compiler, Delivering 10x Faster Builds - InfoQ",
-        "snippet": "Microsoft has released TypeScript 7.0, the first stable version of the language to ship its long-in-development native compiler, a faithful port of the toolset from TypeScript into Go that the team says…",
+        "snippet": "Microsoft has released TypeScript 7.0, the first stable version of the language to ship its long-in-development native compiler, a faithful port of the toolset from TypeScript into Go that the team says typically delivers speedups of between ...",
+        "publishedDate": "2026-08-03T05:22:00",
         "favicon": "https://imgs.search.brave.com/G6IT14wSYNsaoomudWi9ALGTP48RLa7EdIiSbTIY6jA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZGJhMDI3NTkx/NjQ2MmE4YmI4N2Ni/OGEwMTE5NzI5NzU5/OTY4MzU1NzY4ZDMw/ODU5NzNhZDA0MWI1/MjRkNTQ0NC93d3cu/aW5mb3EuY29tLw"
       },
       {
         "url": "https://www.developersdigest.tech/blog/typescript-7-native-compiler-migration-guide",
         "title": "TypeScript 7.0 Native Compiler: What Breaks, What Gets 10x Faster, and How to Migrate - Developers Digest",
         "snippet": "A practical migration guide for TypeScript 7.0's Go-based native compiler. Verified perf numbers, the full breaking-changes list, real npm commands for...",
+        "publishedDate": "2026-07-12T00:00:00",
         "favicon": "https://imgs.search.brave.com/P1gDi7A_EcKCwJnMGwTtQCONmo_iDZQ-hVZbMmSPcs4/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMmU2ZWU3YTMw/MDA2ZWU5OWJlNGJj/MGQ2MDUwYzRmMTdj/ODNiMjM5ZjgyMmJk/ZjE4N2IwNGVmMzAy/MjhkYTk5Mi93d3cu/ZGV2ZWxvcGVyc2Rp/Z2VzdC50ZWNoLw"
       },
       {
         "url": "https://www.prisma.io/blog/typescript-7-native-compiler-faster-type-checking",
         "title": "TypeScript 7 Native Compiler: 3x Faster Type Checks in a Real Monorepo",
-        "snippet": "TypeScript 7 ships the compiler as a native Go port. We migrated a large TypeScript monorepo to it: whole-repo type checking went from ~74s to ~24s with no memory tuning. Here are the numbers, the exact…",
+        "snippet": "TypeScript 7 ships the compiler as a native Go port. We migrated a large TypeScript monorepo to it: whole-repo type checking went from ~74s to ~24s with no memory tuning. Here are the numbers, the exact config diffs, the sharp edges, and who ...",
+        "publishedDate": "2026-07-09T00:00:00",
         "favicon": "https://imgs.search.brave.com/I-jd6urhzxDeJweFcLQQS8i4DAGcL2uijL91tjcjF3k/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWNkZmVlYmUy/NmE0MzkxMmVhNDBh/OGQzN2UwNWRmNWQw/YWQ5NmQyNDU0ZDI4/OTRiOWEwZjY0NjBh/YWUyNGIzMi93d3cu/cHJpc21hLmlvLw"
       },
       {
         "url": "https://believemy.com/en/r/typescript-7-native-go-compiler",
         "title": "TypeScript 7: The Native Compiler 10x Faster",
-        "snippet": "TypeScript 7 is the first major version to ship a native compiler written in Go, delivering speed gains of 8x to 12x on full builds. Concretely, a project like VS Code goes from 125 seconds to about 10…",
+        "snippet": "TypeScript 7 is the first major version to ship a native compiler written in Go, delivering speed gains of 8x to 12x on full builds. Concretely, a project like VS Code goes from 125 seconds to about 10 seconds of build time, and the time to ...",
+        "publishedDate": "2026-08-14T00:00:00",
         "favicon": "https://imgs.search.brave.com/nwdPtShJq4bzVcUh0_n_dOl3m_YwRbxXxHXvlkz8SZs/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvMzM2Y2JlMTE5/MWMzYTAwMTYzNTgz/YjVkNTNhY2U1MGRj/NzhkMTgzNDYyMGI5/OWJhNmMyYmMwNzI4/ZDRjMmFiYy9iZWxp/ZXZlbXkuY29tLw"
       },
       {
         "url": "https://pas7.com.ua/blog/en/typescript-7-native-compiler-2026",
         "title": "TypeScript 7.0: the native compiler, benchmarks, and what it changes for the web | PAS7 STUDIO",
-        "snippet": "TypeScript 7.0 is a production native release, not another preview build. The official announcement reports over 80% fewer failed language-server commands and over 60% fewer server crashes compared with…",
+        "snippet": "TypeScript 7.0 is a production native release, not another preview build. The official announcement reports over 80% fewer failed language-server commands and over 60% fewer server crashes compared with TypeScript 6.0. The biggest winners are ...",
+        "publishedDate": "2026-07-31T10:18:42",
         "favicon": "https://imgs.search.brave.com/YYnFOdqi0akkYQlncXBfwdoRtyIAb_eRCJICsHX4HNA/rs:fit:32:32:1:0/g:ce/aHR0cDovL2Zhdmlj/b25zLnNlYXJjaC5i/cmF2ZS5jb20vaWNv/bnMvZWFkMjg0Yjhi/YzdkZmMxMzJlNDA1/YjIyYWNlZDVkZGQy/N2VhMTBhZTlhMTNi/NTc5MTIxZmYxOTEw/Mjg2MDNiOC9wYXM3/LmNvbS51YS8"
       }
     ],

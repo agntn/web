@@ -18,6 +18,7 @@ interface BraveResult {
   readonly description?: string | null;
   readonly extra_snippets?: readonly string[];
   readonly age?: string;
+  readonly page_age?: string | null;
   readonly language?: string;
   readonly family_friendly?: boolean;
   readonly meta_url?: {
@@ -41,11 +42,11 @@ class BraveProvider extends Provider {
     search: {
       contentOptions: [],
       resultLimit: { default: 10, maximum: 20 },
-      resultFields: ["favicon", "text"],
+      resultFields: ["publishedDate", "favicon", "text"],
     },
   } as const satisfies ProviderCapabilityDetails;
   static readonly searchFilterCapabilities = {
-    filters: [],
+    filters: ["startPublishedDate", "endPublishedDate"],
   } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
@@ -70,7 +71,7 @@ class BraveProvider extends Provider {
   ): Promise<ProviderSearchPage> {
     try {
       const offset = braveOffset(continuation);
-      const url = braveSearchUrl(this.baseURL, query, options?.maxResults, offset);
+      const url = braveSearchUrl(this.baseURL, query, options ?? {}, offset);
       const headers = { "X-Subscription-Token": this.apiKey };
       const response = await this.client.getJSON<BraveSearchResponse>(
         url,
@@ -90,11 +91,22 @@ class BraveProvider extends Provider {
 function braveSearchUrl(
   baseURL: string,
   query: string,
-  maxResults: number | undefined,
+  options: SearchRequestOptions,
   offset: number,
 ): string {
   const offsetParam = offset === 0 ? "" : `&offset=${offset}`;
-  return `${baseURL}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${maxResults ?? 10}&extra_snippets=true&text_decorations=false${offsetParam}`;
+  return `${baseURL}/res/v1/web/search?q=${encodeURIComponent(query)}&count=${options.maxResults ?? 10}&extra_snippets=true&text_decorations=false${offsetParam}${freshnessParam(options)}`;
+}
+
+/**
+ * `freshness=YYYY-MM-DDtoYYYY-MM-DD`, one side may be empty; any other spelling Brave ignores.
+ * @param options - Search options requested by the caller.
+ * @returns {string} The `freshness` query parameter, or nothing without a date bound.
+ */
+function freshnessParam(options: SearchRequestOptions): string {
+  const start = options.startPublishedDate?.slice(0, 10) ?? "";
+  const end = options.endPublishedDate?.slice(0, 10) ?? "";
+  return start === "" && end === "" ? "" : `&freshness=${start}to${end}`;
 }
 
 function braveContinuation(
@@ -111,11 +123,17 @@ function braveOffset(continuation?: string): number {
   return Number(continuation);
 }
 
+/**
+ * `page_age` is Brave's date for the page, published or last modified, `null` when it has none.
+ * @param result - One Brave web result.
+ * @returns {SearchResult} Normalized search result.
+ */
 function mapResult(result: BraveResult): SearchResult {
   return {
     url: result.url,
     title: result.title,
     snippet: decodeHtml(result.description ?? ""),
+    ...(result.page_age ? { publishedDate: result.page_age } : {}),
     favicon: result.meta_url?.favicon,
     text: extraSnippetText(result.extra_snippets),
   };

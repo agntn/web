@@ -1231,13 +1231,13 @@ describe("searchAllDetailed", () => {
 
     const response = await searchAllDetailed("test", {
       providers: ["exa", "brave"],
-      startPublishedDate: "2024-01-01",
+      includeDomains: ["example.com"],
     });
 
     expect(response.filterReports).toEqual([
       {
         provider: "brave",
-        ignoredFilters: ["startPublishedDate"],
+        ignoredFilters: ["includeDomains"],
         undeclaredFilters: [],
       },
     ]);
@@ -1434,11 +1434,11 @@ describe("searchWithFallback", () => {
     mockGetJSON.mockResolvedValue(braveResponse);
 
     await expect(
-      searchWithFallback("test", { startPublishedDate: "2024-01-01" }),
+      searchWithFallback("test", { includeDomains: ["example.com"] }),
     ).resolves.toMatchObject({
       provider: "brave",
       results: [expect.objectContaining({ url: "https://b.com" })],
-      ignoredFilters: ["startPublishedDate"],
+      ignoredFilters: ["includeDomains"],
       undeclaredFilters: [],
       attempts: ["exa", "brave"],
       failures: [{ provider: "exa", error: failure.message }],

@@ -134,7 +134,7 @@ describe("providers command", () => {
         name: "brave",
         envVar: "BRAVE_API_KEY",
         configured: true,
-        searchFilters: [],
+        searchFilters: ["startPublishedDate", "endPublishedDate"],
       });
     });
 

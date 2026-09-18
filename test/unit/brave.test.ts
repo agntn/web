@@ -30,6 +30,7 @@ const braveResponse = {
         url: "https://example.com",
         description: "A test description from Brave search",
         extra_snippets: ["Additional context snippet"],
+        page_age: "2026-08-23T17:30:05",
         meta_url: {
           favicon: "https://example.com/favicon.ico",
         },
@@ -101,7 +102,48 @@ describe("brave provider", () => {
       expect(result.url).toBe("https://example.com");
       expect(result.title).toBe("Test Result");
       expect(result.snippet).toBe("A test description from Brave search");
+      expect(result.publishedDate).toBe("2026-08-23T17:30:05");
       expect(result.text).toBe("Additional context snippet");
+    });
+
+    it("leaves publishedDate out when Brave has no date for the page", async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        web: { results: [{ ...braveResponse.web.results[0], page_age: null }] },
+      });
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const results = await provider.search("test query");
+
+      expect(results[0]).not.toHaveProperty("publishedDate");
+    });
+
+    it("sends the date window as freshness, cut to the day", async () => {
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      await provider.search("test query", {
+        startPublishedDate: "2026-06-01T00:00:00Z",
+        endPublishedDate: "2026-09-01",
+      });
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(url).toContain("&freshness=2026-06-01to2026-09-01");
+    });
+
+    it.each([
+      ["startPublishedDate", "2026-06-01to"],
+      ["endPublishedDate", "to2026-06-01"],
+    ])("leaves the other side of freshness empty with only %s", async (option, expected) => {
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      await provider.search("test query", { [option]: "2026-06-01" });
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(url).toContain(`&freshness=${expected}`);
+    });
+
+    it("sends no freshness without a date bound", async () => {
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      await provider.search("test query", { includeDomains: ["example.com"] });
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(url).not.toContain("freshness");
     });
 
     it("maps maxResults to count query param", async () => {
