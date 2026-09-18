@@ -127,6 +127,17 @@ describe("brave provider", () => {
       expect(new URL(url).searchParams.get("freshness")).toBe("2026-06-01to2026-09-01");
     });
 
+    it("takes the day of each bound in UTC, so offsets cannot flip the window", async () => {
+      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      await provider.search("test query", {
+        startPublishedDate: "2026-06-02T01:00:00+05:00",
+        endPublishedDate: "2026-06-01T23:00:00Z",
+      });
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(new URL(url).searchParams.get("freshness")).toBe("2026-06-01to2026-06-01");
+    });
+
     it("closes a lone start bound with today's UTC date", async () => {
       vi.setSystemTime(new Date("2026-09-18T23:30:00Z"));
       try {

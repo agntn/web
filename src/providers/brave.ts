@@ -111,8 +111,15 @@ function freshnessParam(options: SearchRequestOptions): string {
   return `&freshness=${start ?? FRESHNESS_FLOOR}to${end ?? day(new Date().toISOString())}`;
 }
 
+/**
+ * The day in UTC, so two bounds with different offsets keep the order the core checked them in.
+ * @param value - ISO 8601 date or datetime, or nothing.
+ * @returns {string | undefined} `YYYY-MM-DD`, cut from the text when it does not parse.
+ */
 function day(value?: string): string | undefined {
-  return value ? value.slice(0, 10) : undefined;
+  if (!value) return undefined;
+  const time = Date.parse(value);
+  return Number.isNaN(time) ? value.slice(0, 10) : new Date(time).toISOString().slice(0, 10);
 }
 
 function braveContinuation(
