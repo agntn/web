@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: ^1.30.0
+        specifier: 1.30.0
         version: 1.30.0(zod@4.3.6)
       citty:
         specifier: latest
@@ -18,16 +18,16 @@ importers:
         specifier: latest
         version: 3.4.2
       ofetch:
-        specifier: ^1.5.1
+        specifier: 1.5.1
         version: 1.5.1
       string-width:
-        specifier: ^8.2.2
+        specifier: 8.2.2
         version: 8.2.2
       typebox:
-        specifier: ^1.1.38
+        specifier: 1.1.38
         version: 1.1.38
       zod:
-        specifier: ^4.3.6
+        specifier: 4.3.6
         version: 4.3.6
     devDependencies:
       '@agntn/ox':
@@ -49,7 +49,7 @@ importers:
         specifier: latest
         version: 26.6.1
       ai:
-        specifier: ^6.0.116
+        specifier: 6.0.116
         version: 6.0.116(zod@4.3.6)
       changelogen:
         specifier: latest
@@ -4209,7 +4209,7 @@ snapshots:
 
   '@opentelemetry/api-logs@0.220.0':
     dependencies:
-      '@opentelemetry/api': 1.9.0
+      '@opentelemetry/api': 1.9.1
 
   '@opentelemetry/api@1.9.0': {}
 
@@ -5448,7 +5448,7 @@ snapshots:
     dependencies:
       citty: 0.1.6
       consola: 3.4.2
-      defu: 6.1.4
+      defu: 6.1.7
       node-fetch-native: 1.6.7
       nypm: 0.6.5
       pathe: 2.0.3
@@ -6034,7 +6034,7 @@ snapshots:
 
   rc9@2.1.2:
     dependencies:
-      defu: 6.1.4
+      defu: 6.1.7
       destr: 2.0.5
 
   rc9@3.1.0:
