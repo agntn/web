@@ -87,7 +87,8 @@ interface Run {
 }
 
 /**
- * Runs the CLI under the load hook with stdin closed, because the server reads stdin until it ends.
+ * Runs the CLI under the load hook with stdin closed, because the server reads stdin until it ends,
+ * and kills it after ten seconds so a server that stops exiting on EOF fails here instead of outliving CI.
  * @param args - Arguments for `web`.
  * @returns {Promise<Run>} The exit code, stdout and every module URL the run loaded.
  */
@@ -95,6 +96,7 @@ async function run(...args: readonly string[]): Promise<Run> {
   const pending = execute(process.execPath, ["--import", hook, "src/cli.ts", ...args], {
     cwd: process.cwd(),
     env: { ...process.env, NODE_ENV: "test" },
+    timeout: 10_000,
   });
   pending.child.stdin?.end();
   const { code, stderr, stdout } = await pending.then(
