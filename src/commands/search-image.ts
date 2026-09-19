@@ -1,7 +1,6 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
 import { sanitizeTerminalText } from "../tui.ts";
-import { imageSearchProviderNames, searchByImage } from "../core/image.ts";
 import { providerApiKeyEnvVar } from "../core/providers.ts";
 import {
   AuthError,
@@ -39,16 +38,17 @@ export default defineCommand({
     },
   },
   async run({ args }) {
+    const image = await import("../core/image.ts");
     const maxResults = parseMaxResults(args["max-results"]);
     try {
       await import("../providers/index.ts");
-      const results = await searchByImage(args.url, {
+      const results = await image.searchByImage(args.url, {
         provider: args.provider?.trim() || undefined,
         maxResults,
       });
       writeImageSearchResults(results, args.json);
     } catch (error) {
-      handleImageSearchError(error);
+      handleImageSearchError(error, image);
     }
   },
 });
@@ -83,7 +83,10 @@ function writeImageSearchResults(
   }
 }
 
-function handleImageSearchError(error: unknown): never {
+function handleImageSearchError(
+  error: unknown,
+  image: Readonly<Pick<typeof import("../core/image.ts"), "imageSearchProviderNames">>,
+): never {
   if (error instanceof EmptyImageUrlError || error instanceof InvalidImageUrlError) {
     return exitWithError(error.message);
   }
@@ -93,7 +96,7 @@ function handleImageSearchError(error: unknown): never {
     return exitWithError(`Authentication failed for provider "${error.provider}".`);
   }
   if (error instanceof UnknownProviderError) {
-    consola.info(`Reverse image search providers: ${imageSearchProviderNames.join(", ")}`);
+    consola.info(`Reverse image search providers: ${image.imageSearchProviderNames.join(", ")}`);
     return exitWithError(`Unknown provider: ${error.provider}`);
   }
   if (error instanceof ImageSearchNotSupportedError) return exitWithError(error.message);

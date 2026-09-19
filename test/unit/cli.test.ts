@@ -1,8 +1,10 @@
 import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, it } from "vitest";
 
 const execute = promisify(execFile);
+const hook = fileURLToPath(new URL("../fixtures/record-loads.mjs", import.meta.url));
 
 interface Failure {
   readonly code: number;
@@ -75,5 +77,73 @@ describe.concurrent("web CLI", () => {
       stdout: "",
       stderr: "[error] --continuation is only supported for a single query.\n",
     });
+  });
+});
+
+interface Run {
+  readonly code: number;
+  readonly loaded: readonly string[];
+  readonly stdout: string;
+}
+
+/**
+ * Runs the CLI under the load hook with stdin closed, because the server reads stdin until it ends.
+ * @param args - Arguments for `web`.
+ * @returns {Promise<Run>} The exit code, stdout and every module URL the run loaded.
+ */
+async function run(...args: readonly string[]): Promise<Run> {
+  const pending = execute(process.execPath, ["--import", hook, "src/cli.ts", ...args], {
+    cwd: process.cwd(),
+    env: { ...process.env, NODE_ENV: "test" },
+  });
+  pending.child.stdin?.end();
+  const { code, stderr, stdout } = await pending.then(
+    (streams) => ({ code: 0, ...streams }),
+    (error: unknown) => error as Failure,
+  );
+  const report = /@loaded (\[.*\])/u.exec(stderr)?.[1];
+  if (report === undefined) throw new Error(`the load hook reported nothing: ${stderr}`);
+  return { code, loaded: JSON.parse(report) as string[], stdout };
+}
+
+/**
+ * The package a module URL sits in. pnpm's store nests node_modules, so the last one counts.
+ * @param url - A module URL the load hook reported.
+ * @returns {string | undefined} The package name, or undefined outside node_modules.
+ */
+function packageOf(url: string): string | undefined {
+  const at = url.lastIndexOf("/node_modules/");
+  if (at < 0) return undefined;
+  const [scope = "", name = ""] = url.slice(at + "/node_modules/".length).split("/");
+  return scope.startsWith("@") ? `${scope}/${name}` : scope;
+}
+
+describe.concurrent("web usage paths", () => {
+  it.for([
+    { args: ["--help"], code: 0, usage: /USAGE.*web search\|search-image\|read\|providers\|mcp/u },
+    { args: ["-h"], code: 0, usage: /USAGE.*web search\|search-image\|read\|providers\|mcp/u },
+    { args: ["mcp", "--help"], code: 0, usage: /USAGE.*web mcp/u },
+    { args: [], code: 1, usage: /USAGE.*web search\|search-image\|read\|providers\|mcp/u },
+  ])(
+    "web $args prints the usage without the server or a provider",
+    async ({ args, code, usage }, { expect }) => {
+      const { code: exit, loaded, stdout } = await run(...args);
+      expect(exit).toBe(code);
+      expect(stdout).toMatch(usage);
+      const packages = new Set(loaded.map(packageOf));
+      expect(packages).toContain("citty");
+      expect(packages).not.toContain("@modelcontextprotocol/sdk");
+      expect(packages).not.toContain("typebox");
+      expect(packages).not.toContain("ofetch");
+      expect(loaded.filter((url) => /\/src\/(providers\/|mcp\.ts)/u.test(url))).toEqual([]);
+    },
+  );
+
+  it("web mcp loads the server and the providers once it runs", async ({ expect }) => {
+    const { code, loaded } = await run("mcp");
+    expect(code).toBe(0);
+    const packages = new Set(loaded.map(packageOf));
+    expect(packages).toContain("@modelcontextprotocol/sdk");
+    expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
   });
 });
