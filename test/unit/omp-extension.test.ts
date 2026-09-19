@@ -603,6 +603,45 @@ describe("OMP extension", () => {
     });
   });
 
+  it("keeps favicons out of a search unless asked", async () => {
+    const providerName = `ompicon${Math.random().toString(36).slice(2)}`;
+    const favicon = "https://example.com/favicon.ico";
+    class FaviconProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://favicon.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, FaviconProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com", title: "Plain", snippet: "Snippet", favicon }];
+      }
+    }
+    customProviderCleanups.push(register(FaviconProvider));
+    const search = requiredTool(captureOmpExtension().tools, "web_search");
+
+    const lean = await search.execute(
+      "search-call",
+      { query: "plain query", provider: providerName },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const requested = await search.execute(
+      "search-call",
+      { query: "plain query", provider: providerName, favicon: true },
+      undefined,
+      undefined,
+      {} as never,
+    );
+
+    expect(lean.details).toMatchObject({ provider: providerName, results: [{ title: "Plain" }] });
+    expect(lean.details).not.toHaveProperty("results.0.favicon");
+    expect(JSON.stringify(lean.content)).not.toContain("favicon");
+    expect(requested.details).toMatchObject({ results: [{ favicon }] });
+  });
+
   it("keeps links and images out of a read unless asked", async () => {
     const providerName = `omplinked${Math.random().toString(36).slice(2)}`;
     const page = {

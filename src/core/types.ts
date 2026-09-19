@@ -66,6 +66,8 @@ export type SearchRequestOptions = Readonly<
 /** Detailed search options with an opaque token for one provider and query. */
 export type SearchPageOptions = SearchRequestOptions & {
   readonly continuation?: string;
+  /** Keeps favicon URLs on results. Defaults to true; the agent surfaces pass false unless the model asks. */
+  readonly favicon?: boolean;
 };
 
 export const searchFilterNames = [

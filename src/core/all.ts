@@ -204,7 +204,7 @@ export async function searchProviderDetailed(
  * @returns {Promise<PreparedSearchWithFallback>} Search function using the resolved provider order.
  */
 export async function prepareSearchWithFallback(
-  options?: Readonly<SearchRequestOptions>,
+  options?: Readonly<Omit<SearchPageOptions, "continuation">>,
 ): Promise<PreparedSearchWithFallback> {
   validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
   const effectiveOptions = withExecutionBudget(options);
@@ -280,7 +280,7 @@ async function searchProvider<TProvider extends string>(
   query: string,
   options?: Readonly<SearchPageOptions>,
 ): Promise<SearchProviderResult & { readonly provider: TProvider }> {
-  const { continuation, ...searchOptions } = options ?? {};
+  const { continuation, favicon, ...searchOptions } = options ?? {};
   const effectiveSearchOptions = withExecutionBudget(searchOptions);
   throwIfAborted(effectiveSearchOptions.signal);
   const requestOptions = providerRequestOptions(effectiveSearchOptions);
@@ -314,10 +314,20 @@ async function searchProvider<TProvider extends string>(
   return {
     ...report,
     provider: providerName,
-    results: response.results,
+    results: favicon === false ? response.results.map(withoutFavicon) : response.results,
     pagination,
     ...(response.metadata === undefined ? {} : { metadata: { ...response.metadata } }),
   };
+}
+
+/**
+ * Drops the favicon URL, a few hundred bytes of image address per result that a model cannot use.
+ * @param result - Result as the provider mapped it.
+ * @returns {SearchResult} The same result without `favicon`.
+ */
+function withoutFavicon(result: ReadonlySearchResult): SearchResult {
+  const { favicon: _favicon, ...rest } = result;
+  return mutableResult(rest);
 }
 
 type SearchResponseWithContinuation = SearchResponse & {
@@ -373,7 +383,7 @@ type ProviderSearchAttempt = readonly [provider: string, outcome: ProviderSearch
 function searchProviders(
   providerNames: readonly string[],
   query: string,
-  options: Readonly<SearchRequestOptions>,
+  options: Readonly<Omit<SearchPageOptions, "continuation">>,
   probeReachability: boolean,
 ): Promise<readonly ProviderSearchSettlement[]> {
   return settleWithConcurrency(
@@ -451,17 +461,20 @@ function collectProviderResults(
   };
 }
 
-function mutableResultWithProvider(
-  result: ReadonlySearchResult,
-  provider: string,
-): SearchAllEvidence {
+function mutableResult(result: ReadonlySearchResult): SearchResult {
   const { highlights, metadata, ...rest } = result;
   return {
     ...rest,
     ...(highlights ? { highlights: [...highlights] } : {}),
     ...(metadata ? { metadata: { ...metadata } } : {}),
-    provider,
   };
+}
+
+function mutableResultWithProvider(
+  result: ReadonlySearchResult,
+  provider: string,
+): SearchAllEvidence {
+  return { ...mutableResult(result), provider };
 }
 
 type ReadonlySearchAllEvidence = ReadonlySearchResult & { readonly provider: string };

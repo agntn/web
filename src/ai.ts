@@ -50,6 +50,7 @@ export const searchTool = tool({
       .boolean()
       .optional()
       .describe("Request full page text when supported. Defaults to false."),
+    favicon: z.boolean().optional().describe("Include favicon URLs on results. Defaults to false."),
     includeDomains: z
       .array(z.string())
       .optional()
@@ -96,6 +97,7 @@ export const searchTool = tool({
       highlights,
       summary,
       fullText,
+      favicon,
       includeDomains,
       excludeDomains,
       sources,
@@ -114,6 +116,7 @@ export const searchTool = tool({
       highlights,
       summary,
       fullText,
+      favicon: favicon === true,
       includeDomains,
       excludeDomains,
       sources,
