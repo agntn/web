@@ -29,9 +29,11 @@ const cleanups: Array<() => void> = [];
 
 beforeEach(() => {
   for (const key of providerEnvKeys) vi.stubEnv(key, "");
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 });
 
@@ -64,6 +66,29 @@ function registerIconProvider(): string {
 }
 
 describe("search favicon option", () => {
+  it("leaves results that carry no favicon alone", async () => {
+    const providerName = `plainprovider${Math.random().toString(36).slice(2)}`;
+    const plainResults = [{ url: "https://example.com", title: "Plain", snippet: "Snippet" }];
+    class PlainProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://plain.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, PlainProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return plainResults;
+      }
+    }
+    cleanups.push(register(PlainProvider));
+
+    const answer = await searchProviderDetailed(providerName, "test", { favicon: false });
+
+    expect(answer.results).toBe(plainResults);
+  });
+
   it("keeps the favicon URL by default", async () => {
     const providerName = registerIconProvider();
 

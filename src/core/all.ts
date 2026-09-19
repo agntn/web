@@ -314,20 +314,25 @@ async function searchProvider<TProvider extends string>(
   return {
     ...report,
     provider: providerName,
-    results: favicon === false ? response.results.map(withoutFavicon) : response.results,
+    results: dropsFavicons(favicon, response.results)
+      ? response.results.map(({ favicon: _favicon, ...rest }) => rest)
+      : response.results,
     pagination,
     ...(response.metadata === undefined ? {} : { metadata: { ...response.metadata } }),
   };
 }
 
 /**
- * Drops the favicon URL, a few hundred bytes of image address per result that a model cannot use.
- * @param result - Result as the provider mapped it.
- * @returns {SearchResult} The same result without `favicon`.
+ * Whether the caller declined favicons and a result carries one, so a provider that maps none costs nothing.
+ * @param favicon - The caller's `favicon` option.
+ * @param results - Results as the provider mapped them.
+ * @returns {boolean} Whether the favicon URLs have to be stripped.
  */
-function withoutFavicon(result: ReadonlySearchResult): SearchResult {
-  const { favicon: _favicon, ...rest } = result;
-  return mutableResult(rest);
+function dropsFavicons(
+  favicon: boolean | undefined,
+  results: readonly ReadonlySearchResult[],
+): boolean {
+  return favicon === false && results.some((result) => result.favicon !== undefined);
 }
 
 type SearchResponseWithContinuation = SearchResponse & {
@@ -461,20 +466,17 @@ function collectProviderResults(
   };
 }
 
-function mutableResult(result: ReadonlySearchResult): SearchResult {
+function mutableResultWithProvider(
+  result: ReadonlySearchResult,
+  provider: string,
+): SearchAllEvidence {
   const { highlights, metadata, ...rest } = result;
   return {
     ...rest,
     ...(highlights ? { highlights: [...highlights] } : {}),
     ...(metadata ? { metadata: { ...metadata } } : {}),
+    provider,
   };
-}
-
-function mutableResultWithProvider(
-  result: ReadonlySearchResult,
-  provider: string,
-): SearchAllEvidence {
-  return { ...mutableResult(result), provider };
 }
 
 type ReadonlySearchAllEvidence = ReadonlySearchResult & { readonly provider: string };
