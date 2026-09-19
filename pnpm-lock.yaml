@@ -40,10 +40,10 @@ importers:
         specifier: 0.74.0
         version: 0.74.0
       '@oh-my-pi/omptype':
-        specifier: ^18.0.11
+        specifier: 18.0.11
         version: 18.0.11
       '@oh-my-pi/pi-coding-agent':
-        specifier: ^18.0.11
+        specifier: 18.0.11
         version: 18.0.11(yauzl@2.10.0)
       '@types/node':
         specifier: latest
@@ -3980,7 +3980,7 @@ snapshots:
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
       '@jridgewell/trace-mapping': 0.3.31
 
   '@jridgewell/remapping@2.3.5':
@@ -4716,6 +4716,7 @@ snapshots:
   '@types/node@26.4.0':
     dependencies:
       undici-types: 8.3.0
+    optional: true
 
   '@types/node@26.6.1':
     dependencies:
@@ -5665,7 +5666,7 @@ snapshots:
 
   magic-string@0.30.21:
     dependencies:
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   magic-string@1.4.1:
     dependencies:
@@ -5976,7 +5977,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 26.4.0
+      '@types/node': 26.6.1
       long: 5.3.2
 
   proxy-addr@2.0.7:
@@ -6440,7 +6441,8 @@ snapshots:
 
   uint8array-extras@1.5.0: {}
 
-  undici-types@8.3.0: {}
+  undici-types@8.3.0:
+    optional: true
 
   undici-types@8.9.0: {}
 
