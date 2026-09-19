@@ -74,7 +74,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
-    "@agntn/ox": "^0.1.0",
+    "@agntn/ox": "0.1.0",
     "@earendil-works/pi-coding-agent": "0.74.0",
     "@earendil-works/pi-tui": "0.74.0",
     "@oh-my-pi/omptype": "^18.0.11",
@@ -83,9 +83,9 @@
     "ai": "6.0.116",
     "changelogen": "latest",
     "obuild": "latest",
-    "oxfmt": "0.63.0",
-    "oxlint": "1.78.0",
-    "oxlint-tsgolint": "^7.0.2001",
+    "oxfmt": "0.68.0",
+    "oxlint": "1.83.0",
+    "oxlint-tsgolint": "7.0.2001",
     "typescript": "7.0.2",
     "vitest": "latest"
   },
