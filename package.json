@@ -13,7 +13,7 @@
     "unified",
     "web-search"
   ],
-  "homepage": "https://github.com/agntn/web#readme",
+  "homepage": "https://web.agntn.dev",
   "bugs": "https://github.com/agntn/web/issues",
   "license": "MIT",
   "author": "oritwoen (https://github.com/oritwoen)",
@@ -137,6 +137,7 @@
   "pi": {
     "extensions": [
       "./packages/pi/extensions/*.ts"
-    ]
+    ],
+    "image": "https://web.agntn.dev/image.png"
   }
 }
