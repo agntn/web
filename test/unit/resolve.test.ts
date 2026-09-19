@@ -151,7 +151,7 @@ describe("resolve", () => {
       );
 
       expect(matrix).toEqual({
-        brave: { filters: [] },
+        brave: { filters: ["startPublishedDate", "endPublishedDate"] },
         "openai-codex": { filters: [] },
         context: { filters: ["includeDomains", "excludeDomains"] },
         exa: {
@@ -210,11 +210,11 @@ describe("resolve", () => {
       expect(matrix.brave).toEqual({
         search: {
           supported: true,
-          filters: [],
+          filters: ["startPublishedDate", "endPublishedDate"],
           contentOptions: [],
           pagination: true,
           resultLimit: { default: 10, maximum: 20 },
-          resultFields: ["favicon", "text"],
+          resultFields: ["publishedDate", "favicon", "text"],
         },
         searchImage: { supported: false },
         read: { supported: false },

@@ -129,7 +129,7 @@ That's most of it, really. `create("brave")` instead of `create("exa")` and noth
 
 | Provider         | Auth                                                 | Does                | Filters                      | Pages |
 | ---------------- | ---------------------------------------------------- | ------------------- | ---------------------------- | ----- |
-| **brave**        | `BRAVE_API_KEY`                                      | search              | none                         | yes   |
+| **brave**        | `BRAVE_API_KEY`                                      | search              | dates                        | yes   |
 | **context**      | `CONTEXT_DEV_API_KEY`                                | search, read        | domains                      |       |
 | **exa**          | `EXA_API_KEY`                                        | search              | domains, category, dates     |       |
 | **firecrawl**    | `FIRECRAWL_API_KEY`                                  | search, read        | domains, sources, categories |       |

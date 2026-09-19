@@ -475,7 +475,7 @@ describe("searchTool", () => {
     mockGetJSON.mockResolvedValue(braveResponse);
 
     const outcomes = await searchTool.execute!(
-      { query: ["first query", "second query"], startPublishedDate: "2024-01-01" },
+      { query: ["first query", "second query"], includeDomains: ["example.com"] },
       { toolCallId: "call-batch-fallback", messages: [] },
     );
 
@@ -494,7 +494,7 @@ describe("searchTool", () => {
         filterReports: [
           {
             provider: "brave",
-            ignoredFilters: ["startPublishedDate"],
+            ignoredFilters: ["includeDomains"],
             undeclaredFilters: [],
           },
         ],
@@ -514,7 +514,7 @@ describe("searchTool", () => {
         filterReports: [
           {
             provider: "brave",
-            ignoredFilters: ["startPublishedDate"],
+            ignoredFilters: ["includeDomains"],
             undeclaredFilters: [],
           },
         ],
@@ -683,18 +683,18 @@ describe("searchTool", () => {
     expect(body.endPublishedDate).toBe("2024-12-31");
   });
 
-  it("reports a date filter ignored by an explicit provider", async () => {
+  it("reports a domain filter ignored by an explicit provider", async () => {
     process.env.BRAVE_API_KEY = "test-brave-key";
     mockGetJSON.mockResolvedValue(braveResponse);
 
     const response = await searchTool.execute!(
-      { query: "test", provider: "brave", startPublishedDate: "2024-01-01" },
-      { toolCallId: "call-ignored-date", messages: [] },
+      { query: "test", provider: "brave", includeDomains: ["example.com"] },
+      { toolCallId: "call-ignored-domain", messages: [] },
     );
 
     expect(response).toMatchObject({
       provider: "brave",
-      ignoredFilters: ["startPublishedDate"],
+      ignoredFilters: ["includeDomains"],
       undeclaredFilters: [],
       results: [expect.objectContaining({ url: "https://brave.example.com" })],
     });
@@ -725,7 +725,7 @@ describe("searchTool", () => {
       filterReports: [
         {
           provider: "brave",
-          ignoredFilters: ["includeDomains", "startPublishedDate"],
+          ignoredFilters: ["includeDomains"],
           undeclaredFilters: [],
         },
       ],
@@ -733,6 +733,9 @@ describe("searchTool", () => {
     const [, body] = mockPostJSON.mock.calls[0];
     expect(body.includeDomains).toEqual(["github.com"]);
     expect(body.startPublishedDate).toBe("2024-01-01");
+    expect(new URL(String(mockGetJSON.mock.calls[0]?.[0])).searchParams.get("freshness")).toMatch(
+      /^2024-01-01to\d{4}-\d{2}-\d{2}$/u,
+    );
     expect(body.numResults).toBe(5);
   });
 

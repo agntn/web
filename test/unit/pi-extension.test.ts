@@ -928,7 +928,7 @@ describe("Pi extension", () => {
       if (!searchTool) throw new Error("web_search was not registered");
       const execution: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
         "test-call",
-        { query: "test query", startPublishedDate: "2024-01-01" },
+        { query: "test query", includeDomains: ["example.com"] },
         undefined,
         undefined,
         undefined,
@@ -945,11 +945,9 @@ describe("Pi extension", () => {
       );
       await expect(execution).resolves.toHaveProperty(
         "content.0.text",
-        expect.stringContaining("[ignored=startPublishedDate]"),
+        expect.stringContaining("[ignored=includeDomains]"),
       );
-      await expect(execution).resolves.toHaveProperty("details.ignoredFilters", [
-        "startPublishedDate",
-      ]);
+      await expect(execution).resolves.toHaveProperty("details.ignoredFilters", ["includeDomains"]);
       await expect(execution).resolves.toHaveProperty("details.attempts", ["exa", "brave"]);
       await expect(execution).resolves.toHaveProperty("details.pagination.status", "next");
       await expect(execution).resolves.toHaveProperty(
