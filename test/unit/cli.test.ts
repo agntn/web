@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, it } from "vitest";
+import { builtinProviders } from "../../src/core/providers.ts";
 
 const execute = promisify(execFile);
 const hook = fileURLToPath(new URL("../fixtures/record-loads.mjs", import.meta.url));
@@ -170,7 +171,9 @@ describe.concurrent("web data paths", () => {
   }) => {
     const { code, loaded, stdout } = await run("providers", "--json");
     expect(code).toBe(0);
-    expect((JSON.parse(stdout) as { name: string }[]).map((row) => row.name)).toHaveLength(12);
+    expect((JSON.parse(stdout) as { name: string }[]).map((row) => row.name)).toEqual([
+      ...builtinProviders,
+    ]);
     expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
     expect(providerModules(loaded)).toEqual([]);
   });

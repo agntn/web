@@ -61,7 +61,7 @@ describe("mojeek provider", () => {
     delete process.env.MOJEEK_API_KEY;
   });
 
-  it("registers itself on import", () => {
+  it("is listed without loading the adapter", () => {
     expect(has("mojeek")).toBe(true);
   });
 

@@ -5,6 +5,8 @@ import {
   getProviderApiKeyEnvVar,
   getProviderCapabilities,
   has,
+  isProviderConfigured,
+  probesAvailability,
   searchImageProviders,
   providers,
   readProviders,
@@ -17,6 +19,7 @@ import {
   UnknownProviderError,
 } from "../../src/core/errors.ts";
 import { searchProviderDetailed } from "../../src/core/all.ts";
+import { probeConfiguredProvider } from "../../src/core/resolve.ts";
 import { Provider, type ProviderConstructor } from "../../src/core/provider.ts";
 import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 
@@ -358,6 +361,46 @@ describe("registry", () => {
         contentOptions: [],
         resultFields: [],
       });
+    });
+
+    it("calls a static isConfigured() on its class", () => {
+      const name = `testprovider${Math.random().toString(36).slice(2)}`;
+      class ThisBoundProvider extends Provider {
+        static readonly providerName = name;
+        static readonly defaultBaseURL = "https://bound.example.com";
+        static readonly ready = true;
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, ThisBoundProvider);
+        }
+
+        static isConfigured(): boolean {
+          return this.ready;
+        }
+      }
+      register(ThisBoundProvider);
+
+      expect(isProviderConfigured(name)).toBe(true);
+    });
+
+    it("probes a registered class that carries isAvailable as an instance field", async () => {
+      const name = `testprovider${Math.random().toString(36).slice(2)}`;
+      class FieldProbeProvider extends Provider {
+        static readonly providerName = name;
+        static readonly defaultBaseURL = "https://probe.example.com";
+        static readonly apiKeyEnvVar = null;
+        readonly isAvailable = async (): Promise<boolean> => false;
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, FieldProbeProvider);
+        }
+      }
+      register(FieldProbeProvider);
+
+      expect(probesAvailability(name)).toBe(true);
+      expect(probesAvailability("brave")).toBe(false);
+      expect(probesAvailability("searxng")).toBe(true);
+      await expect(probeConfiguredProvider(name)).resolves.toBe(false);
     });
 
     it("returns a search-capable provider when required", async () => {

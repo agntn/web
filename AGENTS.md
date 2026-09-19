@@ -62,7 +62,7 @@ test/unit/                # Public behavior and provider contract tests
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible
 - Built in capability lists are the source for static descriptions; `searchProviders()`, `searchImageProviders()`, and `readProviders()` are the live execution contract
-- Providers load on the first `create()` for their name: `src/providers/index.ts` is a manifest of metadata plus a literal `import()` per provider, the registry seeds its table from it on first use, and every listing or capability lookup answers from the manifest without loading a module. `package.json` says `sideEffects: false`, and `test/bundle.test.ts` proves a consumer bundle keeps the registry and drops the adapters it never asks for
+- Providers load on the first `create()` for their name, so `create()` and its capability variants return a `Promise<Provider>`: `src/providers/index.ts` is a manifest of metadata plus a literal `import()` per provider, the registry seeds its table from it on first use, and every listing or capability lookup answers from the manifest without loading a module. `package.json` says `sideEffects: false`, and `test/bundle.test.ts` proves a consumer bundle keeps the registry and drops the adapters it never asks for
 - Command modules keep the registry, the providers and the MCP server behind `import()` inside `run()`; citty resolves every subcommand to print `web --help`, so a static import there loads on the usage path
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 

@@ -116,7 +116,7 @@ describe("context provider", () => {
     delete process.env.CONTEXT_DEV_API_KEY;
   });
 
-  it("registers itself on import", () => {
+  it("is listed without loading the adapter", () => {
     expect(has("context")).toBe(true);
   });
 

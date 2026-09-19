@@ -77,8 +77,8 @@ describe("serpapi provider", () => {
     delete process.env.SERPAPI_API_KEY;
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("serpapi")).toBe(true);
     });
   });

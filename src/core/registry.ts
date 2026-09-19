@@ -50,6 +50,8 @@ export interface ProviderEntry {
 
 interface ProviderRegistration {
   readonly entry: ProviderEntry;
+  /** Whether the entry came from the manifest, so its class still waits behind an `import()`. */
+  readonly builtin: boolean;
   readonly previous?: ProviderRegistration;
 }
 
@@ -63,7 +65,7 @@ const removedRegistrations = new WeakSet<ProviderRegistration>();
  */
 function table(): Map<string, ProviderRegistration> {
   registrations ??= new Map(
-    builtins.map((entry): [string, ProviderRegistration] => [entry.name, { entry }]),
+    builtins.map((entry): [string, ProviderRegistration] => [entry.name, { entry, builtin: true }]),
   );
   return registrations;
 }
@@ -83,6 +85,7 @@ export function register(provider: ProviderConstructor): () => void {
   assertProviderName(provider.providerName);
   const registration: ProviderRegistration = {
     entry: entryFromClass(provider),
+    builtin: false,
     previous: table().get(provider.providerName),
   };
   table().set(provider.providerName, registration);
@@ -194,8 +197,8 @@ export function readProviders(): string[] {
  * @returns {string | null} Environment variable name, or null for a keyless provider.
  */
 export function getProviderApiKeyEnvVar(name: string): string | null {
-  const declaredEnvVar = entryFor(name)?.apiKeyEnvVar;
-  return declaredEnvVar === undefined ? providerApiKeyEnvVar(name) : declaredEnvVar;
+  const entry = entryFor(name);
+  return entry === undefined ? providerApiKeyEnvVar(name) : apiKeyEnvVarOf(entry);
 }
 
 /**
@@ -211,12 +214,17 @@ export function isProviderConfigured(name: string): boolean {
 }
 
 /**
- * Return whether instances of a registered provider answer a reachability probe.
+ * Return whether discovery should instantiate a provider to look for its `isAvailable()` probe.
+ * A built-in declares the probe in the manifest, so the others stay behind their `import()`; a
+ * registered class is already loaded and may carry the probe as an instance field, so it is always
+ * worth constructing.
  * @param name - Registered provider name.
- * @returns {boolean} Whether `create(name)` yields an `AvailabilityProvider`.
+ * @returns {boolean} Whether `create(name)` may yield an `AvailabilityProvider`.
  */
-export function hasAvailabilityProbe(name: string): boolean {
-  return entryFor(name)?.availability === true;
+export function probesAvailability(name: string): boolean {
+  const registration = table().get(name);
+  if (registration === undefined) return false;
+  return registration.entry.availability === true || !registration.builtin;
 }
 
 export function getSearchFilterCapabilities(name: string): SearchFilterCapabilities | undefined {
@@ -257,12 +265,23 @@ function requireEntry(name: string): ProviderEntry {
   return entry;
 }
 
+function apiKeyEnvVarOf(entry: Readonly<ProviderEntry>): string | null {
+  return entry.apiKeyEnvVar === undefined ? providerApiKeyEnvVar(entry.name) : entry.apiKeyEnvVar;
+}
+
+/**
+ * Construct a provider from its entry, the key variable read from that same entry so a
+ * registration that replaces the name during the import cannot hand the class another one.
+ * @param entry - Registry entry the caller resolved.
+ * @param config - Provider configuration.
+ * @returns {Promise<Provider>} Configured provider instance.
+ */
 async function instantiate(
   entry: Readonly<ProviderEntry>,
   config?: Readonly<ProviderConfig>,
 ): Promise<Provider> {
+  const envVar = apiKeyEnvVarOf(entry);
   const ProviderClass = await entry.load();
-  const envVar = getProviderApiKeyEnvVar(entry.name);
   const apiKey = config?.apiKey || (envVar === null ? undefined : process.env[envVar]);
 
   return new ProviderClass({
@@ -284,7 +303,9 @@ function entryFromClass(ProviderClass: ProviderConstructor): ProviderEntry {
     ...(ProviderClass.apiKeyEnvVar === undefined
       ? {}
       : { apiKeyEnvVar: ProviderClass.apiKeyEnvVar }),
-    ...(ProviderClass.isConfigured ? { isConfigured: ProviderClass.isConfigured } : {}),
+    ...(ProviderClass.isConfigured
+      ? { isConfigured: ProviderClass.isConfigured.bind(ProviderClass) }
+      : {}),
     ...(isAvailabilityProvider(ProviderClass.prototype) ? { availability: true } : {}),
     ...(supportsCapability(ProviderClass, "search", isSearchProvider)
       ? { search: searchDetails(ProviderClass) }

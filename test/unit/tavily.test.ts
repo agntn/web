@@ -107,8 +107,8 @@ describe("tavily provider", () => {
     delete process.env.TAVILY_API_KEY;
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("tavily")).toBe(true);
     });
   });

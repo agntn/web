@@ -49,8 +49,8 @@ describe("searxng provider", () => {
     vi.useRealTimers();
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("searxng")).toBe(true);
     });
   });

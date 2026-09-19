@@ -119,7 +119,7 @@ describe("tinyfish provider", () => {
     delete process.env.TINYFISH_API_KEY;
   });
 
-  it("registers itself on import", () => {
+  it("is listed without loading the adapter", () => {
     expect(has("tinyfish")).toBe(true);
   });
 

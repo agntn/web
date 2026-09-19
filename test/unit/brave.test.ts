@@ -43,8 +43,8 @@ describe("brave provider", () => {
     delete process.env.BRAVE_API_KEY;
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("brave")).toBe(true);
     });
   });

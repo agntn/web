@@ -52,8 +52,8 @@ describe("jina provider", () => {
     delete process.env.JINA_API_KEY;
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("jina")).toBe(true);
     });
   });

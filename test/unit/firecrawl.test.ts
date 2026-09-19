@@ -81,8 +81,8 @@ describe("firecrawl provider", () => {
     delete process.env.FIRECRAWL_API_KEY;
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("firecrawl")).toBe(true);
     });
   });

@@ -86,7 +86,7 @@ export const builtins: readonly ProviderEntry[] = [
       filters: ["includeDomains", "excludeDomains", "sources", "categories"],
       contentOptions: ["highlights"],
       resultLimit: { default: 10, maximum: FIRECRAWL_MAX_RESULTS },
-      resultFields: ["image", "text", "metadata"],
+      resultFields: ["publishedDate", "image", "text", "metadata"],
     },
     read: {
       options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],

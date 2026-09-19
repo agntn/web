@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import manifest from "../../package.json" with { type: "json" };
 import { Provider } from "../../src/core/provider.ts";
 import { UnknownProviderError } from "../../src/core/errors.ts";
@@ -9,6 +9,7 @@ import {
   isProviderConfigured,
   providers,
   readProviders,
+  register,
   searchImageProviders,
   searchProviders,
 } from "../../src/core/registry.ts";
@@ -30,9 +31,11 @@ const loaded = vi.hoisted(() => {
       class Stub extends Provider {
         static readonly providerName = name;
         static readonly defaultBaseURL = "https://api.example.com";
+        readonly config: Readonly<ProviderConfig>;
 
         constructor(config: Readonly<ProviderConfig>) {
           super(config, Stub);
+          this.config = config;
         }
 
         async search() {
@@ -61,6 +64,11 @@ vi.mock("../../src/providers/tavily.ts", loaded.provider("tavily", "TavilyProvid
 vi.mock("../../src/providers/tinyfish.ts", loaded.provider("tinyfish", "TinyfishProvider"));
 
 describe("lazy providers", () => {
+  /** Each test reads its own delta and uses a provider no other test touches, so order and isolation do not matter. */
+  beforeEach(() => {
+    loaded.modules.length = 0;
+  });
+
   it("should answer every listing and capability lookup without loading a provider", () => {
     expect(providers()).toEqual([...builtinProviders]);
     expect(searchProviders()).toEqual([...builtinProviders]);
@@ -87,16 +95,40 @@ describe("lazy providers", () => {
   });
 
   it("should reuse the loaded module for the next instance", async () => {
-    const first = await create("brave", { apiKey: "key" });
-    const second = await create("brave", { apiKey: "key", baseURL: "https://brave.example.com" });
+    const first = await create("context", { apiKey: "key" });
+    const second = await create("context", { apiKey: "key", baseURL: "https://ctx.example.com" });
 
-    expect(loaded.modules).toEqual(["brave"]);
+    expect(loaded.modules).toEqual(["context"]);
     expect(second).not.toBe(first);
   });
 
   it("should reject an unknown provider without loading anything", async () => {
     await expect(create("bing")).rejects.toBeInstanceOf(UnknownProviderError);
-    expect(loaded.modules).toEqual(["brave"]);
+    expect(loaded.modules).toEqual([]);
+  });
+
+  it("should read the key variable from the entry it resolved, not from a registration that lands during the import", async () => {
+    class ShadowMojeek extends Provider {
+      static readonly providerName = "mojeek";
+      static readonly defaultBaseURL = "https://shadow.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, ShadowMojeek);
+      }
+    }
+    process.env.MOJEEK_API_KEY = "from-env";
+    const pending = create("mojeek");
+    const unregister = register(ShadowMojeek);
+    try {
+      const provider = (await pending) as Provider & { readonly config: ProviderConfig };
+
+      expect(loaded.modules).toEqual(["mojeek"]);
+      expect(provider.config.apiKey).toBe("from-env");
+    } finally {
+      unregister();
+      delete process.env.MOJEEK_API_KEY;
+    }
   });
 
   it("should share one import between parallel cold creates", async () => {
@@ -106,7 +138,7 @@ describe("lazy providers", () => {
       create("exa", { apiKey: "key" }),
     ]);
 
-    expect(loaded.modules).toEqual(["brave", "exa"]);
+    expect(loaded.modules).toEqual(["exa"]);
     expect(new Set(instances).size).toBe(3);
   });
 });

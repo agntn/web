@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "obuild";
@@ -55,7 +55,7 @@ describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", ()
     expect(bundle.providers().sort()).toEqual([...builtinProviders].sort());
   });
 
-  /** With no import side effects declared, a consumer that never touches the registry ships no adapter. */
+  /** With no import side effects declared, a consumer that never touches the registry ships no adapter, not even as a chunk. */
   it("drops every provider from a consumer that only reads the version", async () => {
     const outDir = await bundleConsumer(versionEntry);
     const bundle = (await import(pathToFileURL(join(outDir, versionEntry)).href)) as Pick<
@@ -65,11 +65,8 @@ describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", ()
     const files = readdirSync(outDir, { recursive: true, encoding: "utf8" }).filter((file) =>
       file.endsWith(".mjs"),
     );
-    const adapters = files.filter((file) =>
-      /class \w+Provider extends/u.test(readFileSync(join(outDir, file), "utf8")),
-    );
 
     expect(bundle.version).toMatch(/^\d+\.\d+\.\d+/u);
-    expect(adapters).toEqual([]);
+    expect(files).toEqual([versionEntry]);
   });
 });
