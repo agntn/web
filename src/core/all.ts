@@ -292,7 +292,8 @@ async function searchProvider<TProvider extends string>(
     throw new InvalidSearchContinuationError();
   }
 
-  const provider = createSearchProvider(providerName);
+  const provider = await createSearchProvider(providerName);
+  throwIfAborted(effectiveSearchOptions.signal);
   const paginated = isPaginatedSearchProvider(provider);
   let response: SearchResponseWithContinuation;
   try {
@@ -325,7 +326,7 @@ type SearchResponseWithContinuation = SearchResponse & {
 };
 
 async function searchResponse(
-  provider: Readonly<ReturnType<typeof createSearchProvider>>,
+  provider: Readonly<Awaited<ReturnType<typeof createSearchProvider>>>,
   paginated: boolean,
   query: string,
   options: Readonly<SearchRequestOptions>,

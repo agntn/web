@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
+import type { ProviderEntry } from "../../src/core/registry.ts";
 import type { ImageSearchResult, ProviderConfig } from "../../src/core/types.ts";
 
 const { mockError, mockInfo, mockLog, mockSearchByImage } = vi.hoisted(() => ({
@@ -19,12 +20,10 @@ vi.mock("consola", () => ({
 
 vi.mock("../../src/providers/index.ts", async () => {
   const { Provider } = await import("../../src/core/provider.ts");
-  const { register } = await import("../../src/core/registry.ts");
 
   class FakeSerpApiProvider extends Provider {
     static readonly providerName = "serpapi";
     static readonly defaultBaseURL = "https://serpapi.example.com";
-    static readonly apiKeyEnvVar = null;
 
     constructor(config: Readonly<ProviderConfig>) {
       super(config, FakeSerpApiProvider);
@@ -35,8 +34,16 @@ vi.mock("../../src/providers/index.ts", async () => {
     }
   }
 
-  register(FakeSerpApiProvider);
-  return {};
+  /** The manifest the registry seeds from: one built in, loaded the way a real entry is. */
+  const builtins: ProviderEntry[] = [
+    {
+      name: "serpapi",
+      apiKeyEnvVar: null,
+      searchImage: { resultLimit: { default: 10 } },
+      load: () => Promise.resolve(FakeSerpApiProvider),
+    },
+  ];
+  return { builtins };
 });
 
 import searchImageCommand from "../../src/commands/search-image.ts";

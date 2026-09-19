@@ -33,11 +33,11 @@ afterEach(() => {
 });
 
 describe("OpenAI Codex search", () => {
-  it("requires both environment credentials and declares only search", () => {
+  it("requires both environment credentials and declares only search", async () => {
     expect(isProviderConfigured("openai-codex")).toBe(false);
     vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", credentials.accessToken);
     expect(isProviderConfigured("openai-codex")).toBe(false);
-    expect(() => createSearchProvider("openai-codex")).toThrow(AuthError);
+    await expect(createSearchProvider("openai-codex")).rejects.toThrow(AuthError);
     vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", credentials.accountId);
     expect(isProviderConfigured("openai-codex")).toBe(true);
     expect(getProviderCapabilities("openai-codex")).toMatchObject({
@@ -54,7 +54,7 @@ describe("OpenAI Codex search", () => {
 
   it("uses OAuth with forced search and returns native sources, not generated snippets", async () => {
     const requests = mockSearch();
-    const provider = createSearchProvider("openai-codex", {
+    const provider = await createSearchProvider("openai-codex", {
       codex: { credentials, model: "gpt-5.4" },
     });
     if (!isDetailedSearchProvider(provider)) throw new Error("Missing detailed search");
@@ -107,7 +107,7 @@ describe("OpenAI Codex search", () => {
       )
       .mockImplementation(async () => sse(completedEvents()));
     vi.stubGlobal("fetch", fetchMock);
-    const provider = createSearchProvider("openai-codex", {
+    const provider = await createSearchProvider("openai-codex", {
       codex: {
         credentials: ({ refresh }) => {
           refreshes.push(refresh);
@@ -142,7 +142,7 @@ describe("OpenAI Codex search", () => {
           headers: { "Retry-After": "7" },
         });
       });
-      const provider = createSearchProvider("openai-codex", { codex: { credentials } });
+      const provider = await createSearchProvider("openai-codex", { codex: { credentials } });
       const error: unknown = await provider.search("query").catch((failure: unknown) => failure);
       expect(error).toBeInstanceOf(errorType);
       expect(String(error)).not.toContain("test-access-token");
@@ -152,13 +152,13 @@ describe("OpenAI Codex search", () => {
     },
   );
 
-  it("rejects arbitrary endpoints before resolving credentials", () => {
-    expect(() =>
+  it("rejects arbitrary endpoints before resolving credentials", async () => {
+    await expect(
       createSearchProvider("openai-codex", {
         baseURL: "https://attacker.example/",
         codex: { credentials },
       }),
-    ).toThrow(/official ChatGPT endpoint/);
+    ).rejects.toThrow(/official ChatGPT endpoint/);
   });
 
   it.each([
@@ -175,7 +175,7 @@ describe("OpenAI Codex search", () => {
     ],
   ])("rejects %s instead of returning partial results", async (_label, events) => {
     mockSearch(events);
-    const provider = createSearchProvider("openai-codex", { codex: { credentials } });
+    const provider = await createSearchProvider("openai-codex", { codex: { credentials } });
     await expect(provider.search("query")).rejects.toBeInstanceOf(HTTPError);
   });
 
@@ -214,9 +214,8 @@ describe("OpenAI Codex search", () => {
         },
       },
     ]);
-    expect(
-      await createSearchProvider("openai-codex", { codex: { credentials } }).search("query"),
-    ).toEqual([
+    const provider = await createSearchProvider("openai-codex", { codex: { credentials } });
+    expect(await provider.search("query")).toEqual([
       { url: "https://example.com/", title: "Real source", snippet: "" },
       { url: "https://other.example/", title: "Cited source", snippet: "" },
     ]);
@@ -238,9 +237,8 @@ describe("OpenAI Codex search", () => {
         },
       },
     ]);
-    expect(
-      await createSearchProvider("openai-codex", { codex: { credentials } }).search("query"),
-    ).toEqual([]);
+    const provider = await createSearchProvider("openai-codex", { codex: { credentials } });
+    expect(await provider.search("query")).toEqual([]);
   });
 
   it.each(["error", "response.failed"])(
@@ -248,9 +246,8 @@ describe("OpenAI Codex search", () => {
     async (type) => {
       const error = { code: "rate_limit_exceeded", message: "test-access-token" };
       mockSearch([{ type, ...(type === "error" ? { error } : { response: { error } }) }]);
-      await expect(
-        createSearchProvider("openai-codex", { codex: { credentials } }).search("query"),
-      ).rejects.toBeInstanceOf(RateLimitError);
+      const provider = await createSearchProvider("openai-codex", { codex: { credentials } });
+      await expect(provider.search("query")).rejects.toBeInstanceOf(RateLimitError);
     },
   );
 
@@ -260,12 +257,12 @@ describe("OpenAI Codex search", () => {
       calls += 1;
       return new Response("sensitive diagnostic", { status: 401 });
     });
-    const provider = createSearchProvider("openai-codex", {
+    const provider = await createSearchProvider("openai-codex", {
       codex: { credentials: () => credentials },
     });
     await expect(provider.search("query")).rejects.toBeInstanceOf(AuthError);
     expect(calls).toBe(2);
-    const broken = createSearchProvider("openai-codex", {
+    const broken = await createSearchProvider("openai-codex", {
       codex: {
         credentials: () => {
           throw new Error("test-access-token");
@@ -278,7 +275,7 @@ describe("OpenAI Codex search", () => {
 
   it("cancels a credential callback that ignores the signal", async () => {
     const requests = mockSearch();
-    const provider = createSearchProvider("openai-codex", {
+    const provider = await createSearchProvider("openai-codex", {
       codex: { credentials: () => new Promise(() => {}) },
     });
     await expect(provider.search("query", { deadline: Date.now() + 15 })).rejects.toMatchObject({
@@ -292,7 +289,7 @@ describe("OpenAI Codex search", () => {
     let resolved = false;
     const controller = new AbortController();
     controller.abort(new DOMException("Cancelled", "AbortError"));
-    const provider = createSearchProvider("openai-codex", {
+    const provider = await createSearchProvider("openai-codex", {
       codex: {
         credentials: () => {
           resolved = true;

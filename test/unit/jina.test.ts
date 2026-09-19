@@ -20,11 +20,8 @@ import { isReadProvider } from "../../src/core/provider.ts";
 import { AuthError, HTTPError, InvalidProviderUrlError } from "../../src/core/errors.ts";
 import type { ProviderConfig, SearchResult, ReadResult } from "../../src/core/types.ts";
 
-// Triggers self-registration of jina provider
-import "../../src/providers/index.ts";
-
-function createJinaProvider(config: Readonly<ProviderConfig> = {}) {
-  const provider = createSearchProvider("jina", config);
+async function createJinaProvider(config: Readonly<ProviderConfig> = {}) {
+  const provider = await createSearchProvider("jina", config);
   if (!isReadProvider(provider)) {
     throw new Error("Jina provider must support URL reading");
   }
@@ -62,37 +59,37 @@ describe("jina provider", () => {
   });
 
   describe("create", () => {
-    it("creates provider with apiKey", () => {
-      expect(() => createJinaProvider({ apiKey: "test-key" })).not.toThrow();
+    it("creates provider with apiKey", async () => {
+      await expect(createJinaProvider({ apiKey: "test-key" })).resolves.toBeDefined();
     });
 
-    it("creates provider without apiKey for read-only use", () => {
-      expect(() => createJinaProvider({})).not.toThrow();
+    it("creates provider without apiKey for read-only use", async () => {
+      await expect(createJinaProvider({})).resolves.toBeDefined();
     });
 
-    it("rejects non-HTTP reader base URLs", () => {
-      expect(() => createJinaProvider({ readBaseURL: "file:///etc/passwd" })).toThrow(
+    it("rejects non-HTTP reader base URLs", async () => {
+      await expect(createJinaProvider({ readBaseURL: "file:///etc/passwd" })).rejects.toThrow(
         InvalidProviderUrlError,
       );
     });
   });
 
   describe("name", () => {
-    it("returns jina", () => {
-      const provider = createJinaProvider({ apiKey: "test-key" });
+    it("returns jina", async () => {
+      const provider = await createJinaProvider({ apiKey: "test-key" });
       expect(provider.name).toBe("jina");
     });
   });
 
   describe("search()", () => {
     it("throws AuthError without apiKey and without env var", async () => {
-      const provider = createJinaProvider({});
+      const provider = await createJinaProvider({});
       await expect(provider.search("test query")).rejects.toThrow(AuthError);
       expect(mockGetJSON).not.toHaveBeenCalled();
     });
 
     it("calls getJSON with correct URL and bearer auth headers", async () => {
-      const provider = createJinaProvider({ apiKey: "test-key" });
+      const provider = await createJinaProvider({ apiKey: "test-key" });
       await provider.search("test query");
 
       expect(mockGetJSON).toHaveBeenCalledOnce();
@@ -108,7 +105,7 @@ describe("jina provider", () => {
     });
 
     it("maps result fields correctly", async () => {
-      const provider = createJinaProvider({ apiKey: "test-key" });
+      const provider = await createJinaProvider({ apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -123,7 +120,7 @@ describe("jina provider", () => {
     });
 
     it("maps maxResults to count query param and clamps to Jina limit", async () => {
-      const provider = createJinaProvider({ apiKey: "test-key" });
+      const provider = await createJinaProvider({ apiKey: "test-key" });
       await provider.search("test query", { maxResults: 25 });
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -131,7 +128,7 @@ describe("jina provider", () => {
     });
 
     it("maps includeDomains and news category to Jina query params", async () => {
-      const provider = createJinaProvider({ apiKey: "test-key" });
+      const provider = await createJinaProvider({ apiKey: "test-key" });
       await provider.search("test query", { includeDomains: ["example.com"], category: "news" });
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -151,7 +148,7 @@ describe("jina provider", () => {
         ],
       });
 
-      const provider = createJinaProvider({ apiKey: "test-key" });
+      const provider = await createJinaProvider({ apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results[0].snippet).toBe("A".repeat(200));
@@ -165,7 +162,7 @@ describe("jina provider", () => {
         data: undefined,
       });
 
-      const provider = createJinaProvider({ apiKey: "test-key" });
+      const provider = await createJinaProvider({ apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results).toEqual([]);
@@ -180,7 +177,7 @@ describe("jina provider", () => {
         data: { url: "https://example.com/", content: "Read content" },
       });
 
-      const provider = createJinaProvider({ baseURL: "https://eu.s.jina.ai" });
+      const provider = await createJinaProvider({ baseURL: "https://eu.s.jina.ai" });
       await provider.read("https://example.com");
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -199,7 +196,7 @@ describe("jina provider", () => {
         },
       });
 
-      const provider = createJinaProvider({});
+      const provider = await createJinaProvider({});
       const result = await provider.read("https://example.com/?a=1&b=2");
 
       expect(mockGetJSON).toHaveBeenCalledOnce();
@@ -216,7 +213,7 @@ describe("jina provider", () => {
         data: { url: "https://example.com/", content: "Text content" },
       });
 
-      const provider = createJinaProvider({ apiKey: "test-key" });
+      const provider = await createJinaProvider({ apiKey: "test-key" });
       await provider.read("https://example.com", {
         format: "text",
         maxTokens: 500,
@@ -258,7 +255,7 @@ describe("jina provider", () => {
         },
       });
 
-      const provider = createJinaProvider({});
+      const provider = await createJinaProvider({});
       const result: ReadResult = await provider.read("https://example.com");
 
       expect(result).toEqual({
@@ -282,7 +279,7 @@ describe("jina provider", () => {
         message: "invalid token",
       });
 
-      const provider = createJinaProvider({ apiKey: "bad-key" });
+      const provider = await createJinaProvider({ apiKey: "bad-key" });
 
       await expect(provider.search("query")).rejects.toThrow(AuthError);
     });
@@ -294,7 +291,7 @@ describe("jina provider", () => {
         message: "unsupported url",
       });
 
-      const provider = createJinaProvider({});
+      const provider = await createJinaProvider({});
 
       const request = provider.read("ftp://example.com");
 

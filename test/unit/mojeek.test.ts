@@ -22,7 +22,6 @@ import {
 } from "../../src/core/errors.ts";
 import { isPaginatedSearchProvider } from "../../src/core/provider.ts";
 import { createSearchProvider, has } from "../../src/core/registry.ts";
-import "../../src/providers/mojeek.ts";
 
 const mojeekResponse = {
   response: {
@@ -66,12 +65,12 @@ describe("mojeek provider", () => {
     expect(has("mojeek")).toBe(true);
   });
 
-  it("requires an API key", () => {
-    expect(() => createSearchProvider("mojeek")).toThrow(AuthError);
+  it("requires an API key", async () => {
+    await expect(createSearchProvider("mojeek")).rejects.toThrow(AuthError);
   });
 
   it("searches with result, domain, and date parameters", async () => {
-    const provider = createSearchProvider("mojeek", {
+    const provider = await createSearchProvider("mojeek", {
       apiKey: "test-key",
       baseURL: "https://proxy.example.com/mojeek/",
     });
@@ -111,7 +110,7 @@ describe("mojeek provider", () => {
         results: [mojeekResponse.response.results[0]],
       },
     });
-    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
     if (!isPaginatedSearchProvider(provider)) throw new Error("Mojeek must support pagination");
 
     const page = await provider.searchPage("independent search", { maxResults: 5 }, "8");
@@ -128,7 +127,7 @@ describe("mojeek provider", () => {
         results: [mojeekResponse.response.results[0]],
       },
     });
-    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
     if (!isPaginatedSearchProvider(provider)) throw new Error("Mojeek must support pagination");
 
     const page = await provider.searchPage("independent search", { maxResults: 1 }, "8");
@@ -138,7 +137,7 @@ describe("mojeek provider", () => {
   });
 
   it("rejects result offsets beyond Mojeek's result window before the request", async () => {
-    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
     if (!isPaginatedSearchProvider(provider)) throw new Error("Mojeek must support pagination");
 
     await provider.searchPage("independent search", undefined, "1000");
@@ -152,7 +151,7 @@ describe("mojeek provider", () => {
   });
 
   it("maps search results and native metadata", async () => {
-    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
 
     await expect(provider.search("independent search")).resolves.toEqual([
       {
@@ -183,7 +182,7 @@ describe("mojeek provider", () => {
         results: [],
       },
     });
-    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
 
     await expect(provider.search("nothing")).resolves.toEqual([]);
   });
@@ -196,7 +195,7 @@ describe("mojeek provider", () => {
         results: [],
       },
     });
-    const provider = createSearchProvider("mojeek", { apiKey: "invalid-key" });
+    const provider = await createSearchProvider("mojeek", { apiKey: "invalid-key" });
 
     await expect(provider.search("test")).rejects.toThrow(AuthError);
   });
@@ -209,7 +208,7 @@ describe("mojeek provider", () => {
         results: [],
       },
     });
-    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
 
     await expect(provider.search("test")).rejects.toThrow(RateLimitError);
   });
@@ -222,7 +221,7 @@ describe("mojeek provider", () => {
         results: [],
       },
     });
-    const provider = createSearchProvider("mojeek", { apiKey: "test-key" });
+    const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
 
     await expect(provider.search("test")).rejects.toThrow(WebError);
   });

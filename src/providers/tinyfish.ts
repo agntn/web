@@ -1,18 +1,13 @@
 import type {
   ProviderConfig,
-  SearchFilterCapabilities,
   ReadOptions,
   ReadResult,
   SearchRequestOptions,
   SearchResult,
 } from "../core/types.ts";
 import { Client } from "../core/client.ts";
-import {
-  Provider,
-  assertProviderBaseURL,
-  type ProviderCapabilityDetails,
-  type ProviderSearchPage,
-} from "../core/provider.ts";
+import { Provider, assertProviderBaseURL, type ProviderSearchPage } from "../core/provider.ts";
+import { TINYFISH_SEARCH_CATEGORIES } from "../core/providers.ts";
 import {
   AuthError,
   HTTPError,
@@ -20,7 +15,6 @@ import {
   WebError,
   normalizeError,
 } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 interface TinyfishSearchResult {
   readonly position?: number;
@@ -75,32 +69,10 @@ interface TinyfishFetchResponse {
 
 const TINYFISH_MAX_FETCH_TIMEOUT_MS = 110_000;
 const TINYFISH_CLIENT_TIMEOUT_MS = 150_000;
-const TINYFISH_SEARCH_CATEGORIES = ["news", "research_paper"] as const;
 
-class TinyfishProvider extends Provider {
+export class TinyfishProvider extends Provider {
   static readonly providerName = "tinyfish";
   static readonly defaultBaseURL = "https://api.search.tinyfish.ai";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: [],
-      resultLimit: { default: 10 },
-      resultFields: ["publishedDate", "author", "metadata"],
-    },
-    read: {
-      options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
-      formats: ["markdown", "html"],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: [
-      "includeDomains",
-      "excludeDomains",
-      "category",
-      "startPublishedDate",
-      "endPublishedDate",
-    ],
-    categories: TINYFISH_SEARCH_CATEGORIES,
-  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
   private readonly readBaseURL: string;
@@ -374,5 +346,3 @@ function selectorHint(error?: Readonly<TinyfishFetchError>): string {
   if (!selectors?.length) return "";
   return `; candidate selectors: ${JSON.stringify(selectors)}`;
 }
-
-register(TinyfishProvider);

@@ -1,14 +1,5 @@
-import type {
-  ProviderConfig,
-  SearchFilterCapabilities,
-  SearchRequestOptions,
-  SearchResult,
-} from "../core/types.ts";
-import {
-  Provider,
-  type ProviderCapabilityDetails,
-  type ProviderSearchPage,
-} from "../core/provider.ts";
+import type { ProviderConfig, SearchRequestOptions, SearchResult } from "../core/types.ts";
+import { Provider, type ProviderSearchPage } from "../core/provider.ts";
 import {
   AuthError,
   InvalidSearchContinuationError,
@@ -17,7 +8,6 @@ import {
   WebError,
   normalizeError,
 } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 interface MojeekSearchEnvelope {
   readonly response?: MojeekSearchResponse;
@@ -53,19 +43,9 @@ interface MojeekResult {
   };
 }
 
-class MojeekProvider extends Provider {
+export class MojeekProvider extends Provider {
   static readonly providerName = "mojeek";
   static readonly defaultBaseURL = "https://api.mojeek.com";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: [],
-      resultLimit: { default: 10 },
-      resultFields: ["score", "publishedDate", "image", "metadata"],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: ["includeDomains", "excludeDomains", "startPublishedDate", "endPublishedDate"],
-  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 
@@ -224,5 +204,3 @@ function unixSecondsToISOString(value?: number): string | undefined {
   const date = new Date(value * 1000);
   return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
-
-register(MojeekProvider);

@@ -61,7 +61,6 @@ export default defineCommand({
     const batch = await import("../core/batch.ts");
     const parsed = parseReadArguments(args, batch.MAX_BATCH_ITEMS);
     try {
-      await import("../providers/index.ts");
       if (parsed.urls.length === 1) {
         const response = await read.readUrlDetailed(parsed.urls[0], parsed.options);
         writeReadDetailedResult(response, args.json);

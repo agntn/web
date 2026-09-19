@@ -52,10 +52,9 @@ import { AuthError } from "../../src/core/errors.ts";
 import { isReadProvider } from "../../src/core/provider.ts";
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import type { ProviderConfig } from "../../src/core/types.ts";
-import "../../src/providers/context.ts";
 
-function createContextProvider(config: Readonly<ProviderConfig> = {}) {
-  const provider = createSearchProvider("context", config);
+async function createContextProvider(config: Readonly<ProviderConfig> = {}) {
+  const provider = await createSearchProvider("context", config);
   if (!isReadProvider(provider)) {
     throw new Error("Context.dev provider must support URL reading");
   }
@@ -121,24 +120,24 @@ describe("context provider", () => {
     expect(has("context")).toBe(true);
   });
 
-  it("requires an API key", () => {
-    expect(() => createContextProvider()).toThrow(AuthError);
+  it("requires an API key", async () => {
+    await expect(createContextProvider()).rejects.toThrow(AuthError);
   });
 
-  it("reads the official Context.dev environment variable", () => {
+  it("reads the official Context.dev environment variable", async () => {
     process.env.CONTEXT_DEV_API_KEY = "ctxt_secret_env";
 
-    expect(() => createContextProvider()).not.toThrow();
+    await expect(createContextProvider()).resolves.toBeDefined();
   });
 
-  it("uses a read client that can honor the provider timeout", () => {
-    createContextProvider({ apiKey: "ctxt_secret_test" });
+  it("uses a read client that can honor the provider timeout", async () => {
+    await createContextProvider({ apiKey: "ctxt_secret_test" });
 
     expect(Client).toHaveBeenCalledWith({ maxRetries: 1, timeout: 310000 });
   });
 
   it("searches with domain filters and Bearer auth", async () => {
-    const provider = createContextProvider({ apiKey: "ctxt_secret_test" });
+    const provider = await createContextProvider({ apiKey: "ctxt_secret_test" });
 
     const results = await provider.search("web agents", {
       maxResults: 1,
@@ -169,7 +168,7 @@ describe("context provider", () => {
   });
 
   it("bounds the number of requested search results", async () => {
-    const provider = createContextProvider({ apiKey: "ctxt_secret_test" });
+    const provider = await createContextProvider({ apiKey: "ctxt_secret_test" });
 
     await provider.search("web agents", { maxResults: 200 });
 
@@ -177,7 +176,7 @@ describe("context provider", () => {
   });
 
   it("scrapes page content with normalized read options", async () => {
-    const provider = createContextProvider({ apiKey: "ctxt_secret_test" });
+    const provider = await createContextProvider({ apiKey: "ctxt_secret_test" });
 
     const result = await provider.read("https://example.com/article", {
       format: "html",

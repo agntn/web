@@ -9,7 +9,6 @@ import { NoProviderAvailableError } from "../../src/core/errors.ts";
 import { Provider } from "../../src/core/provider.ts";
 import { register } from "../../src/core/registry.ts";
 import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
-import "../../src/providers/index.ts";
 
 const envKeys = [
   "EXA_API_KEY",

@@ -25,9 +25,6 @@ import { createSearchProvider, has } from "../../src/core/registry.ts";
 import { AuthError } from "../../src/core/errors.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
-// Triggers self-registration of exa provider
-import "../../src/providers/index.ts";
-
 const exaResponse = {
   requestId: "test-req",
   results: [
@@ -70,25 +67,25 @@ describe("exa provider", () => {
   });
 
   describe("create", () => {
-    it("creates provider with apiKey", () => {
-      expect(() => createSearchProvider("exa", { apiKey: "test-key" })).not.toThrow();
+    it("creates provider with apiKey", async () => {
+      await expect(createSearchProvider("exa", { apiKey: "test-key" })).resolves.toBeDefined();
     });
 
-    it("throws AuthError without apiKey and without env var", () => {
-      expect(() => createSearchProvider("exa", {})).toThrow(AuthError);
+    it("throws AuthError without apiKey and without env var", async () => {
+      await expect(createSearchProvider("exa", {})).rejects.toThrow(AuthError);
     });
   });
 
   describe("name", () => {
-    it("returns exa", () => {
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+    it("returns exa", async () => {
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       expect(provider.name).toBe("exa");
     });
   });
 
   describe("search()", () => {
     it("calls postJSON with correct url, body, and headers", async () => {
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       await provider.search("test query");
 
       expect(mockPostJSON).toHaveBeenCalledOnce();
@@ -105,7 +102,7 @@ describe("exa provider", () => {
 
     it("maps result fields correctly", async () => {
       mockPostJSON.mockResolvedValueOnce(richExaResponse);
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query", {
         summary: true,
         fullText: true,
@@ -123,7 +120,7 @@ describe("exa provider", () => {
     });
 
     it("maps maxResults option to numResults in body", async () => {
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       await provider.search("test query", { maxResults: 5 });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -136,14 +133,14 @@ describe("exa provider", () => {
         results: [{ ...exaResponse.results[0], title: null }],
       });
 
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results[0].title).toBe("");
     });
 
     it("keeps expensive content disabled by default", async () => {
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       await provider.search("test query");
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -151,7 +148,7 @@ describe("exa provider", () => {
     });
 
     it("passes explicit content preferences", async () => {
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       await provider.search("test query", { highlights: false, summary: true, fullText: true });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -171,7 +168,7 @@ describe("exa provider", () => {
         ],
       });
 
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       const results = await provider.search("query", { fullText: true });
 
       expect(results[0].snippet).toBe(longText.slice(0, 200));
@@ -183,7 +180,7 @@ describe("exa provider", () => {
         results: [],
       });
 
-      const provider = createSearchProvider("exa", { apiKey: "test-key" });
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results).toEqual([]);

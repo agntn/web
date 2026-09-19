@@ -77,9 +77,8 @@ describe("search usage limits", () => {
   it.each(["tavily", "serpbase"] as const)(
     "keeps an explicit %s on its own provider",
     async (provider) => {
-      const error = await createSearchProvider(provider)
-        .search("independent search")
-        .catch((caught: unknown) => caught);
+      const search = await createSearchProvider(provider);
+      const error = await search.search("independent search").catch((caught: unknown) => caught);
 
       expect(error).toBeInstanceOf(PaymentError);
       expect(attempts).toEqual([hosts[provider]]);

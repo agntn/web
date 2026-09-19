@@ -41,7 +41,6 @@ import {
 import { Provider } from "../src/core/provider.ts";
 import { register } from "../src/core/registry.ts";
 import type { ProviderConfig, SearchResult } from "../src/core/types.ts";
-import "../src/providers/index.ts";
 
 const openConnections: Array<{ close(): Promise<void> }> = [];
 const customProviderCleanups: Array<() => void> = [];

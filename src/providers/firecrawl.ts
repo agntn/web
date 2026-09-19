@@ -1,5 +1,4 @@
 import type {
-  SearchFilterCapabilities,
   SearchResult,
   SearchRequestOptions,
   SearchResponse,
@@ -7,9 +6,9 @@ import type {
   ReadOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
+import { Provider } from "../core/provider.ts";
+import { FIRECRAWL_MAX_RESULTS } from "../core/providers.ts";
 import { AuthError, WebError, normalizeError } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 interface FirecrawlSearchResult {
   readonly title: string;
@@ -66,29 +65,13 @@ interface FirecrawlScrapeResponse {
   };
 }
 
-const FIRECRAWL_MAX_RESULTS = 100;
-
 function clampMaxResults(max?: number): number {
   return Math.min(Math.max(max ?? 10, 1), FIRECRAWL_MAX_RESULTS);
 }
 
-class FirecrawlProvider extends Provider {
+export class FirecrawlProvider extends Provider {
   static readonly providerName = "firecrawl";
   static readonly defaultBaseURL = "https://api.firecrawl.dev";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: ["highlights"],
-      resultLimit: { default: 10, maximum: FIRECRAWL_MAX_RESULTS },
-      resultFields: ["image", "text", "metadata"],
-    },
-    read: {
-      options: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
-      formats: ["markdown", "html"],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: ["includeDomains", "excludeDomains", "sources", "categories"],
-  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 
@@ -275,5 +258,3 @@ function mapImageResult(result: FirecrawlImageResult): SearchResult {
     metadata: { imageWidth: result.imageWidth, imageHeight: result.imageHeight },
   };
 }
-
-register(FirecrawlProvider);

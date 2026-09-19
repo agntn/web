@@ -89,13 +89,14 @@ interface Run {
 /**
  * Runs the CLI under the load hook with stdin closed, because the server reads stdin until it ends,
  * and kills it after ten seconds so a server that stops exiting on EOF fails here instead of outliving CI.
+ * The blank Brave key keeps a search on that provider off the network.
  * @param args - Arguments for `web`.
  * @returns {Promise<Run>} The exit code, stdout and every module URL the run loaded.
  */
 async function run(...args: readonly string[]): Promise<Run> {
   const pending = execute(process.execPath, ["--import", hook, "src/cli.ts", ...args], {
     cwd: process.cwd(),
-    env: { ...process.env, NODE_ENV: "test" },
+    env: { ...process.env, BRAVE_API_KEY: "", NODE_ENV: "test" },
     timeout: 10_000,
   });
   pending.child.stdin?.end();
@@ -141,11 +142,42 @@ describe.concurrent("web usage paths", () => {
     },
   );
 
-  it("web mcp loads the server and the providers once it runs", async ({ expect }) => {
+  it("web mcp loads the server and the manifest once it runs", async ({ expect }) => {
     const { code, loaded } = await run("mcp");
     expect(code).toBe(0);
     const packages = new Set(loaded.map(packageOf));
     expect(packages).toContain("@modelcontextprotocol/sdk");
     expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
+    expect(providerModules(loaded)).toEqual([]);
+  });
+});
+
+/**
+ * The provider modules a run loaded, by name, so a test can say which adapters a command needs.
+ * @param loaded - Every module URL the load hook reported.
+ * @returns {string[]} Provider names under `src/providers/`, the manifest excluded.
+ */
+function providerModules(loaded: readonly string[]): string[] {
+  return loaded.flatMap((url) => {
+    const name = /\/src\/providers\/([a-z-]+)\.ts$/u.exec(url)?.[1];
+    return name === undefined || name === "index" ? [] : [name];
+  });
+}
+
+describe.concurrent("web data paths", () => {
+  it("web providers lists every adapter from the manifest without loading one", async ({
+    expect,
+  }) => {
+    const { code, loaded, stdout } = await run("providers", "--json");
+    expect(code).toBe(0);
+    expect((JSON.parse(stdout) as { name: string }[]).map((row) => row.name)).toHaveLength(12);
+    expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
+    expect(providerModules(loaded)).toEqual([]);
+  });
+
+  it("web search loads the one adapter the provider flag names", async ({ expect }) => {
+    const { code, loaded } = await run("search", "query", "--provider", "brave");
+    expect(code).toBe(1);
+    expect(providerModules(loaded)).toEqual(["brave"]);
   });
 });

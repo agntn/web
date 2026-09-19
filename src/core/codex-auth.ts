@@ -68,6 +68,45 @@ function hasHostOAuth(host: CodexHostAuth): boolean {
 }
 
 /**
+ * Read the bearer and account the environment carries, an explicit token taking precedence.
+ * @param accessToken - Token from provider configuration, when the caller passed one.
+ * @returns {CodexCredentials} Environment credentials, empty when nothing is set.
+ */
+export function environmentCodexCredentials(
+  accessToken = process.env.OPENAI_CODEX_ACCESS_TOKEN,
+): CodexCredentials {
+  return {
+    accessToken: accessToken ?? "",
+    accountId: process.env.OPENAI_CODEX_ACCOUNT_ID || undefined,
+  };
+}
+
+/**
+ * Whether the environment names a Codex token or account at all.
+ * @returns {boolean} Whether either variable is set.
+ */
+export function hasEnvironmentCodexCredentials(): boolean {
+  return Boolean(process.env.OPENAI_CODEX_ACCESS_TOKEN || process.env.OPENAI_CODEX_ACCOUNT_ID);
+}
+
+/**
+ * The provider's local configuration check: valid environment credentials or a native login.
+ * Never fetches or refreshes a token, so discovery can call it for every listing.
+ * @returns {boolean} Whether `create("openai-codex")` has credentials to start from.
+ */
+export function hasCodexCredentials(): boolean {
+  try {
+    if (hasEnvironmentCodexCredentials()) {
+      resolveCodexCredentials(environmentCodexCredentials());
+      return true;
+    }
+    return hasCodexLogin(codexAuthSource());
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve an explicit source or the environment's source selector.
  * @param source - Optional instance override.
  * @returns {CodexAuthSource} Validated login selection.

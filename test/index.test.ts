@@ -44,7 +44,7 @@ describe("@agntn/web", () => {
     ]);
   });
 
-  it("should register built-in providers from main entrypoint", () => {
+  it("should register built-in providers from main entrypoint", async () => {
     for (const provider of builtinProviders) {
       const config =
         provider === "openai-codex"
@@ -52,23 +52,25 @@ describe("@agntn/web", () => {
           : provider === "searxng" || provider === "jina"
             ? undefined
             : { apiKey: "test-api-key" };
-      expect(() => create(provider, config)).not.toThrow();
+      await expect(create(provider, config)).resolves.toBeDefined();
     }
   });
 
-  it("should export the abstract Provider base class", () => {
+  it("should export the abstract Provider base class", async () => {
     expect(Provider).toBeTypeOf("function");
-    expect(create("searxng")).toBeInstanceOf(Provider);
+    await expect(create("searxng")).resolves.toBeInstanceOf(Provider);
   });
 
-  it("should export capability-aware provider constructors", () => {
-    expect(createSearchProvider("searxng").name).toBe("searxng");
-    expect(createReadProvider("jina").name).toBe("jina");
-    expect(createImageSearchProvider("serpapi", { apiKey: "test-api-key" }).name).toBe("serpapi");
-    expect(() => createImageSearchProvider("brave", { apiKey: "test-api-key" })).toThrow(
+  it("should export capability-aware provider constructors", async () => {
+    expect((await createSearchProvider("searxng")).name).toBe("searxng");
+    expect((await createReadProvider("jina")).name).toBe("jina");
+    expect((await createImageSearchProvider("serpapi", { apiKey: "test-api-key" })).name).toBe(
+      "serpapi",
+    );
+    await expect(createImageSearchProvider("brave", { apiKey: "test-api-key" })).rejects.toThrow(
       ImageSearchNotSupportedError,
     );
-    expect(() => createReadProvider("searxng")).toThrow(ReadNotSupportedError);
+    await expect(createReadProvider("searxng")).rejects.toThrow(ReadNotSupportedError);
     expect(searchProviderDetailed).toBeTypeOf("function");
     for (const provider of builtinProviders) {
       expect(getSearchFilterCapabilities(provider)).toBeDefined();

@@ -2,22 +2,16 @@ import type {
   ImageSearchRequestOptions,
   ImageSearchResult,
   ProviderConfig,
-  SearchFilterCapabilities,
   SearchRequestOptions,
   SearchResult,
 } from "../core/types.ts";
-import {
-  Provider,
-  type ProviderCapabilityDetails,
-  type ProviderSearchPage,
-} from "../core/provider.ts";
+import { Provider, type ProviderSearchPage } from "../core/provider.ts";
 import {
   AuthError,
   InvalidSearchContinuationError,
   WebError,
   normalizeError,
 } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 interface SerpApiResult {
   readonly position: number;
@@ -65,22 +59,9 @@ interface SerpApiImageSearchResponse {
   readonly error?: string;
 }
 
-class SerpApiProvider extends Provider {
+export class SerpApiProvider extends Provider {
   static readonly providerName = "serpapi";
   static readonly defaultBaseURL = "https://serpapi.com";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: [],
-      resultLimit: { default: 10 },
-      resultFields: ["publishedDate", "image", "favicon", "metadata"],
-    },
-    searchImage: {
-      resultLimit: { default: 10 },
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: [],
-  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 
@@ -254,5 +235,3 @@ function mapResult(result: SerpApiResult): SearchResult {
     },
   };
 }
-
-register(SerpApiProvider);

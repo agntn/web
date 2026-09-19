@@ -56,8 +56,6 @@ import {
   MAX_SEARCH_CONTINUATION_LENGTH,
 } from "../../src/core/search-continuation.ts";
 
-import "../../src/providers/index.ts";
-
 const exaResponse = {
   requestId: "test-req",
   results: [

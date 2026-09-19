@@ -4,6 +4,7 @@ import {
   getProviderApiKeyEnvVar,
   getProviderCapabilities,
   getSearchFilterCapabilities,
+  hasAvailabilityProbe,
   isProviderConfigured,
   providers,
   searchProviders,
@@ -154,7 +155,8 @@ function providerStatus(name: string, configured: boolean): ProviderStatus {
 }
 
 /**
- * Runs the provider's reachability probe when it has one.
+ * Runs the provider's reachability probe when its registry entry declares one, so a listing
+ * loads no module for the providers that have none.
  * @param name - Registered provider name.
  * @param signal - Effective operation signal.
  * @returns {Promise<boolean | undefined>} Probe verdict, undefined without a probe.
@@ -163,8 +165,9 @@ export async function probeConfiguredProvider(
   name: string,
   signal?: Readonly<AbortSignal>,
 ): Promise<boolean | undefined> {
+  if (!hasAvailabilityProbe(name)) return undefined;
   try {
-    const provider = create(name);
+    const provider = await create(name);
     if (!isAvailabilityProvider(provider)) return undefined;
     return await provider.isAvailable(signal);
   } catch {

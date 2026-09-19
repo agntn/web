@@ -105,7 +105,8 @@ describe("native Codex login discovery", () => {
     }
     const original = readFileSync(path);
     expect(isProviderConfigured("openai-codex")).toBe(true);
-    expect(await createSearchProvider("openai-codex").search("query")).toHaveLength(2);
+    const active = await createSearchProvider("openai-codex");
+    expect(await active.search("query")).toHaveLength(2);
     expect(new Request(...fetchMock.mock.calls[0]).headers.get("chatgpt-account-id")).toBe(
       "active",
     );
@@ -119,7 +120,7 @@ describe("native Codex login discovery", () => {
     writeAuth(join(home, ".pi/agent/auth.json"), {
       "openai-codex": { type: "oauth", access: token("pi") },
     });
-    const named = createSearchProvider("openai-codex", { codex: { authSource: "pi" } });
+    const named = await createSearchProvider("openai-codex", { codex: { authSource: "pi" } });
     await named.search("query");
     expect(new Request(...fetchMock.mock.calls[0]).headers.get("chatgpt-account-id")).toBe("pi");
     vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", token("environment"));
@@ -127,9 +128,10 @@ describe("native Codex login discovery", () => {
     expect(new Request(...fetchMock.mock.calls[1]).headers.get("chatgpt-account-id")).toBe(
       "environment",
     );
-    await createSearchProvider("openai-codex", {
+    const explicit = await createSearchProvider("openai-codex", {
       codex: { credentials: { accessToken: token("explicit") } },
-    }).search("query");
+    });
+    await explicit.search("query");
     expect(new Request(...fetchMock.mock.calls[2]).headers.get("chatgpt-account-id")).toBe(
       "explicit",
     );
@@ -159,14 +161,14 @@ describe("native Codex login discovery", () => {
     expect(isProviderConfigured("openai-codex")).toBe(true);
   });
 
-  it("does not use another login after explicit environment credentials are incomplete", () => {
+  it("does not use another login after explicit environment credentials are incomplete", async () => {
     writeAuth(join(home, ".codex/auth.json"), { tokens: { access_token: token() } });
     vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", "partial-override");
     expect(isProviderConfigured("openai-codex")).toBe(false);
-    expect(() => createSearchProvider("openai-codex")).toThrow("No usable Codex login");
+    await expect(createSearchProvider("openai-codex")).rejects.toThrow("No usable Codex login");
   });
 
-  it("skips expired or malformed stores and supports disabling automatic discovery", () => {
+  it("skips expired or malformed stores and supports disabling automatic discovery", async () => {
     writeAuth(join(home, ".codex/auth.json"), { tokens: { access_token: token("expired", true) } });
     writeAuth(join(home, ".pi/agent/auth.json"), "not a credential object");
     expect(isProviderConfigured("openai-codex")).toBe(false);
@@ -175,13 +177,13 @@ describe("native Codex login discovery", () => {
     });
     vi.stubEnv("OPENAI_CODEX_AUTH_SOURCE", "none");
     expect(isProviderConfigured("openai-codex")).toBe(false);
-    expect(() => createSearchProvider("openai-codex")).toThrow("No usable Codex login");
+    await expect(createSearchProvider("openai-codex")).rejects.toThrow("No usable Codex login");
   });
 
   it("rereads rotated credentials but pins the original account", async () => {
     const path = join(home, ".codex/auth.json");
     writeAuth(path, { tokens: { access_token: token("selected") } });
-    const provider = createSearchProvider("openai-codex");
+    const provider = await createSearchProvider("openai-codex");
     writeAuth(path, { tokens: { access_token: token("different-account") } });
     await expect(provider.search("query")).rejects.toThrow("credential provider failed");
     expect(fetchMock).not.toHaveBeenCalled();

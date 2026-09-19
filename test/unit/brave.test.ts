@@ -19,9 +19,6 @@ import { createSearchProvider, has } from "../../src/core/registry.ts";
 import { AuthError } from "../../src/core/errors.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
-// Triggers self-registration of brave provider
-import "../../src/providers/index.ts";
-
 const braveResponse = {
   web: {
     results: [
@@ -53,25 +50,25 @@ describe("brave provider", () => {
   });
 
   describe("create", () => {
-    it("creates provider with apiKey", () => {
-      expect(() => createSearchProvider("brave", { apiKey: "test-key" })).not.toThrow();
+    it("creates provider with apiKey", async () => {
+      await expect(createSearchProvider("brave", { apiKey: "test-key" })).resolves.toBeDefined();
     });
 
-    it("throws AuthError without apiKey and without env var", () => {
-      expect(() => createSearchProvider("brave", {})).toThrow(AuthError);
+    it("throws AuthError without apiKey and without env var", async () => {
+      await expect(createSearchProvider("brave", {})).rejects.toThrow(AuthError);
     });
   });
 
   describe("name", () => {
-    it("returns brave", () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+    it("returns brave", async () => {
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       expect(provider.name).toBe("brave");
     });
   });
 
   describe("search()", () => {
     it("calls getJSON with correct url and headers", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       await provider.search("test query");
 
       expect(mockGetJSON).toHaveBeenCalledOnce();
@@ -83,7 +80,7 @@ describe("brave provider", () => {
     });
 
     it("normalizes a trailing slash in custom baseURL", async () => {
-      const provider = createSearchProvider("brave", {
+      const provider = await createSearchProvider("brave", {
         apiKey: "test-key",
         baseURL: "https://custom.example.com/",
       });
@@ -94,7 +91,7 @@ describe("brave provider", () => {
     });
 
     it("maps result fields correctly", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -110,14 +107,14 @@ describe("brave provider", () => {
       mockGetJSON.mockResolvedValueOnce({
         web: { results: [{ ...braveResponse.web.results[0], page_age: null }] },
       });
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       const results = await provider.search("test query");
 
       expect(results[0]).not.toHaveProperty("publishedDate");
     });
 
     it("sends the date window as freshness, cut to the day", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       await provider.search("test query", {
         startPublishedDate: "2026-06-01T00:00:00Z",
         endPublishedDate: "2026-09-01",
@@ -128,7 +125,7 @@ describe("brave provider", () => {
     });
 
     it("takes the day of each bound in UTC, so offsets cannot flip the window", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       await provider.search("test query", {
         startPublishedDate: "2026-06-02T01:00:00+05:00",
         endPublishedDate: "2026-06-01T23:00:00Z",
@@ -141,7 +138,7 @@ describe("brave provider", () => {
     it("closes a lone start bound with today's UTC date", async () => {
       vi.setSystemTime(new Date("2026-09-18T23:30:00Z"));
       try {
-        const provider = createSearchProvider("brave", { apiKey: "test-key" });
+        const provider = await createSearchProvider("brave", { apiKey: "test-key" });
         await provider.search("test query", { startPublishedDate: "2026-06-01" });
 
         const [url] = mockGetJSON.mock.calls[0];
@@ -152,7 +149,7 @@ describe("brave provider", () => {
     });
 
     it("closes a lone end bound at the epoch", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       await provider.search("test query", { endPublishedDate: "2026-06-01T12:00:00Z" });
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -160,7 +157,7 @@ describe("brave provider", () => {
     });
 
     it("sends no freshness without a date bound", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       await provider.search("test query", { includeDomains: ["example.com"] });
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -168,7 +165,7 @@ describe("brave provider", () => {
     });
 
     it("maps maxResults to count query param", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       await provider.search("test query", { maxResults: 5 });
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -176,7 +173,7 @@ describe("brave provider", () => {
     });
 
     it("requests extra snippets so Brave can populate text", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       await provider.search("test query");
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -184,7 +181,7 @@ describe("brave provider", () => {
     });
 
     it("asks Brave to leave query term highlighting out of descriptions", async () => {
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       await provider.search("test query");
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -206,7 +203,7 @@ describe("brave provider", () => {
         },
       });
 
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results[0].title).toBe("AT&T vs T-Mobile: Which is better?");
@@ -223,7 +220,7 @@ describe("brave provider", () => {
         },
       });
 
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results[0].snippet).toBe("");
@@ -234,7 +231,7 @@ describe("brave provider", () => {
         web: undefined,
       });
 
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results).toEqual([]);
@@ -257,7 +254,7 @@ describe("brave provider", () => {
         },
       });
 
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results[0].text).toBe("Snippet 1\nSnippet 2\nSnippet 3");
@@ -277,7 +274,7 @@ describe("brave provider", () => {
         },
       });
 
-      const provider = createSearchProvider("brave", { apiKey: "test-key" });
+      const provider = await createSearchProvider("brave", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results[0].text).toBeUndefined();

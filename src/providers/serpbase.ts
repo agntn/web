@@ -1,14 +1,6 @@
-import type {
-  SearchFilterCapabilities,
-  SearchResult,
-  SearchRequestOptions,
-  ProviderConfig,
-} from "../core/types.ts";
-import {
-  Provider,
-  type ProviderCapabilityDetails,
-  type ProviderSearchPage,
-} from "../core/provider.ts";
+import type { SearchResult, SearchRequestOptions, ProviderConfig } from "../core/types.ts";
+import { Provider, type ProviderSearchPage } from "../core/provider.ts";
+import { SERPBASE_MAX_RESULTS, SERPBASE_SEARCH_CATEGORIES } from "../core/providers.ts";
 import {
   WebError,
   AuthError,
@@ -17,7 +9,6 @@ import {
   RateLimitError,
   normalizeError,
 } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 interface SerpBaseSearchRequest {
   readonly q: string;
@@ -62,23 +53,9 @@ interface SerpBaseSearchResponse {
   readonly videos?: readonly SerpBaseResult[];
 }
 
-const SERPBASE_MAX_RESULTS = 20;
-const SERPBASE_SEARCH_CATEGORIES = ["images", "image", "news", "videos", "video"] as const;
-
-class SerpBaseProvider extends Provider {
+export class SerpBaseProvider extends Provider {
   static readonly providerName = "serpbase";
   static readonly defaultBaseURL = "https://api.serpbase.dev";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: [],
-      resultLimit: { default: 10, maximum: SERPBASE_MAX_RESULTS },
-      resultFields: ["publishedDate", "image", "favicon", "metadata"],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: ["category"],
-    categories: SERPBASE_SEARCH_CATEGORIES,
-  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 
@@ -232,5 +209,3 @@ function mapResult(result: SerpBaseResult, response: SerpBaseSearchResponse): Se
 function firstDefined<T>(...values: readonly (T | undefined)[]): T | undefined {
   return values.find((value) => value !== undefined);
 }
-
-register(SerpBaseProvider);

@@ -31,7 +31,7 @@
     "src/tui.ts"
   ],
   "type": "module",
-  "sideEffects": true,
+  "sideEffects": false,
   "main": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "exports": {
@@ -46,6 +46,14 @@
     "./mcp": {
       "types": "./dist/mcp.d.mts",
       "import": "./dist/mcp.mjs"
+    },
+    "./providers": {
+      "types": "./dist/providers/index.d.mts",
+      "import": "./dist/providers/index.mjs"
+    },
+    "./providers/*": {
+      "types": "./dist/providers/*.d.mts",
+      "import": "./dist/providers/*.mjs"
     }
   },
   "publishConfig": {

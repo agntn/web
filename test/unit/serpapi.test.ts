@@ -20,9 +20,6 @@ import { AuthError, InvalidSearchContinuationError } from "../../src/core/errors
 import { isPaginatedSearchProvider } from "../../src/core/provider.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
-// Triggers self-registration of serpapi provider
-import "../../src/providers/index.ts";
-
 const imageSearchResponse = {
   search_metadata: {
     id: "lens-id",
@@ -87,18 +84,18 @@ describe("serpapi provider", () => {
   });
 
   describe("create", () => {
-    it("creates provider with apiKey", () => {
-      expect(() => createSearchProvider("serpapi", { apiKey: "test-key" })).not.toThrow();
+    it("creates provider with apiKey", async () => {
+      await expect(createSearchProvider("serpapi", { apiKey: "test-key" })).resolves.toBeDefined();
     });
 
-    it("throws AuthError without apiKey and without env var", () => {
-      expect(() => createSearchProvider("serpapi", {})).toThrow(AuthError);
+    it("throws AuthError without apiKey and without env var", async () => {
+      await expect(createSearchProvider("serpapi", {})).rejects.toThrow(AuthError);
     });
   });
 
   describe("name", () => {
-    it("returns serpapi", () => {
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+    it("returns serpapi", async () => {
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       expect(provider.name).toBe("serpapi");
     });
   });
@@ -106,7 +103,7 @@ describe("serpapi provider", () => {
   describe("searchByImage()", () => {
     it("uses the Google Lens visual matches endpoint", async () => {
       mockGetJSON.mockResolvedValueOnce(imageSearchResponse);
-      const provider = createImageSearchProvider("serpapi", {
+      const provider = await createImageSearchProvider("serpapi", {
         apiKey: "test-key",
         baseURL: "https://proxy.example.com/serpapi",
       });
@@ -128,7 +125,7 @@ describe("serpapi provider", () => {
         search_metadata: { id: "lens-id", status: "Error" },
         error: "Google Lens could not fetch the image",
       });
-      const provider = createImageSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createImageSearchProvider("serpapi", { apiKey: "test-key" });
 
       await expect(provider.searchByImage("https://images.example.com/input.jpg")).rejects.toThrow(
         "Google Lens could not fetch the image",
@@ -141,7 +138,7 @@ describe("serpapi provider", () => {
         search_information: { images_results_state: "Fully empty" },
         error: "Google Lens hasn't returned any results for this query.",
       });
-      const provider = createImageSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createImageSearchProvider("serpapi", { apiKey: "test-key" });
 
       await expect(provider.searchByImage("https://images.example.com/input.jpg")).resolves.toEqual(
         [],
@@ -150,7 +147,7 @@ describe("serpapi provider", () => {
 
     it("maps image matches and applies maxResults locally", async () => {
       mockGetJSON.mockResolvedValueOnce(imageSearchResponse);
-      const provider = createImageSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createImageSearchProvider("serpapi", { apiKey: "test-key" });
 
       const results = await provider.searchByImage("https://images.example.com/input.jpg", {
         maxResults: 1,
@@ -177,7 +174,7 @@ describe("serpapi provider", () => {
 
   describe("search()", () => {
     it("calls getJSON with URL containing engine, q, api_key, and num parameters", async () => {
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       await provider.search("test query");
 
       expect(mockGetJSON).toHaveBeenCalledOnce();
@@ -198,7 +195,7 @@ describe("serpapi provider", () => {
           },
         })
         .mockResolvedValueOnce(serpApiResponse);
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
 
       const first = await provider.searchPage("test query");
@@ -210,7 +207,7 @@ describe("serpapi provider", () => {
     });
 
     it("rejects unsafe numeric offsets before the request", async () => {
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
 
       await expect(
@@ -220,7 +217,7 @@ describe("serpapi provider", () => {
     });
 
     it("maps result fields correctly", async () => {
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -234,7 +231,7 @@ describe("serpapi provider", () => {
     });
 
     it("maps metadata fields correctly", async () => {
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -245,7 +242,7 @@ describe("serpapi provider", () => {
     });
 
     it("maps maxResults option to num query parameter", async () => {
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       await provider.search("test query", { maxResults: 5 });
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -265,7 +262,7 @@ describe("serpapi provider", () => {
           next: "https://serpapi.com/search?engine=google&q=test&start=10",
         },
       });
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
 
       const first = await provider.searchPage("test query", { maxResults: 2 });
@@ -291,7 +288,7 @@ describe("serpapi provider", () => {
           { ...organic, position: 3, link: "https://example.com/third" },
         ],
       });
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
 
       const cases: readonly (readonly [number, number, string | undefined])[] = [
@@ -309,7 +306,7 @@ describe("serpapi provider", () => {
     });
 
     it("rejects slice tokens that point nowhere", async () => {
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
 
       for (const token of ["0", "3:0", "0:0", "1:2:3"]) {
@@ -329,7 +326,7 @@ describe("serpapi provider", () => {
         organic_results: undefined,
       });
 
-      const provider = createSearchProvider("serpapi", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results).toEqual([]);

@@ -4,7 +4,6 @@ import {
   resolveDefaultProvider,
   listProviders,
 } from "../../src/core/resolve.ts";
-import "../../src/providers/index.ts";
 
 const envKeys = [
   "EXA_API_KEY",
