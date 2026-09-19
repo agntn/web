@@ -145,7 +145,7 @@ const activeProvider = computed(() => current.value.provider);
       link="All providers"
       :checks="[
         'Auth, endpoints and response shapes stay inside the adapter where they belong',
-        'searchProviders(), searchImageProviders() and readProviders() come from the classes, not from a list someone forgets to update',
+        'Importing the package loads no adapter: create() imports the one you name on its first call and nothing else',
         'A custom provider is one class and one register() call',
       ]"
       reverse

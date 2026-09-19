@@ -62,6 +62,7 @@ test/unit/                # Public behavior and provider contract tests
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible
 - Built in capability lists are the source for static descriptions; `searchProviders()`, `searchImageProviders()`, and `readProviders()` are the live execution contract
+- Providers load on the first `create()` for their name: `src/providers/index.ts` is a manifest of metadata plus a literal `import()` per provider, the registry seeds its table from it on first use, and every listing or capability lookup answers from the manifest without loading a module. `package.json` says `sideEffects: false`, and `test/bundle.test.ts` proves a consumer bundle keeps the registry and drops the adapters it never asks for
 - Command modules keep the registry, the providers and the MCP server behind `import()` inside `run()`; citty resolves every subcommand to print `web --help`, so a static import there loads on the usage path
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
@@ -69,13 +70,13 @@ test/unit/                # Public behavior and provider contract tests
 
 Seven files must be updated. Missing any causes a bug (test failure, missing from CLI/Pi, or silent no-op). Checklist:
 
-1. `src/providers/<name>.ts` — implement provider, call `register()` at module level; support search, read, or both
-2. `src/providers/index.ts` — add `import './<name>.ts'`
-3. `src/core/providers.ts` — add to `builtinProviders` array
-4. `src/core/resolve.ts` — add env var to `envKeys` map (unless self-hosted like searxng)
-5. `src/core/read.ts` — add to `readProviderNames` if provider supports read/scrape
+1. `src/providers/<name>.ts` - export the provider class; support search, read, or both. Nothing runs at module scope: no `register()`, no static capability metadata
+2. `src/providers/index.ts` - add a manifest entry with the capabilities the class implements (`search`, `searchImage`, `read`, `pagination`, `availability`) and `load: () => import("./<name>.ts").then((m) => m.<Name>Provider)`; a cap or category list the adapter also clamps to lives in `src/core/providers.ts` so the two never drift
+3. `src/core/providers.ts` - add to `builtinProviders` and `providerApiKeyEnvVars` (null when self-hosted like searxng), and to `providerDetectionOrder` when automatic selection may pick it
+4. `src/core/read.ts` - add to `readProviderNames` if provider supports read/scrape; `src/core/image.ts` - `imageSearchProviderNames` for reverse image search
+5. `build.config.ts` - nothing: every file in `src/providers/` is a bundle input, so `dist/providers/<name>.mjs` and the `./providers/*` export exist as soon as the file does
 6. `packages/pi/extensions/web.ts` and `packages/omp/extensions/web.ts` - update provider descriptions and tool schemas; execution validates against live registries
-7. `test/unit/<name>.ts` + `test/index.test.ts` — add provider tests + update hardcoded expected list
+7. `test/unit/<name>.ts` + `test/index.test.ts` - add provider tests + update hardcoded expected list; `test/unit/providers-manifest.test.ts` fails when the entry and the class disagree, and `test/unit/lazy-loading.test.ts` mocks every provider module, so add the new one there
 
 After: `pnpm typecheck && pnpm test:run && pnpm build`
 

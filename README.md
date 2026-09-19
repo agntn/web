@@ -109,7 +109,7 @@ web providers
 ```typescript
 import { create, readUrl, searchAll } from "@agntn/web";
 
-const exa = create("exa"); // reads EXA_API_KEY
+const exa = await create("exa"); // reads EXA_API_KEY, loads the Exa adapter and nothing else
 const results = await exa.search("typescript runtime benchmarks", { maxResults: 5 });
 
 for (const result of results) {
@@ -123,7 +123,7 @@ const page = await readUrl("https://example.com", { format: "markdown", maxChars
 console.log(page.title, page.truncated, page.continuation);
 ```
 
-That's most of it, really. `create("brave")` instead of `create("exa")` and nothing else in your code changes. `searchWithFallback()` picks the provider the CLI would and tells you in `attempts` who dropped out along the way. `searchProviderDetailed()` is the same search with `pagination` attached, pass its `continuation` back and you get page two. Errors are one family: a 401 is `AuthError`, spent credits are `PaymentError` whatever status they hide behind, a 429 is `RateLimitError` with `retryAfter`, and no response at all is `HTTPError` with status 0 and the real cause underneath. The details and the gotchas: [Searching](https://web.agntn.dev/guide/search), [Fan-out](https://web.agntn.dev/guide/fanout), [Reading](https://web.agntn.dev/guide/read), [Reverse image search](https://web.agntn.dev/guide/image).
+That's most of it, really. `create("brave")` instead of `create("exa")` and nothing else in your code changes. Importing the package loads no adapter, `create()` imports the one you name and nothing else runs until then. `searchWithFallback()` picks the provider the CLI would and tells you in `attempts` who dropped out along the way. `searchProviderDetailed()` is the same search with `pagination` attached, pass its `continuation` back and you get page two. Errors are one family: a 401 is `AuthError`, spent credits are `PaymentError` whatever status they hide behind, a 429 is `RateLimitError` with `retryAfter`, and no response at all is `HTTPError` with status 0 and the real cause underneath. The details and the gotchas: [Searching](https://web.agntn.dev/guide/search), [Fan-out](https://web.agntn.dev/guide/fanout), [Reading](https://web.agntn.dev/guide/read), [Reverse image search](https://web.agntn.dev/guide/image).
 
 ## 🗺️ Providers
 
@@ -168,7 +168,7 @@ No browser. Nothing here renders JavaScript, crawls a site or takes a screenshot
 
 ## 🧩 Adding a provider
 
-Missing your favourite engine? Extend `Provider`, implement `search`, `read` or `searchByImage`, call `register()`, and the CLI, the tools and `all` see it without a name tuple to edit. A built in one also needs its line in `builtinProviders`, and `test/index.test.ts` will tell you if you forgot. Step by step, with the contract spelled out: [Custom providers](https://web.agntn.dev/guide/custom).
+Missing your favourite engine? Extend `Provider`, implement `search`, `read` or `searchByImage`, call `register()`, and the CLI, the tools and `all` see it without a name tuple to edit. A built in one gets an entry in the manifest at `src/providers/index.ts` instead, with its capabilities and a lazy `import()` of its file, plus its line in `builtinProviders`. `test/index.test.ts` and `test/unit/providers-manifest.test.ts` will tell you if you forgot. Step by step, with the contract spelled out: [Custom providers](https://web.agntn.dev/guide/custom).
 
 ## 🛠️ Development
 
