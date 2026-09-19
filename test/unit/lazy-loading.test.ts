@@ -117,6 +117,7 @@ describe("lazy providers", () => {
         super(config, ShadowMojeek);
       }
     }
+    const previousKey = process.env.MOJEEK_API_KEY;
     process.env.MOJEEK_API_KEY = "from-env";
     const pending = create("mojeek");
     const unregister = register(ShadowMojeek);
@@ -127,7 +128,8 @@ describe("lazy providers", () => {
       expect(provider.config.apiKey).toBe("from-env");
     } finally {
       unregister();
-      delete process.env.MOJEEK_API_KEY;
+      if (previousKey === undefined) delete process.env.MOJEEK_API_KEY;
+      else process.env.MOJEEK_API_KEY = previousKey;
     }
   });
 

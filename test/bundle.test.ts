@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "obuild";
 import { describe, expect, it, onTestFinished } from "vitest";
@@ -62,9 +62,9 @@ describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", ()
       typeof import("../src/index.ts"),
       "version"
     >;
-    const files = readdirSync(outDir, { recursive: true, encoding: "utf8" }).filter((file) =>
-      file.endsWith(".mjs"),
-    );
+    const files = readdirSync(outDir, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".mjs"))
+      .map((file) => file.split(sep).join("/"));
 
     expect(bundle.version).toMatch(/^\d+\.\d+\.\d+/u);
     expect(files).toEqual([versionEntry]);
