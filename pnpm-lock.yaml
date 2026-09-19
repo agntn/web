@@ -24,8 +24,8 @@ importers:
         specifier: 8.2.2
         version: 8.2.2
       typebox:
-        specifier: 1.1.38
-        version: 1.1.38
+        specifier: 1.1.39
+        version: 1.1.39
       zod:
         specifier: 4.3.6
         version: 4.3.6
@@ -3210,6 +3210,9 @@ packages:
 
   typebox@1.1.38:
     resolution: {integrity: sha512-pZ0aQPmMmXoUvSbeuWf/Hzsc+avNw/Zd6VeE8CFgkVGWyuHPJvqeJJDeJqLve+K70LvjYIoleGcoJHPT17cWoA==}
+
+  typebox@1.1.39:
+    resolution: {integrity: sha512-vj0afVtOfLQvv0GR0VxVagYxsXN64btL7Z9XoaG0ZggH3mruMMkOO6hXdgMsjCY3shZgEvooAWVeznQVs5c43w==}
 
   typed-query-selector@2.12.2:
     resolution: {integrity: sha512-EOPFbyIub4ngnEdqi2yOcNeDLaX/0jcE1JoAXQDDMIthap7FoN795lc/SHfIq2d416VufXpM8z/lD+WRm2gfOQ==}
@@ -6410,6 +6413,8 @@ snapshots:
       mime-types: 3.0.2
 
   typebox@1.1.38: {}
+
+  typebox@1.1.39: {}
 
   typed-query-selector@2.12.2: {}
 
