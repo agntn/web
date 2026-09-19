@@ -111,6 +111,9 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
         description: "Request full page text when supported. Defaults to false.",
       }),
     ),
+    favicon: Type.Optional(
+      Type.Boolean({ description: "Include favicon URLs on results. Defaults to false." }),
+    ),
     includeDomains: Type.Optional(
       Type.Array(Type.String(), { description: "Only return results from these domains." }),
     ),
@@ -238,6 +241,7 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
             highlights: params.highlights,
             summary: params.summary,
             fullText: params.fullText,
+            favicon: params.favicon === true,
             includeDomains: params.includeDomains,
             excludeDomains: params.excludeDomains,
             sources: params.sources,

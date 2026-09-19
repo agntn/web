@@ -345,6 +345,28 @@ describe("searchTool", () => {
     expect(body.contents).toEqual({ text: true, highlights: false, summary: true });
   });
 
+  it("keeps favicons out of a search unless asked", async () => {
+    process.env.EXA_API_KEY = "test-exa-key";
+    mockPostJSON.mockResolvedValue(exaResponse);
+
+    const lean = await searchTool.execute!(
+      { query: "test query", provider: "exa" },
+      { toolCallId: "call-favicon-default", messages: [] },
+    );
+    const requested = await searchTool.execute!(
+      { query: "test query", provider: "exa", favicon: true },
+      { toolCallId: "call-favicon-requested", messages: [] },
+    );
+
+    expect(lean).toMatchObject({
+      results: [{ url: "https://example.com", image: "https://example.com/img.png" }],
+    });
+    expect(lean).not.toHaveProperty("results.0.favicon");
+    expect(requested).toMatchObject({
+      results: [{ favicon: "https://example.com/favicon.ico" }],
+    });
+  });
+
   it("continues one provider search with the returned opaque token", async () => {
     process.env.BRAVE_API_KEY = "test-brave-key";
     mockGetJSON

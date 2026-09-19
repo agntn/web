@@ -483,6 +483,57 @@ describe("Pi extension", () => {
     }
   });
 
+  it("keeps favicons out of the model text unless asked", async () => {
+    const providerName = `iconfixture${Math.random().toString(36).slice(2)}`;
+    const favicon = "https://example.com/favicon.ico";
+    class FaviconProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://favicon.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, FaviconProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com", title: "Plain", snippet: "Snippet", favicon }];
+      }
+    }
+    customProviderCleanups.push(register(FaviconProvider));
+    const searchTool = captureTools().get("web_search");
+    if (!searchTool) throw new Error("Missing web_search tool");
+
+    const lean: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
+      "lean-call",
+      { query: "plain query", provider: providerName },
+      undefined,
+      undefined,
+      undefined,
+    ]);
+    const requested: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
+      "favicon-call",
+      { query: "plain query", provider: providerName, favicon: true },
+      undefined,
+      undefined,
+      undefined,
+    ]);
+
+    await expect(lean).resolves.toHaveProperty(
+      "content.0.text",
+      expect.stringContaining("1. Plain\n   https://example.com\n   Snippet: Snippet"),
+    );
+    await expect(lean).resolves.toHaveProperty(
+      "content.0.text",
+      expect.not.stringContaining("Favicon"),
+    );
+    await expect(lean).resolves.toHaveProperty("details.options", { favicon: false });
+    await expect(lean).resolves.not.toHaveProperty("details.results.0.favicon");
+    await expect(requested).resolves.toHaveProperty(
+      "content.0.text",
+      expect.stringContaining(`Favicon: ${favicon}`),
+    );
+    await expect(requested).resolves.toHaveProperty("details.results.0.favicon", favicon);
+  });
+
   it("keeps rich search fields visible to the model without bloating the command selector", async () => {
     const previousKey = process.env.EXA_API_KEY;
     process.env.EXA_API_KEY = "test-key";
@@ -538,7 +589,7 @@ describe("Pi extension", () => {
 
       const execution: unknown = Reflect.apply(searchTool.execute.bind(searchTool), undefined, [
         "test-call",
-        { query: "rich query", provider: providerName },
+        { query: "rich query", provider: providerName, favicon: true },
         undefined,
         undefined,
         undefined,

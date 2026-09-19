@@ -186,6 +186,9 @@ const searchParameters = Type.Object({
       description: "Request full page text when supported. Defaults to false.",
     }),
   ),
+  favicon: Type.Optional(
+    Type.Boolean({ description: "Include favicon URLs on results. Defaults to false." }),
+  ),
   includeDomains: Type.Optional(
     Type.Array(Type.String(), {
       description:
@@ -359,6 +362,7 @@ export default function webExtension(pi: ExtensionAPI) {
             highlights: params.highlights,
             summary: params.summary,
             fullText: params.fullText,
+            favicon: params.favicon === true,
             includeDomains: params.includeDomains,
             excludeDomains: params.excludeDomains,
             sources: params.sources,
@@ -830,6 +834,7 @@ type SearchOptionValues = {
   readonly highlights?: boolean;
   readonly summary?: boolean;
   readonly fullText?: boolean;
+  readonly favicon?: boolean;
   readonly includeDomains?: readonly string[];
   readonly excludeDomains?: readonly string[];
   readonly sources?: readonly string[];
@@ -843,15 +848,22 @@ function stripUndefined(input: SearchOptionValues): SearchPageOptions {
   return {
     ...(input.maxResults === undefined ? {} : { maxResults: input.maxResults }),
     ...(input.continuation === undefined ? {} : { continuation: input.continuation }),
-    ...(input.highlights === undefined ? {} : { highlights: input.highlights }),
-    ...(input.summary === undefined ? {} : { summary: input.summary }),
-    ...(input.fullText === undefined ? {} : { fullText: input.fullText }),
+    ...searchContentOptions(input),
     ...searchArrayOptions(input),
     ...(input.startPublishedDate === undefined
       ? {}
       : { startPublishedDate: input.startPublishedDate }),
     ...(input.endPublishedDate === undefined ? {} : { endPublishedDate: input.endPublishedDate }),
     ...(input.category === undefined ? {} : { category: input.category }),
+  };
+}
+
+function searchContentOptions(input: SearchOptionValues): SearchPageOptions {
+  return {
+    ...(input.highlights === undefined ? {} : { highlights: input.highlights }),
+    ...(input.summary === undefined ? {} : { summary: input.summary }),
+    ...(input.fullText === undefined ? {} : { fullText: input.fullText }),
+    ...(input.favicon === undefined ? {} : { favicon: input.favicon }),
   };
 }
 

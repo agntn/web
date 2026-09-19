@@ -150,6 +150,7 @@ describe("web MCP server", () => {
       type: "string",
       maxLength: 4096,
     });
+    expect(searchInput.properties.favicon).toMatchObject({ type: "boolean" });
     const readInput = response.tools[2]?.inputSchema as {
       readonly properties: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
     };
@@ -610,6 +611,40 @@ describe("web MCP server", () => {
         attempts: ["jina"],
         failures: [],
       },
+    });
+  });
+
+  it("keeps favicons out of a search unless asked", async () => {
+    vi.stubEnv("BRAVE_API_KEY", "test-brave");
+    mockGetJSON.mockResolvedValue({
+      web: {
+        results: [
+          {
+            title: "Brave Result",
+            url: "https://brave.example.com",
+            description: "Snippet",
+            extra_snippets: [],
+            meta_url: { favicon: "https://brave.example.com/favicon.ico" },
+          },
+        ],
+      },
+    });
+    const client = await connectTestClient();
+
+    const lean = await client.callTool({ name: "web_search", arguments: { query: "test" } });
+    const requested = await client.callTool({
+      name: "web_search",
+      arguments: { query: "test", favicon: true },
+    });
+
+    expect(lean.isError).toBeUndefined();
+    expect(lean.structuredContent).toMatchObject({
+      result: { provider: "brave", results: [{ url: "https://brave.example.com" }] },
+    });
+    expect(lean.structuredContent).not.toHaveProperty("result.results.0.favicon");
+    expect(requested.isError).toBeUndefined();
+    expect(requested.structuredContent).toMatchObject({
+      result: { results: [{ favicon: "https://brave.example.com/favicon.ico" }] },
     });
   });
 

@@ -204,7 +204,7 @@ export async function searchProviderDetailed(
  * @returns {Promise<PreparedSearchWithFallback>} Search function using the resolved provider order.
  */
 export async function prepareSearchWithFallback(
-  options?: Readonly<SearchRequestOptions>,
+  options?: Readonly<Omit<SearchPageOptions, "continuation">>,
 ): Promise<PreparedSearchWithFallback> {
   validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
   const effectiveOptions = withExecutionBudget(options);
@@ -280,7 +280,7 @@ async function searchProvider<TProvider extends string>(
   query: string,
   options?: Readonly<SearchPageOptions>,
 ): Promise<SearchProviderResult & { readonly provider: TProvider }> {
-  const { continuation, ...searchOptions } = options ?? {};
+  const { continuation, favicon, ...searchOptions } = options ?? {};
   const effectiveSearchOptions = withExecutionBudget(searchOptions);
   throwIfAborted(effectiveSearchOptions.signal);
   const requestOptions = providerRequestOptions(effectiveSearchOptions);
@@ -314,10 +314,25 @@ async function searchProvider<TProvider extends string>(
   return {
     ...report,
     provider: providerName,
-    results: response.results,
+    results: dropsFavicons(favicon, response.results)
+      ? response.results.map(({ favicon: _favicon, ...rest }) => rest)
+      : response.results,
     pagination,
     ...(response.metadata === undefined ? {} : { metadata: { ...response.metadata } }),
   };
+}
+
+/**
+ * Whether the caller declined favicons and a result carries one, so a provider that maps none costs nothing.
+ * @param favicon - The caller's `favicon` option.
+ * @param results - Results as the provider mapped them.
+ * @returns {boolean} Whether the favicon URLs have to be stripped.
+ */
+function dropsFavicons(
+  favicon: boolean | undefined,
+  results: readonly ReadonlySearchResult[],
+): boolean {
+  return favicon === false && results.some((result) => result.favicon !== undefined);
 }
 
 type SearchResponseWithContinuation = SearchResponse & {
@@ -373,7 +388,7 @@ type ProviderSearchAttempt = readonly [provider: string, outcome: ProviderSearch
 function searchProviders(
   providerNames: readonly string[],
   query: string,
-  options: Readonly<SearchRequestOptions>,
+  options: Readonly<Omit<SearchPageOptions, "continuation">>,
   probeReachability: boolean,
 ): Promise<readonly ProviderSearchSettlement[]> {
   return settleWithConcurrency(
