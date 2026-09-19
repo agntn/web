@@ -1,6 +1,6 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
-import { listProviders, version } from "../index.ts";
+import { version } from "../version.ts";
 import { formatProviderCapabilities } from "../tui.ts";
 
 export default defineCommand({
@@ -16,7 +16,10 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    await import("../providers/index.ts");
+    const [{ listProviders }] = await Promise.all([
+      import("../core/resolve.ts"),
+      import("../providers/index.ts"),
+    ]);
     const status = listProviders();
 
     if (args.json) {

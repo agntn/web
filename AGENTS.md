@@ -62,6 +62,7 @@ test/unit/                # Public behavior and provider contract tests
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible
 - Built in capability lists are the source for static descriptions; `searchProviders()`, `searchImageProviders()`, and `readProviders()` are the live execution contract
+- Command modules keep the registry, the providers and the MCP server behind `import()` inside `run()`; citty resolves every subcommand to print `web --help`, so a static import there loads on the usage path
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
 ## ADDING A NEW PROVIDER
