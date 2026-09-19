@@ -298,7 +298,9 @@ async function readFromProvider(
   throwIfAborted(options.signal);
   let result: ReadResult;
   try {
-    result = await createReadProvider(providerName).read(url, providerRequestOptions(options));
+    const provider = await createReadProvider(providerName);
+    throwIfAborted(options.signal);
+    result = await provider.read(url, providerRequestOptions(options));
   } catch (error) {
     throwIfAborted(options.signal);
     throw error;

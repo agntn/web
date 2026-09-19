@@ -48,10 +48,9 @@ import { AuthError, HTTPError, InvalidProviderUrlError, WebError } from "../../s
 import { isPaginatedSearchProvider, isReadProvider } from "../../src/core/provider.ts";
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import type { ProviderConfig } from "../../src/core/types.ts";
-import "../../src/providers/index.ts";
 
-function createTinyfishProvider(config: Readonly<ProviderConfig> = {}) {
-  const provider = createSearchProvider("tinyfish", config);
+async function createTinyfishProvider(config: Readonly<ProviderConfig> = {}) {
+  const provider = await createSearchProvider("tinyfish", config);
   if (!isReadProvider(provider)) {
     throw new Error("TinyFish provider must support URL reading");
   }
@@ -120,28 +119,28 @@ describe("tinyfish provider", () => {
     delete process.env.TINYFISH_API_KEY;
   });
 
-  it("registers itself on import", () => {
+  it("is listed without loading the adapter", () => {
     expect(has("tinyfish")).toBe(true);
   });
 
-  it("requires an API key", () => {
-    expect(() => createTinyfishProvider()).toThrow(AuthError);
+  it("requires an API key", async () => {
+    await expect(createTinyfishProvider()).rejects.toThrow(AuthError);
   });
 
-  it("rejects non-HTTP fetch base URLs", () => {
-    expect(() =>
+  it("rejects non-HTTP fetch base URLs", async () => {
+    await expect(
       createTinyfishProvider({ apiKey: "tf-test-key", readBaseURL: "file:///etc/passwd" }),
-    ).toThrow(InvalidProviderUrlError);
+    ).rejects.toThrow(InvalidProviderUrlError);
   });
 
-  it("uses the Fetch API client timeout without retrying POST requests", () => {
-    createTinyfishProvider({ apiKey: "tf-test-key" });
+  it("uses the Fetch API client timeout without retrying POST requests", async () => {
+    await createTinyfishProvider({ apiKey: "tf-test-key" });
 
     expect(Client).toHaveBeenCalledWith({ maxRetries: 0, timeout: 150000 });
   });
 
   it("searches with TinyFish filters and API key auth", async () => {
-    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
 
     const results = await provider.search("web agents", {
       maxResults: 1,
@@ -175,7 +174,7 @@ describe("tinyfish provider", () => {
   });
 
   it("continues with TinyFish page state and stops at its documented maximum", async () => {
-    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
     if (!isPaginatedSearchProvider(provider)) throw new Error("TinyFish must paginate");
 
     const first = await provider.searchPage("web agents");
@@ -189,7 +188,7 @@ describe("tinyfish provider", () => {
   });
 
   it("preserves research metadata", async () => {
-    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
 
     const results = await provider.search("agent research", {
       category: "research_paper",
@@ -221,7 +220,7 @@ describe("tinyfish provider", () => {
   });
 
   it("fetches page content with normalized read options", async () => {
-    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
 
     const result = await provider.read("https://example.com/article", {
       format: "text",
@@ -278,7 +277,7 @@ describe("tinyfish provider", () => {
       ],
       errors: [],
     });
-    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
 
     const result = await provider.read("https://example.com", { format: "html", timeout: 200 });
 
@@ -291,7 +290,7 @@ describe("tinyfish provider", () => {
   });
 
   it("keeps direct library timeouts inside the Fetch API range", async () => {
-    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
 
     await provider.read("https://example.com", { timeout: 0 });
 
@@ -309,7 +308,7 @@ describe("tinyfish provider", () => {
         },
       ],
     });
-    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
 
     await expect(provider.read("https://example.com?token=secret-value")).rejects.toMatchObject({
       name: "WebError",
@@ -323,7 +322,7 @@ describe("tinyfish provider", () => {
       results: [],
       errors: [{ url: "https://example.com/missing", error: "page_not_found", status: 404 }],
     });
-    const provider = createTinyfishProvider({ apiKey: "tf-test-key" });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
 
     await expect(provider.read("https://example.com/missing")).rejects.toMatchObject({
       name: "HTTPError",

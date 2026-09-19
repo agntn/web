@@ -76,7 +76,7 @@ describe("Context credit exhaustion", () => {
       const pending =
         operation === "read"
           ? readUrlDetailed(target, { provider: "context" })
-          : createSearchProvider("context").search("article");
+          : (await createSearchProvider("context")).search("article");
       const error = await pending.catch((caught: unknown) => caught);
 
       expect(error).toBeInstanceOf(HTTPError);

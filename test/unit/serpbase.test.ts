@@ -27,9 +27,6 @@ import { isFallbackEligible } from "../../src/core/fallback.ts";
 import { isPaginatedSearchProvider } from "../../src/core/provider.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
-// Triggers self-registration of serpbase provider
-import "../../src/providers/index.ts";
-
 const serpBaseResponse = {
   status: 0,
   request_id: "req-123",
@@ -61,37 +58,37 @@ describe("serpbase provider", () => {
     delete process.env.SERPBASE_API_KEY;
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("serpbase")).toBe(true);
     });
   });
 
   describe("create", () => {
-    it("creates provider with apiKey", () => {
-      expect(() => createSearchProvider("serpbase", { apiKey: "test-key" })).not.toThrow();
+    it("creates provider with apiKey", async () => {
+      await expect(createSearchProvider("serpbase", { apiKey: "test-key" })).resolves.toBeDefined();
     });
 
-    it("creates provider with env api key", () => {
+    it("creates provider with env api key", async () => {
       process.env.SERPBASE_API_KEY = "env-key";
-      expect(() => createSearchProvider("serpbase")).not.toThrow();
+      await expect(createSearchProvider("serpbase")).resolves.toBeDefined();
     });
 
-    it("throws AuthError without apiKey and without env var", () => {
-      expect(() => createSearchProvider("serpbase", {})).toThrow(AuthError);
+    it("throws AuthError without apiKey and without env var", async () => {
+      await expect(createSearchProvider("serpbase", {})).rejects.toThrow(AuthError);
     });
   });
 
   describe("name", () => {
-    it("returns serpbase", () => {
-      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+    it("returns serpbase", async () => {
+      const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
       expect(provider.name).toBe("serpbase");
     });
   });
 
   describe("search()", () => {
     it("calls postJSON with Google search endpoint, body, and X-API-Key header", async () => {
-      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
       await provider.search("test query");
 
       expect(mockPostJSON).toHaveBeenCalledOnce();
@@ -103,7 +100,7 @@ describe("serpbase provider", () => {
     });
 
     it("continues with the next SerpBase page and ends on an empty response", async () => {
-      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
       if (!isPaginatedSearchProvider(provider)) throw new Error("SerpBase must paginate");
 
       const first = await provider.searchPage("test query");
@@ -117,7 +114,7 @@ describe("serpbase provider", () => {
     });
 
     it("maps organic result fields correctly", async () => {
-      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -147,7 +144,7 @@ describe("serpbase provider", () => {
         ],
       });
 
-      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
       const results = await provider.search("test query", { maxResults: 1 });
 
       expect(results).toHaveLength(1);
@@ -174,7 +171,7 @@ describe("serpbase provider", () => {
         ],
       });
 
-      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
       const results = await provider.search("image query", { category: "images" });
 
       const [url] = mockPostJSON.mock.calls[0];
@@ -195,7 +192,7 @@ describe("serpbase provider", () => {
         search_type: "search",
       });
 
-      const provider = createSearchProvider("serpbase", { apiKey: "bad-key" });
+      const provider = await createSearchProvider("serpbase", { apiKey: "bad-key" });
 
       await expect(provider.search("test query")).rejects.toThrow(AuthError);
     });
@@ -210,7 +207,7 @@ describe("serpbase provider", () => {
         search_type: "search",
       });
 
-      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
 
       await expect(provider.search("test query")).rejects.toThrow(RateLimitError);
     });
@@ -226,7 +223,7 @@ describe("serpbase provider", () => {
       };
       mockPostJSON.mockResolvedValueOnce(response);
 
-      const provider = createSearchProvider("serpbase", { apiKey: "test-key" });
+      const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
       const error = await provider.search("test query").catch((caught: unknown) => caught);
 
       expect(error).toBeInstanceOf(WebError);

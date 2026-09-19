@@ -24,7 +24,6 @@ import {
   createReadProvider,
   createSearchProvider,
 } from "../../src/core/registry.ts";
-import "../../src/providers/index.ts";
 
 const searchProviders = [
   "brave",
@@ -52,17 +51,15 @@ describe("provider cancellation", () => {
     const signal = new AbortController().signal;
 
     for (const providerName of searchProviders) {
-      const provider = createSearchProvider(providerName, { apiKey: "test-key" });
+      const provider = await createSearchProvider(providerName, { apiKey: "test-key" });
       await provider.search("test", { signal });
     }
 
-    await createImageSearchProvider("serpapi", { apiKey: "test-key" }).searchByImage(
-      "https://example.com/image.jpg",
-      { signal },
-    );
+    const imageSearch = await createImageSearchProvider("serpapi", { apiKey: "test-key" });
+    await imageSearch.searchByImage("https://example.com/image.jpg", { signal });
 
     for (const providerName of ["jina", "context", "firecrawl", "tinyfish"] as const) {
-      const provider = createReadProvider(providerName, { apiKey: "test-key" });
+      const provider = await createReadProvider(providerName, { apiKey: "test-key" });
       await provider.read("https://example.com", { signal });
     }
 

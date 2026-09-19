@@ -1,18 +1,13 @@
 import type {
-  SearchFilterCapabilities,
   SearchResult,
   SearchRequestOptions,
   ReadResult,
   ReadOptions,
   ProviderConfig,
 } from "../core/types.ts";
-import {
-  Provider,
-  assertProviderBaseURL,
-  type ProviderCapabilityDetails,
-} from "../core/provider.ts";
+import { Provider, assertProviderBaseURL } from "../core/provider.ts";
+import { JINA_MAX_RESULTS, JINA_SEARCH_CATEGORIES } from "../core/providers.ts";
 import { AuthError, HTTPError, normalizeError } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 interface JinaResult {
   readonly title?: string;
@@ -47,27 +42,9 @@ interface JinaReadResponse extends JinaEnvelope {
   readonly data?: JinaResult | null;
 }
 
-const JINA_MAX_RESULTS = 20;
-const JINA_SEARCH_CATEGORIES = ["web", "images", "news"] as const;
-
-class JinaProvider extends Provider {
+export class JinaProvider extends Provider {
   static readonly providerName = "jina";
   static readonly defaultBaseURL = "https://s.jina.ai";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: [],
-      resultLimit: { default: 10, maximum: JINA_MAX_RESULTS },
-      resultFields: ["publishedDate", "image", "text", "metadata"],
-    },
-    read: {
-      options: ["format", "maxTokens", "targetSelector", "removeSelector", "timeout", "noCache"],
-      formats: ["markdown", "text", "html"],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: ["includeDomains", "category"],
-    categories: JINA_SEARCH_CATEGORIES,
-  } as const satisfies SearchFilterCapabilities;
 
   private readonly searchBaseURL: string;
   private readonly readBaseURL: string;
@@ -258,5 +235,3 @@ function resultMetadata(result: Readonly<JinaResult>): Record<string, unknown> |
 
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
-
-register(JinaProvider);

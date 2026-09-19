@@ -16,10 +16,7 @@ export default defineCommand({
     },
   },
   async run({ args }) {
-    const [{ listProviders }] = await Promise.all([
-      import("../core/resolve.ts"),
-      import("../providers/index.ts"),
-    ]);
+    const { listProviders } = await import("../core/resolve.ts");
     const status = listProviders();
 
     if (args.json) {

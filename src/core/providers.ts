@@ -52,3 +52,16 @@ export function providerApiKeyEnvVar(name: string): string | null {
 function isBuiltinProviderName(name: string): name is WebSearchProviderName {
   return Object.hasOwn(providerApiKeyEnvVars, name);
 }
+
+/*
+ * Result caps and category lists a built-in adapter clamps to. The manifest advertises the same
+ * values, and both read them here so neither side has a copy to drift.
+ */
+export const FIRECRAWL_MAX_RESULTS = 100;
+export const JINA_MAX_RESULTS = 20;
+export const JINA_SEARCH_CATEGORIES = ["web", "images", "news"] as const;
+export const OPENAI_CODEX_MAX_RESULTS = 100;
+export const SERPBASE_MAX_RESULTS = 20;
+export const SERPBASE_SEARCH_CATEGORIES = ["images", "image", "news", "videos", "video"] as const;
+export const TAVILY_SEARCH_TOPICS = ["general", "news", "finance"] as const;
+export const TINYFISH_SEARCH_CATEGORIES = ["news", "research_paper"] as const;

@@ -109,7 +109,7 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     contentOptions: ["highlights"],
     pagination: false,
     resultLimit: "10, up to 100",
-    resultFields: ["image", "text", "metadata"],
+    resultFields: ["publishedDate", "image", "text", "metadata"],
     readFormats: ["markdown", "html"],
     readOptions: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
     to: "/providers/firecrawl",

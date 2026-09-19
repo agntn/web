@@ -1,5 +1,3 @@
-import "./providers/index.ts";
-
 export { version, runtimeInfo } from "./version.ts";
 export type { RuntimeInfo } from "./version.ts";
 
@@ -91,6 +89,7 @@ export { Client, defaultClient } from "./core/client.ts";
 export { withCodexHostAuth } from "./core/codex-auth.ts";
 export type { CodexHostAuth } from "./core/codex-auth.ts";
 
+export type { ProviderEntry } from "./core/registry.ts";
 export {
   register,
   create,

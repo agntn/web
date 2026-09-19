@@ -59,9 +59,6 @@ import { isFallbackEligible } from "../../src/core/fallback.ts";
 import { isDetailedSearchProvider } from "../../src/core/provider.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
-// Triggers self-registration of tavily provider
-import "../../src/providers/index.ts";
-
 const tavilyResponse = {
   results: [
     {
@@ -110,32 +107,32 @@ describe("tavily provider", () => {
     delete process.env.TAVILY_API_KEY;
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("tavily")).toBe(true);
     });
   });
 
   describe("create", () => {
-    it("creates provider with apiKey", () => {
-      expect(() => createSearchProvider("tavily", { apiKey: "test-key" })).not.toThrow();
+    it("creates provider with apiKey", async () => {
+      await expect(createSearchProvider("tavily", { apiKey: "test-key" })).resolves.toBeDefined();
     });
 
-    it("throws AuthError without apiKey and without env var", () => {
-      expect(() => createSearchProvider("tavily", {})).toThrow(AuthError);
+    it("throws AuthError without apiKey and without env var", async () => {
+      await expect(createSearchProvider("tavily", {})).rejects.toThrow(AuthError);
     });
   });
 
   describe("name", () => {
-    it("returns tavily", () => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+    it("returns tavily", async () => {
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       expect(provider.name).toBe("tavily");
     });
   });
 
   describe("search()", () => {
     it("calls postJSON with correct url and body containing api_key", async () => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query");
 
       expect(mockPostJSON).toHaveBeenCalledOnce();
@@ -156,7 +153,7 @@ describe("tavily provider", () => {
 
     it("maps result fields correctly", async () => {
       mockPostJSON.mockResolvedValueOnce(richTavilyResponse);
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query", { fullText: true });
 
       expect(results).toHaveLength(1);
@@ -174,7 +171,7 @@ describe("tavily provider", () => {
         ...tavilyResponse,
         results: [{ ...tavilyResponse.results[0], published_date: "last spring" }],
       });
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       const results = await provider.search("test query");
 
       expect(results[0].publishedDate).toBe("last spring");
@@ -185,7 +182,7 @@ describe("tavily provider", () => {
         ...tavilyResponse,
         results: [{ ...tavilyResponse.results[0], published_date: null }],
       });
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       const results = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -197,7 +194,7 @@ describe("tavily provider", () => {
         ...tavilyResponse,
         results: [{ ...tavilyResponse.results[0], raw_content: null }],
       });
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       const results = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -206,7 +203,7 @@ describe("tavily provider", () => {
 
     it("keeps the generated answer in response metadata", async () => {
       mockPostJSON.mockResolvedValueOnce(richTavilyResponse);
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       expect(isDetailedSearchProvider(provider)).toBe(true);
       if (!isDetailedSearchProvider(provider)) {
         throw new Error("Tavily provider must support detailed search responses");
@@ -219,7 +216,7 @@ describe("tavily provider", () => {
     });
 
     it("maps maxResults to max_results in body", async () => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", { maxResults: 5 });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -227,7 +224,7 @@ describe("tavily provider", () => {
     });
 
     it("passes explicit content preferences", async () => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", { summary: true, fullText: true });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -236,7 +233,7 @@ describe("tavily provider", () => {
     });
 
     it("passes includeDomains to include_domains in body", async () => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", { includeDomains: ["github.com", "stackoverflow.com"] });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -244,7 +241,7 @@ describe("tavily provider", () => {
     });
 
     it("passes excludeDomains to exclude_domains in body", async () => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", { excludeDomains: ["reddit.com"] });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -252,7 +249,7 @@ describe("tavily provider", () => {
     });
 
     it("cuts the date window to the day Tavily takes", async () => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", {
         startPublishedDate: "2026-06-01T00:00:00Z",
         endPublishedDate: "2026-09-01",
@@ -264,7 +261,7 @@ describe("tavily provider", () => {
     });
 
     it.each(["general", "news", "finance"])("passes category %s as topic", async (category) => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", { category });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -272,7 +269,7 @@ describe("tavily provider", () => {
     });
 
     it("leaves topic out for a category Tavily does not have", async () => {
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", { category: "images" });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -285,7 +282,7 @@ describe("tavily provider", () => {
         query: "test query",
       });
 
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results).toEqual([]);
@@ -293,19 +290,19 @@ describe("tavily provider", () => {
   });
 
   describe("read()", () => {
-    it("registers as a read provider", () => {
+    it("registers as a read provider", async () => {
       expect(readProviders()).toContain("tavily");
-      expect(() => createReadProvider("tavily", { apiKey: "test-key" })).not.toThrow();
+      await expect(createReadProvider("tavily", { apiKey: "test-key" })).resolves.toBeDefined();
     });
 
-    it("reads through a client that outlasts Tavily's longest timeout and never re-posts", () => {
-      createReadProvider("tavily", { apiKey: "test-key" });
+    it("reads through a client that outlasts Tavily's longest timeout and never re-posts", async () => {
+      await createReadProvider("tavily", { apiKey: "test-key" });
 
       expect(Client).toHaveBeenCalledWith({ maxRetries: 0, timeout: 70_000 });
     });
 
     it("posts one URL to /extract with a bearer header", async () => {
-      const provider = createReadProvider("tavily", { apiKey: "test-key" });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
       await provider.read("https://example.com");
 
       expect(mockPostJSON).not.toHaveBeenCalled();
@@ -321,7 +318,7 @@ describe("tavily provider", () => {
     });
 
     it("maps the extracted page", async () => {
-      const provider = createReadProvider("tavily", { apiKey: "test-key" });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
       const result = await provider.read("https://example.com");
 
       expect(result).toEqual({
@@ -338,7 +335,7 @@ describe("tavily provider", () => {
         results: [{ url: "https://example.com", raw_content: "Example Domain\nplain" }],
         request_id: undefined,
       });
-      const provider = createReadProvider("tavily", { apiKey: "test-key" });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
       const result = await provider.read("https://example.com", { format: "text" });
 
       const [, body] = mockReadPostJSON.mock.calls[0];
@@ -351,7 +348,7 @@ describe("tavily provider", () => {
     });
 
     it("falls back to markdown for html", async () => {
-      const provider = createReadProvider("tavily", { apiKey: "test-key" });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
       await provider.read("https://example.com", { format: "html" });
 
       const [, body] = mockReadPostJSON.mock.calls[0];
@@ -363,7 +360,7 @@ describe("tavily provider", () => {
       [20, 20],
       [120, 60],
     ])("clamps timeout %s s to Tavily's range as %s", async (timeout, expected) => {
-      const provider = createReadProvider("tavily", { apiKey: "test-key" });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
       await provider.read("https://example.com", { timeout });
 
       const [, body] = mockReadPostJSON.mock.calls[0];
@@ -377,7 +374,7 @@ describe("tavily provider", () => {
         response_time: 0.33,
         request_id: "98024ac2-b144-4917-aeb0-1b8c243f4226",
       });
-      const provider = createReadProvider("tavily", { apiKey: "test-key" });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
       const failure = await provider
         .read("https://example.com/missing")
         .catch((caught: unknown) => caught);
@@ -390,7 +387,7 @@ describe("tavily provider", () => {
 
     it("throws when the response carries neither a page nor a failure", async () => {
       mockReadPostJSON.mockResolvedValueOnce({ results: [], failed_results: [] });
-      const provider = createReadProvider("tavily", { apiKey: "test-key" });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
 
       await expect(provider.read("https://example.com")).rejects.toThrow(
         "Tavily extract failed: no result returned",
@@ -401,7 +398,7 @@ describe("tavily provider", () => {
       mockReadPostJSON.mockRejectedValueOnce(
         new HTTPError(statusCode, "https://api.tavily.com/extract", "usage limit"),
       );
-      const provider = createReadProvider("tavily", { apiKey: "test-key" });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
       const failure = await provider.read("https://example.com").catch((caught: unknown) => caught);
 
       expect(failure).toBeInstanceOf(PaymentError);
@@ -417,7 +414,7 @@ describe("tavily provider", () => {
 
     it.each([432, 433])("classifies HTTP %i as PaymentError", async (statusCode) => {
       mockPostJSON.mockRejectedValueOnce(new HTTPError(statusCode, url, body));
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
 
       const error = await provider.search("test query").catch((caught: unknown) => caught);
 
@@ -432,7 +429,7 @@ describe("tavily provider", () => {
       [401, AuthError],
     ])("keeps HTTP %i strict", async (statusCode, expected) => {
       mockPostJSON.mockRejectedValueOnce(new HTTPError(statusCode, url, body));
-      const provider = createSearchProvider("tavily", { apiKey: "test-key" });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
 
       const error = await provider.search("test query").catch((caught: unknown) => caught);
 

@@ -19,9 +19,6 @@ vi.mock("../../src/core/client.ts", () => ({
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import type { SearchResult } from "../../src/core/types.ts";
 
-// Triggers self-registration of searxng provider
-import "../../src/providers/index.ts";
-
 const searxngResponse = {
   results: [
     {
@@ -52,25 +49,25 @@ describe("searxng provider", () => {
     vi.useRealTimers();
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("searxng")).toBe(true);
     });
   });
 
   describe("create", () => {
-    it("creates provider without apiKey", () => {
-      expect(() => createSearchProvider("searxng", {})).not.toThrow();
+    it("creates provider without apiKey", async () => {
+      await expect(createSearchProvider("searxng", {})).resolves.toBeDefined();
     });
 
-    it("creates provider with apiKey (ignores it)", () => {
-      expect(() => createSearchProvider("searxng", { apiKey: "test-key" })).not.toThrow();
+    it("creates provider with apiKey (ignores it)", async () => {
+      await expect(createSearchProvider("searxng", { apiKey: "test-key" })).resolves.toBeDefined();
     });
   });
 
   describe("name", () => {
-    it("returns searxng", () => {
-      const provider = createSearchProvider("searxng", {});
+    it("returns searxng", async () => {
+      const provider = await createSearchProvider("searxng", {});
       expect(provider.name).toBe("searxng");
     });
   });
@@ -87,7 +84,7 @@ describe("searxng provider", () => {
       );
       vi.stubGlobal("fetch", fetchMock);
 
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       if (!isAvailabilityProvider(provider)) throw new Error("SearXNG must expose availability");
       const availability = provider.isAvailable();
 
@@ -100,7 +97,7 @@ describe("searxng provider", () => {
 
   describe("search()", () => {
     it("calls getJSON with correct URL containing q, format, and pageno", async () => {
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       await provider.search("test query");
 
       expect(mockGetJSON).toHaveBeenCalledOnce();
@@ -113,7 +110,7 @@ describe("searxng provider", () => {
     });
 
     it("marks a nonempty page as requiring an uncertain probe of the next page", async () => {
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       if (!isPaginatedSearchProvider(provider)) throw new Error("SearXNG must paginate");
 
       await expect(provider.searchPage("test query")).resolves.toMatchObject({
@@ -128,7 +125,7 @@ describe("searxng provider", () => {
         number_of_results: 100,
         query: "test query",
       });
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       if (!isPaginatedSearchProvider(provider)) throw new Error("SearXNG must paginate");
 
       const page = await provider.searchPage("test query", undefined, "2");
@@ -138,7 +135,7 @@ describe("searxng provider", () => {
     });
 
     it("maps result fields correctly", async () => {
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -152,7 +149,7 @@ describe("searxng provider", () => {
     });
 
     it("maps metadata correctly", async () => {
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results).toHaveLength(1);
@@ -173,14 +170,14 @@ describe("searxng provider", () => {
         query: "test query",
       });
 
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       const results = await provider.search("test query", { maxResults: 2 });
 
       expect(results).toHaveLength(2);
     });
 
     it("adds categories param when category option is provided", async () => {
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       await provider.search("test query", { category: "news" });
 
       const [url] = mockGetJSON.mock.calls[0];
@@ -194,7 +191,7 @@ describe("searxng provider", () => {
         query: "test query",
       });
 
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       const results = await provider.search("query");
 
       expect(results).toEqual([]);
@@ -213,7 +210,7 @@ describe("searxng provider", () => {
         query: "test query",
       });
 
-      const provider = createSearchProvider("searxng", {});
+      const provider = await createSearchProvider("searxng", {});
       const results = await provider.search("query");
 
       expect(results[0].image).toBe("https://example.com/thumb.png");

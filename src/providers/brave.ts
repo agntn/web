@@ -1,16 +1,6 @@
-import type {
-  SearchFilterCapabilities,
-  SearchResult,
-  SearchRequestOptions,
-  ProviderConfig,
-} from "../core/types.ts";
-import {
-  Provider,
-  type ProviderCapabilityDetails,
-  type ProviderSearchPage,
-} from "../core/provider.ts";
+import type { SearchResult, SearchRequestOptions, ProviderConfig } from "../core/types.ts";
+import { Provider, type ProviderSearchPage } from "../core/provider.ts";
 import { AuthError, InvalidSearchContinuationError, normalizeError } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 interface BraveResult {
   readonly title: string;
@@ -35,19 +25,9 @@ interface BraveSearchResponse {
   };
 }
 
-class BraveProvider extends Provider {
+export class BraveProvider extends Provider {
   static readonly providerName = "brave";
   static readonly defaultBaseURL = "https://api.search.brave.com";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: [],
-      resultLimit: { default: 10, maximum: 20 },
-      resultFields: ["publishedDate", "favicon", "text"],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: ["startPublishedDate", "endPublishedDate"],
-  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
 
@@ -197,5 +177,3 @@ function extraSnippetText(snippets?: readonly string[]): string | undefined {
   const parts = snippets?.filter((snippet) => snippet.length > 0) ?? [];
   return parts.length > 0 ? parts.join("\n") : undefined;
 }
-
-register(BraveProvider);

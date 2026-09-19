@@ -16,7 +16,6 @@ import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
 import { listProviders } from "./core/resolve.ts";
 import { MAX_SEARCH_CONTINUATION_LENGTH } from "./core/search-continuation.ts";
 import { runtimeInfo } from "./version.ts";
-import "./providers/index.ts";
 
 const advertisedSearchProviderNames = [...builtinProviders, "all"].join(", ");
 

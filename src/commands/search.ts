@@ -102,7 +102,6 @@ export default defineCommand({
     const parsed = parseSearchArguments(args);
     const providerName = parsed.provider;
     try {
-      await import("../providers/index.ts");
       const output = await runSearch(parsed);
       writeSearchOutput(output, parsed.json);
     } catch (error) {
@@ -412,7 +411,6 @@ async function handleSearchError(
     return exitWithError(`Unknown provider: ${providerName}`);
   }
   if (error instanceof NoProviderConfiguredError) {
-    await import("../providers/index.ts");
     reportConfiguredProviderHint(registry.providers());
     return exitWithError(error.message);
   }

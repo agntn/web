@@ -25,7 +25,6 @@ import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
 import { MAX_SEARCH_CONTINUATION_LENGTH } from "./core/search-continuation.ts";
 import { searchFilterNames, type SearchPageOptions } from "./core/types.ts";
-import "./providers/index.ts";
 import { runtimeInfo, version } from "./version.ts";
 
 const MAX_RESULTS_HARD_CAP = 20;
@@ -809,7 +808,8 @@ function errorResult(text: string): CallToolResult {
 
 /**
  * Creates the low level MCP server so Pi and MCP can share TypeBox schemas without a parallel Zod definition.
- * Successful calls return schema checked data and compact JSON text for older clients.
+ * Successful calls return schema checked data and compact JSON text for older clients. A provider
+ * module loads with the first call that names it.
  * @returns {Server} Unconnected MCP server.
  */
 export function createMcpServer(): Server {

@@ -26,11 +26,8 @@ import { isDetailedSearchProvider, isReadProvider } from "../../src/core/provide
 import { AuthError, WebError } from "../../src/core/errors.ts";
 import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 
-// Triggers self-registration of firecrawl provider
-import "../../src/providers/index.ts";
-
-function createFirecrawlProvider(config: Readonly<ProviderConfig> = {}) {
-  const provider = createSearchProvider("firecrawl", config);
+async function createFirecrawlProvider(config: Readonly<ProviderConfig> = {}) {
+  const provider = await createSearchProvider("firecrawl", config);
   if (!isReadProvider(provider)) {
     throw new Error("Firecrawl provider must support URL reading");
   }
@@ -84,32 +81,32 @@ describe("firecrawl provider", () => {
     delete process.env.FIRECRAWL_API_KEY;
   });
 
-  describe("self-registration", () => {
-    it("registers itself on import", () => {
+  describe("manifest", () => {
+    it("is listed without loading the adapter", () => {
       expect(has("firecrawl")).toBe(true);
     });
   });
 
   describe("create", () => {
-    it("creates provider with apiKey", () => {
-      expect(() => createFirecrawlProvider({ apiKey: "test-key" })).not.toThrow();
+    it("creates provider with apiKey", async () => {
+      await expect(createFirecrawlProvider({ apiKey: "test-key" })).resolves.toBeDefined();
     });
 
-    it("throws AuthError without apiKey and without env var", () => {
-      expect(() => createFirecrawlProvider({})).toThrow(AuthError);
+    it("throws AuthError without apiKey and without env var", async () => {
+      await expect(createFirecrawlProvider({})).rejects.toThrow(AuthError);
     });
   });
 
   describe("name", () => {
-    it("returns firecrawl", () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+    it("returns firecrawl", async () => {
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       expect(provider.name).toBe("firecrawl");
     });
   });
 
   describe("search()", () => {
     it("calls postJSON with correct url and Authorization header", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "fc-test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "fc-test-key" });
       await provider.search("test query");
 
       expect(mockPostJSON).toHaveBeenCalledOnce();
@@ -127,7 +124,7 @@ describe("firecrawl provider", () => {
     });
 
     it("maps result fields correctly", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results).toHaveLength(2);
@@ -137,7 +134,7 @@ describe("firecrawl provider", () => {
     });
 
     it("preserves response metadata in detailed searches", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       expect(isDetailedSearchProvider(provider)).toBe(true);
       if (!isDetailedSearchProvider(provider)) {
         throw new Error("Firecrawl provider must support detailed search");
@@ -160,7 +157,7 @@ describe("firecrawl provider", () => {
         id: "empty-job",
         creditsUsed: 1,
       });
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       if (!isDetailedSearchProvider(provider)) {
         throw new Error("Firecrawl provider must support detailed search");
       }
@@ -172,7 +169,7 @@ describe("firecrawl provider", () => {
     });
 
     it("maps markdown content to text field", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const results: SearchResult[] = await provider.search("test query");
 
       expect(results[1].text).toBe("# Firecrawl\n\nOpen source web scraper.");
@@ -180,7 +177,7 @@ describe("firecrawl provider", () => {
     });
 
     it("maps maxResults to limit in body", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { maxResults: 5 });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -188,7 +185,7 @@ describe("firecrawl provider", () => {
     });
 
     it("can disable search highlights", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { highlights: false });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -196,7 +193,7 @@ describe("firecrawl provider", () => {
     });
 
     it("passes includeDomains in body", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { includeDomains: ["github.com"] });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -204,7 +201,7 @@ describe("firecrawl provider", () => {
     });
 
     it("passes excludeDomains in body", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { excludeDomains: ["reddit.com"] });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -212,7 +209,7 @@ describe("firecrawl provider", () => {
     });
 
     it("passes source types independently", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { sources: ["web", "news", "images"] });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -221,7 +218,7 @@ describe("firecrawl provider", () => {
     });
 
     it("passes search categories independently", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { categories: ["developer"] });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -230,7 +227,7 @@ describe("firecrawl provider", () => {
     });
 
     it("rejects combining developer with another category", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
 
       await expect(
         provider.search("test query", { categories: ["developer", "pdf"] }),
@@ -259,7 +256,7 @@ describe("firecrawl provider", () => {
         },
       });
 
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const results = await provider.search("test query", { sources: ["web", "news"] });
 
       expect(results.map(({ snippet }) => snippet)).toEqual([
@@ -285,7 +282,7 @@ describe("firecrawl provider", () => {
         },
       });
 
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const results = await provider.search("test query", {
         sources: ["web", "news"],
         maxResults: 5,
@@ -320,7 +317,7 @@ describe("firecrawl provider", () => {
         },
       });
 
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const results = await provider.search("test query", { sources: ["news", "images"] });
 
       expect(results).toEqual([
@@ -356,7 +353,7 @@ describe("firecrawl provider", () => {
           ],
         },
       });
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
 
       await expect(provider.search("test query", { sources: ["images"] })).resolves.toEqual([
         {
@@ -370,7 +367,7 @@ describe("firecrawl provider", () => {
     });
 
     it("does not translate the singular category option", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { category: "news" });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -381,7 +378,7 @@ describe("firecrawl provider", () => {
     it("returns empty array when web results are missing", async () => {
       mockPostJSON.mockResolvedValueOnce({ success: true, data: {} });
 
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const results = await provider.search("query");
 
       expect(results).toEqual([]);
@@ -390,12 +387,12 @@ describe("firecrawl provider", () => {
     it("throws when success is false", async () => {
       mockPostJSON.mockResolvedValueOnce({ success: false });
 
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await expect(provider.search("query")).rejects.toThrow();
     });
 
     it("clamps maxResults to 100", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.search("test query", { maxResults: 500 });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -410,7 +407,7 @@ describe("firecrawl provider", () => {
     });
 
     it("calls postJSON with scrape endpoint and url in body", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "fc-test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "fc-test-key" });
       await provider.read("https://example.com");
 
       expect(mockPostJSON).toHaveBeenCalledOnce();
@@ -429,7 +426,7 @@ describe("firecrawl provider", () => {
     });
 
     it("returns read result with content from markdown", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const result = await provider.read("https://example.com");
 
       expect(result.url).toBe("https://example.com");
@@ -445,7 +442,7 @@ describe("firecrawl provider", () => {
     });
 
     it("rejects maxTokens before sending a scrape request", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
 
       await expect(provider.read("https://example.com", { maxTokens: 500 })).rejects.toThrowError(
         new WebError("Firecrawl does not support the maxTokens read option"),
@@ -454,7 +451,7 @@ describe("firecrawl provider", () => {
     });
 
     it("passes format option to formats array", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.read("https://example.com", { format: "html" });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -462,7 +459,7 @@ describe("firecrawl provider", () => {
     });
 
     it("maps text format to markdown", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.read("https://example.com", { format: "text" });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -478,14 +475,14 @@ describe("firecrawl provider", () => {
         },
       });
 
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const result = await provider.read("https://example.com", { format: "html" });
 
       expect(result.content).toBe("<p>Only HTML</p>");
     });
 
     it("converts timeout from seconds to milliseconds", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.read("https://example.com", { timeout: 30 });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -493,7 +490,7 @@ describe("firecrawl provider", () => {
     });
 
     it("passes content selectors to Firecrawl", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.read("https://example.com", {
         targetSelector: "main article",
         removeSelector: "nav, footer",
@@ -505,7 +502,7 @@ describe("firecrawl provider", () => {
     });
 
     it("sets maxAge to zero when cache is bypassed", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.read("https://example.com", { noCache: true });
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -513,7 +510,7 @@ describe("firecrawl provider", () => {
     });
 
     it("sets onlyMainContent to true by default", async () => {
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await provider.read("https://example.com");
 
       const [, body] = mockPostJSON.mock.calls[0];
@@ -523,14 +520,14 @@ describe("firecrawl provider", () => {
     it("throws when success is false", async () => {
       mockPostJSON.mockResolvedValueOnce({ success: false });
 
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       await expect(provider.read("https://example.com")).rejects.toThrow();
     });
 
     it("handles missing data gracefully", async () => {
       mockPostJSON.mockResolvedValueOnce({ success: true, data: {} });
 
-      const provider = createFirecrawlProvider({ apiKey: "test-key" });
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
       const result = await provider.read("https://example.com");
 
       expect(result.content).toBe("");

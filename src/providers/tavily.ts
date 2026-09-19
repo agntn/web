@@ -1,5 +1,4 @@
 import type {
-  SearchFilterCapabilities,
   SearchResult,
   SearchRequestOptions,
   SearchResponse,
@@ -8,9 +7,9 @@ import type {
   ProviderConfig,
 } from "../core/types.ts";
 import { Client } from "../core/client.ts";
-import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
+import { Provider } from "../core/provider.ts";
+import { TAVILY_SEARCH_TOPICS } from "../core/providers.ts";
 import { AuthError, HTTPError, PaymentError, WebError, normalizeError } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 type TavilyTopic = (typeof TAVILY_SEARCH_TOPICS)[number];
 
@@ -71,35 +70,13 @@ interface TavilyExtractResponse {
 }
 
 const TAVILY_USAGE_LIMIT_STATUS_CODES = new Set([432, 433]);
-const TAVILY_SEARCH_TOPICS = ["general", "news", "finance"] as const;
 const TAVILY_MIN_EXTRACT_TIMEOUT_SECONDS = 1;
 const TAVILY_MAX_EXTRACT_TIMEOUT_SECONDS = 60;
 const TAVILY_EXTRACT_CLIENT_TIMEOUT_MS = 70_000;
 
-class TavilyProvider extends Provider {
+export class TavilyProvider extends Provider {
   static readonly providerName = "tavily";
   static readonly defaultBaseURL = "https://api.tavily.com";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: ["summary", "fullText"],
-      resultLimit: { default: 10, maximum: 20 },
-      resultFields: ["score", "publishedDate", "text"],
-    },
-    read: {
-      options: ["format", "timeout"],
-      formats: ["markdown", "text"],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: [
-      "includeDomains",
-      "excludeDomains",
-      "category",
-      "startPublishedDate",
-      "endPublishedDate",
-    ],
-    categories: TAVILY_SEARCH_TOPICS,
-  } as const satisfies SearchFilterCapabilities;
 
   private readonly apiKey: string;
   /** Extract waits up to 60 s on request and bills every attempt, so no retries and a longer window. */
@@ -286,5 +263,3 @@ function mapExtractResult(
 function extractFailure(failure?: Readonly<TavilyExtractFailure>): WebError {
   return new WebError(`Tavily extract failed: ${failure?.error ?? "no result returned"}`);
 }
-
-register(TavilyProvider);

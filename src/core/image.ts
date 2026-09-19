@@ -47,7 +47,9 @@ export async function searchByImage(
   }
   let results: ImageSearchResult[];
   try {
-    results = await createImageSearchProvider(providerName).searchByImage(
+    const imageSearchProvider = await createImageSearchProvider(providerName);
+    throwIfAborted(effectiveSearchOptions.signal);
+    results = await imageSearchProvider.searchByImage(
       trimmedUrl,
       providerRequestOptions(effectiveSearchOptions),
     );

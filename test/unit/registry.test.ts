@@ -5,6 +5,8 @@ import {
   getProviderApiKeyEnvVar,
   getProviderCapabilities,
   has,
+  isProviderConfigured,
+  probesAvailability,
   searchImageProviders,
   providers,
   readProviders,
@@ -17,6 +19,7 @@ import {
   UnknownProviderError,
 } from "../../src/core/errors.ts";
 import { searchProviderDetailed } from "../../src/core/all.ts";
+import { probeConfiguredProvider } from "../../src/core/resolve.ts";
 import { Provider, type ProviderConstructor } from "../../src/core/provider.ts";
 import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 
@@ -139,7 +142,7 @@ describe("registry", () => {
       expect(has(testProviderName)).toBe(false);
     });
 
-    it("restores the previous registration when a replacement is removed", () => {
+    it("restores the previous registration when a replacement is removed", async () => {
       class ReplacementProvider extends Provider {
         static readonly providerName = testProviderName;
         static readonly defaultBaseURL = "https://replacement.example.com";
@@ -153,7 +156,7 @@ describe("registry", () => {
 
       removeReplacement();
 
-      expect(create(testProviderName)).toBeInstanceOf(MockProvider);
+      await expect(create(testProviderName)).resolves.toBeInstanceOf(MockProvider);
     });
 
     it("does not restore a registration removed before its replacement", () => {
@@ -223,82 +226,86 @@ describe("registry", () => {
   });
 
   describe("create()", () => {
-    it("creates an instance of the abstract provider base", () => {
+    it("creates an instance of the abstract provider base", async () => {
       register(MockProvider);
 
-      const provider = create(testProviderName);
+      const provider = await create(testProviderName);
 
       expect(provider).toBeInstanceOf(Provider);
       expect(provider.name).toBe(testProviderName);
     });
 
-    it("keeps provider identity immutable at runtime", () => {
+    it("keeps provider identity immutable at runtime", async () => {
       register(MockProvider);
-      const provider = create(testProviderName);
+      const provider = await create(testProviderName);
 
       expect(() => Object.assign(provider, { name: "changed" })).toThrow(TypeError);
       expect(provider.name).toBe(testProviderName);
     });
 
-    it("passes config.apiKey to the provider constructor", () => {
+    it("passes config.apiKey to the provider constructor", async () => {
       register(MockProvider);
       const apiKey = "test-api-key-12345";
 
-      create(testProviderName, { apiKey });
+      await create(testProviderName, { apiKey });
 
       expect(MockProvider.capturedConfigs).toHaveLength(1);
       expect(MockProvider.capturedConfigs[0]?.apiKey).toBe(apiKey);
     });
 
-    it("reads the API key from the environment", () => {
+    it("reads the API key from the environment", async () => {
       register(MockProvider);
       const apiKey = "env-api-key-67890";
       process.env[envVarName] = apiKey;
 
-      create(testProviderName);
+      await create(testProviderName);
 
       expect(MockProvider.capturedConfigs[0]?.apiKey).toBe(apiKey);
     });
 
-    it("prefers config.apiKey over the environment", () => {
+    it("prefers config.apiKey over the environment", async () => {
       register(MockProvider);
       process.env[envVarName] = "env-api-key";
 
-      create(testProviderName, { apiKey: "config-api-key" });
+      await create(testProviderName, { apiKey: "config-api-key" });
 
       expect(MockProvider.capturedConfigs[0]?.apiKey).toBe("config-api-key");
     });
 
-    it("throws for an unregistered provider name", () => {
+    it("throws for an unregistered provider name", async () => {
       const unregisteredName = `unknown-${Math.random().toString(36).slice(2)}`;
-      expect(() => create(unregisteredName)).toThrow(UnknownProviderError);
-      expect(() => create(unregisteredName)).toThrow(`Unknown provider: ${unregisteredName}`);
+      await expect(create(unregisteredName)).rejects.toThrow(UnknownProviderError);
+      await expect(create(unregisteredName)).rejects.toThrow(
+        `Unknown provider: ${unregisteredName}`,
+      );
     });
 
-    it("passes a custom baseURL to the provider constructor", () => {
+    it("passes a custom baseURL to the provider constructor", async () => {
       register(MockProvider);
 
-      create(testProviderName, { baseURL: "https://custom.example.com" });
+      await create(testProviderName, { baseURL: "https://custom.example.com" });
 
       expect(MockProvider.capturedConfigs[0]?.baseURL).toBe("https://custom.example.com");
     });
 
-    it("rejects provider base URLs that are not absolute HTTP(S) URLs", () => {
+    it("rejects provider base URLs that are not absolute HTTP(S) URLs", async () => {
       register(MockProvider);
 
       for (const baseURL of ["ftp://example.com", "/relative"]) {
-        expect(() => create(testProviderName, { baseURL })).toThrow(InvalidProviderUrlError);
+        await expect(create(testProviderName, { baseURL })).rejects.toThrow(
+          InvalidProviderUrlError,
+        );
       }
 
-      expect(() => create(testProviderName, { baseURL: "ftp://example.com" })).toThrow(
+      await expect(create(testProviderName, { baseURL: "ftp://example.com" })).rejects.toThrow(
         `Invalid base URL for provider "${testProviderName}": expected an absolute http or https URL`,
       );
     });
 
-    it("uses class metadata as the default baseURL", () => {
+    it("uses class metadata as the default baseURL", async () => {
       register(MockProvider);
 
-      create(testProviderName);
+      await create(testProviderName);
 
       expect(MockProvider.capturedConfigs[0]?.baseURL).toBe(MockProvider.defaultBaseURL);
     });
@@ -313,7 +320,9 @@ describe("registry", () => {
 
       expect(searchProviders()).toContain(testProviderName);
       expect(searchProviders()).toContain(testProviderName5);
-      await expect(createSearchProvider(testProviderName5).search("query")).resolves.toEqual([]);
+      await expect(
+        (await createSearchProvider(testProviderName5)).search("query"),
+      ).resolves.toEqual([]);
       expect(searchProviders()).not.toContain(testProviderName3);
       expect(readProviders()).toContain(testProviderName3);
       expect(readProviders()).not.toContain(testProviderName);
@@ -354,18 +363,60 @@ describe("registry", () => {
       });
     });
 
+    it("calls a static isConfigured() on its class", () => {
+      const name = `testprovider${Math.random().toString(36).slice(2)}`;
+      class ThisBoundProvider extends Provider {
+        static readonly providerName = name;
+        static readonly defaultBaseURL = "https://bound.example.com";
+        static readonly ready = true;
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, ThisBoundProvider);
+        }
+
+        static isConfigured(): boolean {
+          return this.ready;
+        }
+      }
+      register(ThisBoundProvider);
+
+      expect(isProviderConfigured(name)).toBe(true);
+    });
+
+    it("probes a registered class that carries isAvailable as an instance field", async () => {
+      const name = `testprovider${Math.random().toString(36).slice(2)}`;
+      class FieldProbeProvider extends Provider {
+        static readonly providerName = name;
+        static readonly defaultBaseURL = "https://probe.example.com";
+        static readonly apiKeyEnvVar = null;
+        readonly isAvailable = async (): Promise<boolean> => false;
+
+        constructor(config: Readonly<ProviderConfig>) {
+          super(config, FieldProbeProvider);
+        }
+      }
+      register(FieldProbeProvider);
+
+      expect(probesAvailability(name)).toBe(true);
+      expect(probesAvailability("brave")).toBe(false);
+      expect(probesAvailability("searxng")).toBe(true);
+      await expect(probeConfiguredProvider(name)).resolves.toBe(false);
+    });
+
     it("returns a search-capable provider when required", async () => {
       register(MockProvider);
 
-      const provider = createSearchProvider(testProviderName);
+      const provider = await createSearchProvider(testProviderName);
 
       await expect(provider.search("query")).resolves.toEqual([]);
     });
 
-    it("rejects a read-only provider when search is required", () => {
+    it("rejects a read-only provider when search is required", async () => {
       register(ReadOnlyProvider);
 
-      expect(() => createSearchProvider(testProviderName3)).toThrow(SearchNotSupportedError);
+      await expect(createSearchProvider(testProviderName3)).rejects.toThrow(
+        SearchNotSupportedError,
+      );
     });
 
     it("keeps undeclared custom filter support distinct from ignored filters", async () => {

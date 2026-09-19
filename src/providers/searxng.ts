@@ -1,16 +1,6 @@
-import type {
-  SearchFilterCapabilities,
-  SearchResult,
-  SearchRequestOptions,
-  ProviderConfig,
-} from "../core/types.ts";
-import {
-  Provider,
-  type ProviderCapabilityDetails,
-  type ProviderSearchPage,
-} from "../core/provider.ts";
+import type { SearchResult, SearchRequestOptions, ProviderConfig } from "../core/types.ts";
+import { Provider, type ProviderSearchPage } from "../core/provider.ts";
 import { InvalidSearchContinuationError, normalizeError } from "../core/errors.ts";
-import { register } from "../core/registry.ts";
 
 interface SearXNGResult {
   readonly title: string;
@@ -33,18 +23,9 @@ interface SearXNGSearchResponse {
 
 const SEARXNG_PROBE_TIMEOUT_MS = 2000;
 
-class SearXNGProvider extends Provider {
+export class SearXNGProvider extends Provider {
   static readonly providerName = "searxng";
   static readonly defaultBaseURL = "http://localhost:8080";
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: [],
-      resultFields: ["score", "publishedDate", "image", "metadata"],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: ["category"],
-  } as const satisfies SearchFilterCapabilities;
 
   constructor(config: Readonly<ProviderConfig>) {
     super(config, SearXNGProvider);
@@ -144,5 +125,3 @@ function mapResult(result: SearXNGResult): SearchResult {
     },
   };
 }
-
-register(SearXNGProvider);

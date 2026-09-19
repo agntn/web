@@ -10,18 +10,18 @@ import {
 import { operationSignal } from "../core/execution.ts";
 import {
   codexAuthSource,
-  hasCodexLogin,
+  environmentCodexCredentials,
+  hasEnvironmentCodexCredentials,
   nativeCodexCredentials,
   resolveCodexCredentials,
   type ResolvedCodexCredentials,
 } from "../core/codex-auth.ts";
-import { Provider, type ProviderCapabilityDetails } from "../core/provider.ts";
-import { register } from "../core/registry.ts";
+import { Provider } from "../core/provider.ts";
+import { OPENAI_CODEX_MAX_RESULTS } from "../core/providers.ts";
 import type {
   CodexCredentials,
   CodexCredentialProvider,
   ProviderConfig,
-  SearchFilterCapabilities,
   SearchRequestOptions,
   SearchResponse,
   SearchResult,
@@ -31,7 +31,6 @@ const BASE_URL = "https://chatgpt.com/backend-api";
 const ENDPOINT = `${BASE_URL}/codex/responses`;
 const DEFAULT_MODEL = "gpt-5.5";
 const TIMEOUT_MS = 90_000;
-const MAX_RESULTS = 100;
 const INSTRUCTIONS =
   "Search the web to answer the user's query. Cite your sources and keep the answer concise.";
 
@@ -101,19 +100,9 @@ const eventSchema = z
 type CodexItem = z.infer<typeof itemSchema>;
 type CodexEvent = z.infer<typeof eventSchema>;
 
-class OpenAICodexProvider extends Provider {
+export class OpenAICodexProvider extends Provider {
   static readonly providerName = "openai-codex";
   static readonly defaultBaseURL = BASE_URL;
-  static readonly capabilityDetails = {
-    search: {
-      contentOptions: ["summary"],
-      resultLimit: { default: 10, maximum: MAX_RESULTS },
-      resultFields: [],
-    },
-  } as const satisfies ProviderCapabilityDetails;
-  static readonly searchFilterCapabilities = {
-    filters: [],
-  } as const satisfies SearchFilterCapabilities;
 
   readonly #credentials: CodexCredentials | CodexCredentialProvider;
   readonly #model: string;
@@ -132,18 +121,6 @@ class OpenAICodexProvider extends Provider {
       typeof credentials === "function" ? credentials : resolveCodexCredentials(credentials);
     this.#model = configuredModel(config);
     if (!this.#model.trim()) throw new TypeError("Codex model must not be empty");
-  }
-
-  static isConfigured(): boolean {
-    try {
-      if (hasEnvironmentCredentials()) {
-        resolveCodexCredentials(environmentCredentials());
-        return true;
-      }
-      return hasCodexLogin(codexAuthSource());
-    } catch {
-      return false;
-    }
   }
 
   async search(query: string, options?: SearchRequestOptions): Promise<SearchResult[]> {
@@ -240,24 +217,12 @@ class OpenAICodexProvider extends Provider {
   }
 }
 
-function environmentCredentials(
-  accessToken = process.env.OPENAI_CODEX_ACCESS_TOKEN,
-): CodexCredentials {
-  return {
-    accessToken: accessToken ?? "",
-    accountId: process.env.OPENAI_CODEX_ACCOUNT_ID || undefined,
-  };
-}
-
-function hasEnvironmentCredentials(): boolean {
-  return Boolean(process.env.OPENAI_CODEX_ACCESS_TOKEN || process.env.OPENAI_CODEX_ACCOUNT_ID);
-}
-
 function configuredCredentials(
   config: Readonly<ProviderConfig>,
 ): CodexCredentials | CodexCredentialProvider {
   if (config.codex?.credentials !== undefined) return config.codex.credentials;
-  if (config.apiKey || hasEnvironmentCredentials()) return environmentCredentials(config.apiKey);
+  if (config.apiKey || hasEnvironmentCodexCredentials())
+    return environmentCodexCredentials(config.apiKey);
   return nativeCodexCredentials(codexAuthSource(config.codex?.authSource));
 }
 
@@ -294,7 +259,7 @@ function resultLimit(options?: SearchRequestOptions): number {
   const limit = options?.maxResults ?? 10;
   if (!Number.isInteger(limit) || limit < 1)
     throw new TypeError("maxResults must be a positive integer");
-  return Math.min(limit, MAX_RESULTS);
+  return Math.min(limit, OPENAI_CODEX_MAX_RESULTS);
 }
 
 async function collectSearch(
@@ -450,5 +415,3 @@ function eventError(event: Readonly<CodexEvent>): Error {
 function protocolError(message: string): HTTPError {
   return new HTTPError(502, ENDPOINT, message);
 }
-
-register(OpenAICodexProvider);

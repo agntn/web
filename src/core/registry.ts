@@ -1,12 +1,13 @@
 import type { ProviderConfig, SearchFilterCapabilities } from "./types.ts";
 import { providerApiKeyEnvVar } from "./providers.ts";
 import {
-  Provider,
+  isAvailabilityProvider,
   isImageSearchProvider,
   isPaginatedSearchProvider,
   isReadProvider,
   isSearchProvider,
   type ImageSearchProvider,
+  type Provider,
   type ProviderCapabilities,
   type ProviderCapability,
   type ProviderConstructor,
@@ -22,47 +23,265 @@ import {
   SearchNotSupportedError,
   UnknownProviderError,
 } from "./errors.ts";
+import { builtins } from "../providers/index.ts";
+
+/**
+ * One provider the registry knows: the metadata every listing and capability lookup answers from,
+ * plus a loader for the class. A built-in entry's `load` is a literal `import()` of its module, so
+ * the module runs on the first `create()` for that name and never on package import.
+ */
+export interface ProviderEntry {
+  readonly name: string;
+  /** API key variable; `null` when registering is enough to count as configured; absent derives `<NAME>_API_KEY`. */
+  readonly apiKeyEnvVar?: string | null;
+  /** Local configuration check for providers whose credentials are more than one variable. */
+  readonly isConfigured?: () => boolean;
+  /** Whether instances answer `isAvailable()`, so discovery can probe without loading the rest. */
+  readonly availability?: boolean;
+  /** Search capability as discovery reports it; absent when the provider does not search. */
+  readonly search?: Omit<ProviderSearchCapabilities, "supported">;
+  /** Reverse image search capability; absent when the provider does not implement it. */
+  readonly searchImage?: Omit<ProviderImageSearchCapabilities, "supported">;
+  /** URL reader capability; absent when the provider does not read. */
+  readonly read?: Omit<ProviderReadCapabilities, "supported">;
+  /** Resolves the provider class. */
+  readonly load: () => Promise<ProviderConstructor>;
+}
 
 interface ProviderRegistration {
-  readonly provider: ProviderConstructor;
+  readonly entry: ProviderEntry;
+  /** Whether the entry came from the manifest, so its class still waits behind an `import()`. */
+  readonly builtin: boolean;
   readonly previous?: ProviderRegistration;
 }
 
-const providerClasses = new Map<string, ProviderConstructor>();
-const providerRegistrations = new Map<string, ProviderRegistration>();
+let registrations: Map<string, ProviderRegistration> | undefined;
 const removedRegistrations = new WeakSet<ProviderRegistration>();
 
 /**
- * Register a provider class.
- * Called by providers on import to self-register.
+ * The registry table, seeded from the built-in manifest on first use rather than at module scope,
+ * so a consumer bundle that never touches the registry drops the table with it.
+ * @returns {Map<string, ProviderRegistration>} The seeded table.
+ */
+function table(): Map<string, ProviderRegistration> {
+  registrations ??= new Map(
+    builtins.map((entry): [string, ProviderRegistration] => [entry.name, { entry, builtin: true }]),
+  );
+  return registrations;
+}
+
+function entryFor(name: string): ProviderEntry | undefined {
+  return table().get(name)?.entry;
+}
+
+/**
+ * Register a provider class living outside the package.
+ * The class's static metadata and its prototype decide what discovery reports; registering a name
+ * again shadows the previous entry until the returned function removes the registration.
  * @param {ProviderConstructor} provider - Provider class to register.
  * @returns {() => void} A function that removes this registration when it is still current.
  */
 export function register(provider: ProviderConstructor): () => void {
   assertProviderName(provider.providerName);
   const registration: ProviderRegistration = {
-    provider,
-    previous: providerRegistrations.get(provider.providerName),
+    entry: entryFromClass(provider),
+    builtin: false,
+    previous: table().get(provider.providerName),
   };
-  providerRegistrations.set(provider.providerName, registration);
-  providerClasses.set(provider.providerName, provider);
+  table().set(provider.providerName, registration);
   return () => removeRegistration(provider.providerName, registration);
 }
 
 /**
  * Create a provider instance by name.
- * Resolves apiKey from config or environment variable (PROVIDER_NAME_API_KEY).
+ * Imports a built-in provider's module on the first call for its name; the module map shares one
+ * import between parallel callers. Resolves apiKey from config or the provider's env var.
  * @param {string} name - Registered provider name.
  * @param {ProviderConfig} config - Provider configuration.
- * @returns {Provider} Configured provider instance.
+ * @returns {Promise<Provider>} Configured provider instance.
  */
-export function create(name: string, config?: Readonly<ProviderConfig>): Provider {
-  const ProviderClass = providerClasses.get(name);
-  if (!ProviderClass) {
+export async function create(name: string, config?: Readonly<ProviderConfig>): Promise<Provider> {
+  const entry = entryFor(name);
+  if (!entry) {
     throw new UnknownProviderError(name);
   }
+  return instantiate(entry, config);
+}
 
+/**
+ * Create a provider that implements text search.
+ * @param name - Registered provider name.
+ * @param config - Provider configuration.
+ * @returns {Promise<Provider & SearchProvider>} A provider with search support.
+ */
+export async function createSearchProvider(
+  name: string,
+  config?: Readonly<ProviderConfig>,
+): Promise<Provider & SearchProvider> {
+  const entry = requireEntry(name);
+  if (entry.search === undefined) throw new SearchNotSupportedError(name);
+  const provider = await instantiate(entry, config);
+  if (!isSearchProvider(provider)) throw new SearchNotSupportedError(name);
+  return provider;
+}
+
+/**
+ * Create a provider that implements reverse image search.
+ * @param name - Registered provider name.
+ * @param config - Provider configuration.
+ * @returns {Promise<Provider & ImageSearchProvider>} A provider with reverse image search support.
+ */
+export async function createImageSearchProvider(
+  name: string,
+  config?: Readonly<ProviderConfig>,
+): Promise<Provider & ImageSearchProvider> {
+  const entry = requireEntry(name);
+  if (entry.searchImage === undefined) throw new ImageSearchNotSupportedError(name);
+  const provider = await instantiate(entry, config);
+  if (!isImageSearchProvider(provider)) throw new ImageSearchNotSupportedError(name);
+  return provider;
+}
+
+/**
+ * Create a provider that implements URL reading.
+ * @param name - Registered provider name.
+ * @param config - Provider configuration.
+ * @returns {Promise<Provider & ReadProvider>} A provider with read support.
+ */
+export async function createReadProvider(
+  name: string,
+  config?: Readonly<ProviderConfig>,
+): Promise<Provider & ReadProvider> {
+  const entry = requireEntry(name);
+  if (entry.read === undefined) throw new ReadNotSupportedError(name);
+  const provider = await instantiate(entry, config);
+  if (!isReadProvider(provider)) throw new ReadNotSupportedError(name);
+  return provider;
+}
+
+/**
+ * Return every registered provider name, built-ins first in manifest order.
+ * @returns {string[]} Registered provider names.
+ */
+export function providers(): string[] {
+  return Array.from(table().keys());
+}
+
+/**
+ * Return registered providers that implement text search.
+ * @returns {string[]} Search provider names.
+ */
+export function searchProviders(): string[] {
+  return providerNamesWithCapability("search");
+}
+
+/**
+ * Return registered providers that implement reverse image search.
+ * @returns {string[]} Image search provider names.
+ */
+export function searchImageProviders(): string[] {
+  return providerNamesWithCapability("searchImage");
+}
+
+/**
+ * Return registered providers that implement URL reading.
+ * @returns {string[]} Read provider names.
+ */
+export function readProviders(): string[] {
+  return providerNamesWithCapability("read");
+}
+
+/**
+ * Return the API key variable declared by a provider or derived from its name.
+ * @param {string} name - Registered or prospective provider name.
+ * @returns {string | null} Environment variable name, or null for a keyless provider.
+ */
+export function getProviderApiKeyEnvVar(name: string): string | null {
+  const entry = entryFor(name);
+  return entry === undefined ? providerApiKeyEnvVar(name) : apiKeyEnvVarOf(entry);
+}
+
+/**
+ * Check local credentials without a network request or token refresh.
+ * @param name - Registered provider name.
+ * @returns {boolean} Whether selection from the environment can use this provider.
+ */
+export function isProviderConfigured(name: string): boolean {
+  const entry = entryFor(name);
+  if (entry?.isConfigured) return entry.isConfigured();
   const envVar = getProviderApiKeyEnvVar(name);
+  return envVar === null || Boolean(process.env[envVar]);
+}
+
+/**
+ * Return whether discovery should instantiate a provider to look for its `isAvailable()` probe.
+ * A built-in declares the probe in the manifest, so the others stay behind their `import()`; a
+ * registered class is already loaded and may carry the probe as an instance field, so it is always
+ * worth constructing.
+ * @param name - Registered provider name.
+ * @returns {boolean} Whether `create(name)` may yield an `AvailabilityProvider`.
+ */
+export function probesAvailability(name: string): boolean {
+  const registration = table().get(name);
+  if (registration === undefined) return false;
+  return registration.entry.availability === true || !registration.builtin;
+}
+
+export function getSearchFilterCapabilities(name: string): SearchFilterCapabilities | undefined {
+  const search = entryFor(name)?.search;
+  if (search?.filters === undefined) return undefined;
+  return {
+    filters: search.filters,
+    ...(search.categories === undefined ? {} : { categories: search.categories }),
+  };
+}
+
+/**
+ * Return the complete operation matrix a registered provider declares.
+ * Optional details stay absent for custom providers that only implement methods.
+ * @param name - Registered provider name.
+ * @returns {ProviderCapabilities | undefined} Capability metadata, or undefined when the provider is not registered.
+ */
+export function getProviderCapabilities(name: string): ProviderCapabilities | undefined {
+  const entry = entryFor(name);
+  if (!entry) return undefined;
+
+  return {
+    search: entry.search ? { supported: true, ...entry.search } : { supported: false },
+    searchImage: entry.searchImage
+      ? { supported: true, ...entry.searchImage }
+      : { supported: false },
+    read: entry.read ? { supported: true, ...entry.read } : { supported: false },
+  };
+}
+
+export function has(name: string): boolean {
+  return table().has(name);
+}
+
+function requireEntry(name: string): ProviderEntry {
+  const entry = entryFor(name);
+  if (!entry) throw new UnknownProviderError(name);
+  return entry;
+}
+
+function apiKeyEnvVarOf(entry: Readonly<ProviderEntry>): string | null {
+  return entry.apiKeyEnvVar === undefined ? providerApiKeyEnvVar(entry.name) : entry.apiKeyEnvVar;
+}
+
+/**
+ * Construct a provider from its entry, the key variable read from that same entry so a
+ * registration that replaces the name during the import cannot hand the class another one.
+ * @param entry - Registry entry the caller resolved.
+ * @param config - Provider configuration.
+ * @returns {Promise<Provider>} Configured provider instance.
+ */
+async function instantiate(
+  entry: Readonly<ProviderEntry>,
+  config?: Readonly<ProviderConfig>,
+): Promise<Provider> {
+  const envVar = apiKeyEnvVarOf(entry);
+  const ProviderClass = await entry.load();
   const apiKey = config?.apiKey || (envVar === null ? undefined : process.env[envVar]);
 
   return new ProviderClass({
@@ -72,127 +291,38 @@ export function create(name: string, config?: Readonly<ProviderConfig>): Provide
   });
 }
 
-export function createSearchProvider(
-  name: string,
-  config?: Readonly<ProviderConfig>,
-): Provider & SearchProvider {
-  const provider = create(name, config);
-  if (!isSearchProvider(provider)) {
-    throw new SearchNotSupportedError(name);
-  }
-  return provider;
-}
-
 /**
- * Create a provider that implements reverse image search.
- * @param name - Registered provider name.
- * @param config - Provider configuration.
- * @returns {Provider & ImageSearchProvider} A provider with reverse image search support.
+ * Describe a class the way a manifest entry would: the static metadata it declares plus the
+ * operations its prototype implements.
+ * @param ProviderClass - Registered provider class.
+ * @returns {ProviderEntry} Entry answering from the class without loading anything.
  */
-export function createImageSearchProvider(
-  name: string,
-  config?: Readonly<ProviderConfig>,
-): Provider & ImageSearchProvider {
-  const provider = create(name, config);
-  if (!isImageSearchProvider(provider)) {
-    throw new ImageSearchNotSupportedError(name);
-  }
-  return provider;
-}
-
-export function createReadProvider(
-  name: string,
-  config?: Readonly<ProviderConfig>,
-): Provider & ReadProvider {
-  const provider = create(name, config);
-  if (!isReadProvider(provider)) {
-    throw new ReadNotSupportedError(name);
-  }
-  return provider;
-}
-
-/**
- * Return every registered provider name in registration order.
- * @returns {string[]} Registered provider names.
- */
-export function providers(): string[] {
-  return Array.from(providerClasses.keys());
-}
-
-/**
- * Return registered providers that implement text search.
- * @returns {string[]} Search provider names.
- */
-export function searchProviders(): string[] {
-  return providerNamesWithCapability("search", isSearchProvider);
-}
-
-/**
- * Return registered providers that implement reverse image search.
- * @returns {string[]} Image search provider names.
- */
-export function searchImageProviders(): string[] {
-  return providerNamesWithCapability("searchImage", isImageSearchProvider);
-}
-
-/**
- * Return registered providers that implement URL reading.
- * @returns {string[]} Read provider names.
- */
-export function readProviders(): string[] {
-  return providerNamesWithCapability("read", isReadProvider);
-}
-
-/**
- * Return the API key variable declared by a provider or derived from its name.
- * @param {string} name - Registered or prospective provider name.
- * @returns {string | null} Environment variable name, or null for a keyless provider.
- */
-export function getProviderApiKeyEnvVar(name: string): string | null {
-  const declaredEnvVar = providerClasses.get(name)?.apiKeyEnvVar;
-  return declaredEnvVar === undefined ? providerApiKeyEnvVar(name) : declaredEnvVar;
-}
-
-/**
- * Check local credentials without a network request or token refresh.
- * @param name - Registered provider name.
- * @returns {boolean} Whether selection from the environment can use this provider.
- */
-export function isProviderConfigured(name: string): boolean {
-  const provider = providerClasses.get(name);
-  if (provider?.isConfigured) return provider.isConfigured();
-  const envVar = getProviderApiKeyEnvVar(name);
-  return envVar === null || Boolean(process.env[envVar]);
-}
-
-export function getSearchFilterCapabilities(name: string): SearchFilterCapabilities | undefined {
-  return providerClasses.get(name)?.searchFilterCapabilities;
-}
-
-/**
- * Return the complete operation matrix declared by and inferred from a registered provider.
- * Optional details stay absent for backward-compatible custom providers that only implement methods.
- * @param name - Registered provider name.
- * @returns {ProviderCapabilities | undefined} Capability metadata, or undefined when the provider is not registered.
- */
-export function getProviderCapabilities(name: string): ProviderCapabilities | undefined {
-  const ProviderClass = providerClasses.get(name);
-  if (!ProviderClass) return undefined;
-
+function entryFromClass(ProviderClass: ProviderConstructor): ProviderEntry {
   return {
-    search: searchCapabilityStatus(ProviderClass),
-    searchImage: imageSearchCapabilityStatus(ProviderClass),
-    read: readCapabilityStatus(ProviderClass),
+    name: ProviderClass.providerName,
+    ...(ProviderClass.apiKeyEnvVar === undefined
+      ? {}
+      : { apiKeyEnvVar: ProviderClass.apiKeyEnvVar }),
+    ...(ProviderClass.isConfigured
+      ? { isConfigured: ProviderClass.isConfigured.bind(ProviderClass) }
+      : {}),
+    ...(isAvailabilityProvider(ProviderClass.prototype) ? { availability: true } : {}),
+    ...(supportsCapability(ProviderClass, "search", isSearchProvider)
+      ? { search: searchDetails(ProviderClass) }
+      : {}),
+    ...(supportsCapability(ProviderClass, "searchImage", isImageSearchProvider)
+      ? { searchImage: { ...ProviderClass.capabilityDetails?.searchImage } }
+      : {}),
+    ...(supportsCapability(ProviderClass, "read", isReadProvider)
+      ? { read: { ...ProviderClass.capabilityDetails?.read } }
+      : {}),
+    load: () => Promise.resolve(ProviderClass),
   };
 }
 
-function searchCapabilityStatus(ProviderClass: ProviderConstructor): ProviderSearchCapabilities {
-  if (!providerSupportsCapability(ProviderClass, "search", isSearchProvider)) {
-    return { supported: false };
-  }
+function searchDetails(ProviderClass: ProviderConstructor): NonNullable<ProviderEntry["search"]> {
   const details = ProviderClass.capabilityDetails?.search;
   return {
-    supported: true,
     ...ProviderClass.searchFilterCapabilities,
     ...(details
       ? {
@@ -205,38 +335,13 @@ function searchCapabilityStatus(ProviderClass: ProviderConstructor): ProviderSea
   };
 }
 
-function imageSearchCapabilityStatus(
-  ProviderClass: ProviderConstructor,
-): ProviderImageSearchCapabilities {
-  if (!providerSupportsCapability(ProviderClass, "searchImage", isImageSearchProvider)) {
-    return { supported: false };
-  }
-  return {
-    supported: true,
-    ...ProviderClass.capabilityDetails?.searchImage,
-  };
+function providerNamesWithCapability(capability: ProviderCapability): string[] {
+  return Array.from(table().values())
+    .filter(({ entry }) => entry[capability] !== undefined)
+    .map(({ entry }) => entry.name);
 }
 
-function readCapabilityStatus(ProviderClass: ProviderConstructor): ProviderReadCapabilities {
-  if (!providerSupportsCapability(ProviderClass, "read", isReadProvider)) {
-    return { supported: false };
-  }
-  return {
-    supported: true,
-    ...ProviderClass.capabilityDetails?.read,
-  };
-}
-
-function providerNamesWithCapability(
-  capability: ProviderCapability,
-  predicate: (provider: object) => boolean,
-): string[] {
-  return Array.from(providerClasses.entries())
-    .filter(([, ProviderClass]) => providerSupportsCapability(ProviderClass, capability, predicate))
-    .map(([name]) => name);
-}
-
-function providerSupportsCapability(
+function supportsCapability(
   ProviderClass: ProviderConstructor,
   capability: ProviderCapability,
   predicate: (provider: object) => boolean,
@@ -249,19 +354,17 @@ function providerSupportsCapability(
 function removeRegistration(name: string, registration: Readonly<ProviderRegistration>): void {
   if (removedRegistrations.has(registration)) return;
   removedRegistrations.add(registration);
-  if (providerRegistrations.get(name) !== registration) return;
+  if (table().get(name) !== registration) return;
 
   let previous = registration.previous;
   while (previous !== undefined && removedRegistrations.has(previous)) {
     previous = previous.previous;
   }
   if (previous === undefined) {
-    providerRegistrations.delete(name);
-    providerClasses.delete(name);
+    table().delete(name);
     return;
   }
-  providerRegistrations.set(name, previous);
-  providerClasses.set(name, previous.provider);
+  table().set(name, previous);
 }
 
 function assertProviderName(name: string): void {
@@ -270,8 +373,4 @@ function assertProviderName(name: string): void {
       'providerName must use lowercase ASCII letters, digits, and single internal hyphens, and cannot be "auto" or "all"',
     );
   }
-}
-
-export function has(name: string): boolean {
-  return providerClasses.has(name);
 }

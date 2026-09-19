@@ -4,7 +4,6 @@ import {
   resolveDefaultProvider,
   listProviders,
 } from "../../src/core/resolve.ts";
-import "../../src/providers/index.ts";
 
 const envKeys = [
   "EXA_API_KEY",
@@ -266,7 +265,7 @@ describe("resolve", () => {
           filters: ["includeDomains", "excludeDomains", "sources", "categories"],
           contentOptions: ["highlights"],
           resultLimit: { default: 10, maximum: 100 },
-          resultFields: ["image", "text", "metadata"],
+          resultFields: ["publishedDate", "image", "text", "metadata"],
         },
         searchImage: { supported: false },
         read: {
