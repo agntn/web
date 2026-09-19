@@ -33,7 +33,7 @@ const advertisedSearchProviderNames = [...builtinProviders, "all"] as const;
 const strictObject = <T extends TProperties>(properties: T) =>
   Type.Object(properties, { additionalProperties: false });
 const unknownRecordSchema = Type.Record(Type.String(), Type.Unknown());
-const searchFilterSchema = Type.Union(searchFilterNames.map((name) => Type.Literal(name)));
+const searchFilterSchema = Type.Enum(searchFilterNames);
 const namedSearchProviderSchema = Type.String({ pattern: "^(?!all$).+" });
 const searchResultProperties = {
   url: Type.String(),
@@ -452,7 +452,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           }),
         ),
         format: Type.Optional(
-          Type.Union([Type.Literal("markdown"), Type.Literal("text"), Type.Literal("html")], {
+          Type.Enum(["markdown", "text", "html"], {
             description: "Preferred content format.",
           }),
         ),
