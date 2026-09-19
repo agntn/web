@@ -1,5 +1,36 @@
 # Changelog
 
+## v0.6.0
+
+[compare changes](https://github.com/agntn/web/compare/v0.5.5...v0.6.0)
+
+### 🚀 Enhancements
+
+- **tavily:** Forward date and topic filters ([#159](https://github.com/agntn/web/pull/159))
+- **brave:** Freshness takes the date bounds ([#161](https://github.com/agntn/web/pull/161))
+
+### 🩹 Fixes
+
+- **cli:** --help boots every provider and the SDK ([#164](https://github.com/agntn/web/pull/164))
+
+### 💅 Refactors
+
+- ⚠️  Create() imports the provider it names ([#166](https://github.com/agntn/web/pull/166))
+
+### 🏡 Chore
+
+- Add `pi` image ([75dcaf1](https://github.com/agntn/web/commit/75dcaf1))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Create() imports the provider it names ([#166](https://github.com/agntn/web/pull/166))
+
+### ❤️ Contributors
+
+- Aei ([@aeitwoen](https://github.com/aeitwoen))
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.5.5
 
 [compare changes](https://github.com/agntn/web/compare/v0.5.4...v0.5.5)
