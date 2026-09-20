@@ -1,5 +1,35 @@
 # Changelog
 
+## v0.7.0
+
+[compare changes](https://github.com/agntn/web/compare/v0.6.0...v0.7.0)
+
+### 🔥 Performance
+
+- **mcp:** Compact repeated schema choices ([#169](https://github.com/agntn/web/pull/169))
+
+### 🩹 Fixes
+
+- **search:** Favicons weigh a third of an answer ([#168](https://github.com/agntn/web/pull/168))
+
+### 💅 Refactors
+
+- ⚠️  Update Pi and OMP integrations ([#172](https://github.com/agntn/web/pull/172))
+
+### 🏡 Chore
+
+- ⚠️  Move runtime baseline to Node 24 ([#171](https://github.com/agntn/web/pull/171))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Update Pi and OMP integrations ([#172](https://github.com/agntn/web/pull/172))
+- ⚠️  Move runtime baseline to Node 24 ([#171](https://github.com/agntn/web/pull/171))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.6.0
 
 [compare changes](https://github.com/agntn/web/compare/v0.5.5...v0.6.0)
