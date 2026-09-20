@@ -177,12 +177,18 @@ describe("Pi extension", () => {
       if (!search) throw new Error("Missing search tool");
       const ctx = {
         modelRegistry: {
-          authStorage: {
-            get: () => ({ type: "oauth", accountId: "native-test-account" }),
-            getApiKey: async () => {
-              resolutions += 1;
-              return "native-test-token";
-            },
+          getProviderAuthStatus: () => ({ configured: true }),
+          getProviderAuth: async (provider: string) => {
+            expect(provider).toBe("openai-codex");
+            resolutions += 1;
+            const claims = {
+              "https://api.openai.com/auth": { chatgpt_account_id: "native-test-account" },
+            };
+            return {
+              auth: {
+                apiKey: `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`,
+              },
+            };
           },
         },
         sessionManager: { getSessionId: () => "host-session" },

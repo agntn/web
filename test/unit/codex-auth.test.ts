@@ -191,6 +191,37 @@ describe("native Codex login discovery", () => {
 });
 
 describe("native host auth scope", () => {
+  it("accepts the current Pi ModelRegistry without exposing its credential store", async () => {
+    const { ModelRegistry, ModelRuntime } = await import("@earendil-works/pi-coding-agent");
+    const authPath = join(home, "auth.json");
+    const original = writeAuth(authPath, {
+      "openai-codex": {
+        type: "oauth",
+        access: token("pi-sdk"),
+        refresh: "unused-refresh",
+        expires: Date.now() + 3_600_000,
+      },
+    });
+    const runtime = await ModelRuntime.create({
+      authPath,
+      modelsPath: null,
+      modelsStorePath: join(home, "models-store.json"),
+      allowModelNetwork: false,
+    });
+    const registry = new ModelRegistry(runtime);
+    expect(registry.getProviderAuthStatus("openai-codex").configured).toBe(true);
+    expect("authStorage" in registry).toBe(false);
+    fetchMock.mockClear();
+    await withCodexHostAuth(registry, async () => {
+      expect(isProviderConfigured("openai-codex")).toBe(true);
+      await searchProviderDetailed("openai-codex", "query");
+    });
+    expect(new Request(...fetchMock.mock.calls[0]).headers.get("chatgpt-account-id")).toBe(
+      "pi-sdk",
+    );
+    expect(readFileSync(authPath, "utf8")).toBe(original);
+  });
+
   it("lets OMP own refresh and passes the calling session to its broker", async () => {
     const refreshes: boolean[] = [];
     const sessions: Array<string | undefined> = [];
@@ -230,6 +261,69 @@ describe("native host auth scope", () => {
     expect(new Request(...fetchMock.mock.calls[0]).headers.get("chatgpt-account-id")).toBe(
       "pi-host",
     );
+  });
+
+  it("resolves current Pi auth lazily and again after a rejected bearer", async () => {
+    const getProviderAuth = vi.fn(async () => ({ auth: { apiKey: token("pi-runtime") } }));
+    const host: CodexHostAuth = {
+      getProviderAuthStatus: (provider) => ({ configured: provider === "openai-codex" }),
+      getProviderAuth,
+    };
+    fetchMock.mockResolvedValueOnce(new Response("expired", { status: 401 }));
+    await withCodexHostAuth(host, async () => {
+      expect(isProviderConfigured("openai-codex")).toBe(true);
+      expect(getProviderAuth).not.toHaveBeenCalled();
+      await searchProviderDetailed("openai-codex", "query");
+    });
+    expect(getProviderAuth.mock.calls).toHaveLength(2);
+    expect(new Request(...fetchMock.mock.calls[1]).headers.get("chatgpt-account-id")).toBe(
+      "pi-runtime",
+    );
+    expect(isProviderConfigured("openai-codex")).toBe(false);
+  });
+
+  it("does not resolve unconfigured Pi auth during discovery", () => {
+    const getProviderAuth = vi.fn();
+    withCodexHostAuth(
+      { getProviderAuthStatus: () => ({ configured: false }), getProviderAuth },
+      () => {
+        expect(isProviderConfigured("openai-codex")).toBe(false);
+      },
+    );
+    expect(getProviderAuth).not.toHaveBeenCalled();
+  });
+
+  it.each([undefined, { auth: {} }, { auth: { apiKey: "not-a-codex-token" } }])(
+    "rejects missing or unusable resolved Pi auth: %j",
+    async (resolved) => {
+      await expect(
+        withCodexHostAuth(
+          {
+            getProviderAuthStatus: () => ({ configured: true }),
+            getProviderAuth: async () => resolved,
+          },
+          () => searchProviderDetailed("openai-codex", "query"),
+        ),
+      ).rejects.toThrow("Codex credential provider failed; check your login or refresh handler");
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it("stops before HTTP when cancelled during Pi auth resolution", async () => {
+    const controller = new AbortController();
+    await expect(
+      withCodexHostAuth(
+        {
+          getProviderAuthStatus: () => ({ configured: true }),
+          getProviderAuth: async () => {
+            controller.abort();
+            return { auth: { apiKey: token("cancelled") } };
+          },
+        },
+        () => searchProviderDetailed("openai-codex", "query", { signal: controller.signal }),
+      ),
+    ).rejects.toThrow();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("keeps concurrent hosts isolated", async () => {
