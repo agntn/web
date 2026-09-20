@@ -31,7 +31,7 @@ Docs and a live explorer: [web.agntn.dev](https://web.agntn.dev).
 pnpm add @agntn/web
 ```
 
-Node.js 22 or newer. The AI SDK tools on `@agntn/web/ai` want `ai` and `zod` next to them, the main entry never touches either:
+Node.js 24 or newer. The AI SDK tools on `@agntn/web/ai` want `ai` and `zod` next to them, the main entry never touches either:
 
 ```bash
 pnpm add ai zod
