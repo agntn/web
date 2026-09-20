@@ -20,6 +20,11 @@ export interface ResolvedCodexCredentials {
 
 /** Minimal native Pi/OMP auth interface; refresh tokens never cross it. */
 export interface CodexHostAuth {
+  readonly getProviderAuthStatus?: (provider: string) => { readonly configured: boolean };
+  /** Pi resolves current auth but exposes no forced renewal through this API. */
+  readonly getProviderAuth?: (
+    provider: string,
+  ) => Promise<{ readonly auth: { readonly apiKey?: string } } | undefined>;
   readonly hasOAuth?: (provider: string) => boolean;
   readonly get?: (provider: string) => unknown;
   readonly reload?: () => void;
@@ -33,7 +38,7 @@ export interface CodexHostAuth {
 
 /**
  * Reuse the invoking Pi/OMP login for this operation without global credential registration.
- * @param host - Native auth storage from the extension context.
+ * @param host - Pi model registry or OMP auth storage from the extension context.
  * @param run - Search or discovery operation.
  * @param sessionId - OMP account affinity for this session.
  * @returns {T} The operation's result, with scoped host auth.
@@ -43,7 +48,7 @@ export function withCodexHostAuth<T>(
   run: () => T,
   sessionId?: string,
 ): T {
-  if (!host || !hasHostOAuth(host)) return run();
+  if (!host || !hasHostAuth(host)) return run();
   return hostCredentials.run(async ({ refresh, signal }) => {
     signal.throwIfAborted();
     if (host.getOAuthAccess) {
@@ -54,15 +59,29 @@ export function withCodexHostAuth<T>(
       if (!credentials) throw missingLogin();
       return credentials;
     }
-    host.reload?.();
-    const accessToken = await host.getApiKey?.("openai-codex");
-    const credential = record(host.get?.("openai-codex"));
-    if (!accessToken) throw missingLogin();
-    return { accessToken, accountId: stringValue(credential?.accountId) };
+    const credentials = await resolvePiHostCredentials(host);
+    signal.throwIfAborted();
+    return credentials;
   }, run);
 }
 
-function hasHostOAuth(host: CodexHostAuth): boolean {
+async function resolvePiHostCredentials(host: CodexHostAuth): Promise<CodexCredentials> {
+  if (host.getProviderAuth) {
+    const resolved = await host.getProviderAuth("openai-codex");
+    const accessToken = resolved?.auth.apiKey;
+    if (!accessToken) throw missingLogin();
+    return { accessToken };
+  }
+  host.reload?.();
+  const accessToken = await host.getApiKey?.("openai-codex");
+  const credential = record(host.get?.("openai-codex"));
+  if (!accessToken) throw missingLogin();
+  return { accessToken, accountId: stringValue(credential?.accountId) };
+}
+
+function hasHostAuth(host: CodexHostAuth): boolean {
+  if (host.getProviderAuth && host.getProviderAuthStatus)
+    return host.getProviderAuthStatus("openai-codex").configured;
   if (host.hasOAuth) return host.hasOAuth("openai-codex");
   return record(host.get?.("openai-codex"))?.type === "oauth";
 }

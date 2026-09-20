@@ -353,7 +353,7 @@ export default function webExtension(pi: ExtensionAPI) {
     ): Promise<AgentToolResult<SearchDetails>> {
       const web = await loadWeb();
       return web.withCodexHostAuth(
-        ctx?.modelRegistry?.authStorage,
+        ctx?.modelRegistry,
         async () => {
           const providerName = normalizeSearchProviderInput(params.provider, web.searchProviders());
           const searchOptions: SearchPageOptions = stripUndefined({
@@ -665,7 +665,7 @@ export default function webExtension(pi: ExtensionAPI) {
     > {
       const web = await loadWeb();
       return web.withCodexHostAuth(
-        ctx?.modelRegistry?.authStorage,
+        ctx?.modelRegistry,
         async () => {
           const statuses = await web.listProvidersAsync({ signal });
           const lines = statuses.map((s) => formatProviderStatus(s));
@@ -701,7 +701,7 @@ export default function webExtension(pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       const web = await loadWeb();
       await web.withCodexHostAuth(
-        ctx.modelRegistry?.authStorage,
+        ctx.modelRegistry,
         async () => {
           if (ctx.hasUI) await runWebCommand(args, ctx.ui);
         },
@@ -715,7 +715,7 @@ export default function webExtension(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const web = await loadWeb();
       const statuses = await web.withCodexHostAuth(
-        ctx.modelRegistry?.authStorage,
+        ctx.modelRegistry,
         () => web.listProvidersAsync(),
         ctx.sessionManager?.getSessionId(),
       );

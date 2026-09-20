@@ -258,7 +258,12 @@ describe("OpenAI Codex search", () => {
       return new Response("sensitive diagnostic", { status: 401 });
     });
     const provider = await createSearchProvider("openai-codex", {
-      codex: { credentials: () => credentials },
+      codex: {
+        credentials: ({ refresh }) => ({
+          ...credentials,
+          accessToken: refresh ? "rotated-token" : credentials.accessToken,
+        }),
+      },
     });
     await expect(provider.search("query")).rejects.toBeInstanceOf(AuthError);
     expect(calls).toBe(2);
