@@ -170,8 +170,12 @@ describe("Pi extension", () => {
     vi.stubEnv("OPENAI_CODEX_AUTH_SOURCE", "auto");
     vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", "");
     vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", "");
-    let resolutions = 0;
-    vi.stubGlobal("fetch", async () => sse(completedEvents()));
+    const claims = {
+      "https://api.openai.com/auth": { chatgpt_account_id: "native-test-account" },
+    };
+    const accessToken = `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`;
+    const fetchMock = vi.fn<typeof fetch>(async () => sse(completedEvents()));
+    vi.stubGlobal("fetch", fetchMock);
     try {
       const search = captureTools().get("web_search");
       if (!search) throw new Error("Missing search tool");
@@ -180,15 +184,7 @@ describe("Pi extension", () => {
           getProviderAuthStatus: () => ({ configured: true }),
           getProviderAuth: async (provider: string) => {
             expect(provider).toBe("openai-codex");
-            resolutions += 1;
-            const claims = {
-              "https://api.openai.com/auth": { chatgpt_account_id: "native-test-account" },
-            };
-            return {
-              auth: {
-                apiKey: `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.signature`,
-              },
-            };
+            return { auth: { apiKey: accessToken } };
           },
         },
         sessionManager: { getSessionId: () => "host-session" },
@@ -200,7 +196,9 @@ describe("Pi extension", () => {
         undefined,
         ctx,
       ]);
-      expect(resolutions).toBe(1);
+      const request = new Request(...fetchMock.mock.calls[0]);
+      expect(request.headers.get("authorization")).toBe(`Bearer ${accessToken}`);
+      expect(request.headers.get("chatgpt-account-id")).toBe("native-test-account");
       expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
     } finally {
       vi.unstubAllGlobals();

@@ -21,6 +21,7 @@ export interface ResolvedCodexCredentials {
 /** Minimal native Pi/OMP auth interface; refresh tokens never cross it. */
 export interface CodexHostAuth {
   readonly getProviderAuthStatus?: (provider: string) => { readonly configured: boolean };
+  /** Pi resolves current auth but exposes no forced renewal through this API. */
   readonly getProviderAuth?: (
     provider: string,
   ) => Promise<{ readonly auth: { readonly apiKey?: string } } | undefined>;

@@ -149,6 +149,15 @@ export class OpenAICodexProvider extends Provider {
         signal.throwIfAborted();
         if (!this.canRefresh(error)) throw error;
         const refreshed = await this.resolveCredentials(true, signal);
+        if (
+          refreshed.accessToken === credentials.accessToken &&
+          refreshed.accountId === credentials.accountId
+        ) {
+          throw new AuthError(
+            "Codex login was rejected and the credential resolver returned the same bearer and account. Sign in again with the owning client.",
+            "openai-codex",
+          );
+        }
         return await this.runSearch(query, refreshed, maxResults, summary, signal);
       }
     } catch (error) {

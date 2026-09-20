@@ -191,36 +191,45 @@ describe("native Codex login discovery", () => {
 });
 
 describe("native host auth scope", () => {
-  it("accepts the current Pi ModelRegistry without exposing its credential store", async () => {
-    const { ModelRegistry, ModelRuntime } = await import("@earendil-works/pi-coding-agent");
-    const authPath = join(home, "auth.json");
-    const original = writeAuth(authPath, {
-      "openai-codex": {
-        type: "oauth",
-        access: token("pi-sdk"),
-        refresh: "unused-refresh",
-        expires: Date.now() + 3_600_000,
-      },
-    });
-    const runtime = await ModelRuntime.create({
-      authPath,
-      modelsPath: null,
-      modelsStorePath: join(home, "models-store.json"),
-      allowModelNetwork: false,
-    });
-    const registry = new ModelRegistry(runtime);
-    expect(registry.getProviderAuthStatus("openai-codex").configured).toBe(true);
-    expect("authStorage" in registry).toBe(false);
-    fetchMock.mockClear();
-    await withCodexHostAuth(registry, async () => {
-      expect(isProviderConfigured("openai-codex")).toBe(true);
-      await searchProviderDetailed("openai-codex", "query");
-    });
-    expect(new Request(...fetchMock.mock.calls[0]).headers.get("chatgpt-account-id")).toBe(
-      "pi-sdk",
-    );
-    expect(readFileSync(authPath, "utf8")).toBe(original);
-  });
+  it.each(["accepted", "revoked"])(
+    "handles a %s bearer from the real Pi ModelRegistry",
+    async (state) => {
+      const { ModelRegistry, ModelRuntime } = await import("@earendil-works/pi-coding-agent");
+      const authPath = join(home, "auth.json");
+      const original = writeAuth(authPath, {
+        "openai-codex": {
+          type: "oauth",
+          access: token("pi-sdk"),
+          refresh: "unused-refresh",
+          expires: Date.now() + 3_600_000,
+        },
+      });
+      const runtime = await ModelRuntime.create({
+        authPath,
+        modelsPath: null,
+        modelsStorePath: join(home, "models-store.json"),
+        allowModelNetwork: false,
+      });
+      const registry = new ModelRegistry(runtime);
+      expect(registry.getProviderAuthStatus("openai-codex").configured).toBe(true);
+      expect("authStorage" in registry).toBe(false);
+      fetchMock.mockClear();
+      if (state === "revoked")
+        fetchMock.mockImplementation(async () => new Response("revoked", { status: 401 }));
+      const search = withCodexHostAuth(registry, async () => {
+        expect(isProviderConfigured("openai-codex")).toBe(true);
+        return searchProviderDetailed("openai-codex", "query");
+      });
+      if (state === "revoked")
+        await expect(search).rejects.toThrow("Sign in again with the owning client");
+      else await expect(search).resolves.toHaveProperty("results.length", 2);
+      expect(fetchMock.mock.calls).toHaveLength(1);
+      expect(new Request(...fetchMock.mock.calls[0]).headers.get("chatgpt-account-id")).toBe(
+        "pi-sdk",
+      );
+      expect(readFileSync(authPath, "utf8")).toBe(original);
+    },
+  );
 
   it("lets OMP own refresh and passes the calling session to its broker", async () => {
     const refreshes: boolean[] = [];
@@ -230,7 +239,7 @@ describe("native host auth scope", () => {
       getOAuthAccess: async (_provider, session, options) => {
         refreshes.push(options?.forceRefresh === true);
         sessions.push(session);
-        return { accessToken: token("omp-host") };
+        return { accessToken: `${token("omp-host")}${options?.forceRefresh ? "-rotated" : ""}` };
       },
     };
     fetchMock.mockResolvedValueOnce(new Response("expired", { status: 401 }));
@@ -264,7 +273,12 @@ describe("native host auth scope", () => {
   });
 
   it("resolves current Pi auth lazily and again after a rejected bearer", async () => {
-    const getProviderAuth = vi.fn(async () => ({ auth: { apiKey: token("pi-runtime") } }));
+    const initialToken = token("pi-runtime");
+    const rotatedToken = `${initialToken}-rotated`;
+    const getProviderAuth = vi
+      .fn()
+      .mockResolvedValueOnce({ auth: { apiKey: initialToken } })
+      .mockResolvedValueOnce({ auth: { apiKey: rotatedToken } });
     const host: CodexHostAuth = {
       getProviderAuthStatus: (provider) => ({ configured: provider === "openai-codex" }),
       getProviderAuth,
@@ -275,10 +289,15 @@ describe("native host auth scope", () => {
       expect(getProviderAuth).not.toHaveBeenCalled();
       await searchProviderDetailed("openai-codex", "query");
     });
-    expect(getProviderAuth.mock.calls).toHaveLength(2);
-    expect(new Request(...fetchMock.mock.calls[1]).headers.get("chatgpt-account-id")).toBe(
+    const requests = fetchMock.mock.calls.map((args) => new Request(...args));
+    expect(requests.map((request) => request.headers.get("authorization"))).toEqual([
+      `Bearer ${initialToken}`,
+      `Bearer ${rotatedToken}`,
+    ]);
+    expect(requests.map((request) => request.headers.get("chatgpt-account-id"))).toEqual([
       "pi-runtime",
-    );
+      "pi-runtime",
+    ]);
     expect(isProviderConfigured("openai-codex")).toBe(false);
   });
 
