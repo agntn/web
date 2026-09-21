@@ -245,7 +245,7 @@ function fetchBody(url: string, options?: Readonly<ReadOptions>): Record<string,
   return {
     urls: [url],
     format: normalizeReadFormat(options?.format),
-    links: true,
+    links: options?.links !== false,
     image_links: true,
     ...cacheParams(options?.noCache),
     ...timeoutParams(options?.timeout),

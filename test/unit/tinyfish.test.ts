@@ -289,6 +289,17 @@ describe("tinyfish provider", () => {
     expect(result.html).toBe("<main>Example</main>");
   });
 
+  it("skips link extraction when the caller turns the list off", async () => {
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+
+    await provider.read("https://example.com/article", { links: false });
+
+    expect(mockPostJSON.mock.calls[0]?.[1]).toMatchObject({
+      links: false,
+      image_links: true,
+    });
+  });
+
   it("keeps direct library timeouts inside the Fetch API range", async () => {
     const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
 
