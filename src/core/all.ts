@@ -19,6 +19,7 @@ import {
   EmptyQueryError,
   InvalidSearchContinuationError,
   validateDateFilters,
+  validateMaxResults,
 } from "./errors.ts";
 import {
   isFallbackEligible,
@@ -206,6 +207,7 @@ export async function searchProviderDetailed(
 export async function prepareSearchWithFallback(
   options?: Readonly<Omit<SearchPageOptions, "continuation">>,
 ): Promise<PreparedSearchWithFallback> {
+  validateMaxResults(options?.maxResults);
   validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
   const effectiveOptions = withExecutionBudget(options);
   throwIfAborted(effectiveOptions.signal);
@@ -250,6 +252,7 @@ function validateSearchInput(query: string, options?: Readonly<SearchPageOptions
   if (!query.trim()) {
     throw new EmptyQueryError();
   }
+  validateMaxResults(options?.maxResults);
   validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
 }
 

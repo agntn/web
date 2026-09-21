@@ -41,6 +41,7 @@ export interface ExecutionOptions {
 }
 
 export interface SearchOptions extends ExecutionOptions {
+  /** Positive integer result limit. */
   maxResults?: number;
   highlights?: boolean;
   summary?: boolean;

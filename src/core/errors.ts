@@ -2,6 +2,12 @@ import { stripVTControlCharacters } from "node:util";
 
 const ERROR_MESSAGE_UNSAFE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
 
+export function validateMaxResults(maxResults: number | undefined): void {
+  if (maxResults !== undefined && (!Number.isInteger(maxResults) || maxResults < 1)) {
+    throw new TypeError("maxResults must be a positive integer");
+  }
+}
+
 /** Base error for all web operations. */
 export class WebError extends Error {
   constructor(message: string, options?: Readonly<ErrorOptions>) {
