@@ -1,4 +1,4 @@
-import { EmptyQueryError, EmptyUrlError } from "./errors.ts";
+import { EmptyQueryError, EmptyUrlError, validateMaxResults } from "./errors.ts";
 import {
   prepareSearchWithFallback,
   searchAllDetailed,
@@ -84,6 +84,7 @@ export async function searchBatch(
   options?: Readonly<SearchBatchOptions>,
 ): Promise<readonly SearchBatchItem[]> {
   validateBatch(queries, "query", EmptyQueryError);
+  validateMaxResults(options?.maxResults);
 
   const { provider: requestedProvider, continuation, ...searchOptions } = options ?? {};
   if (continuation !== undefined) {

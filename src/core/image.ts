@@ -3,6 +3,7 @@ import {
   EmptyImageUrlError,
   ImageSearchNotSupportedError,
   InvalidImageUrlError,
+  validateMaxResults,
 } from "./errors.ts";
 import { createImageSearchProvider, has, searchImageProviders } from "./registry.ts";
 import { providerRequestOptions, throwIfAborted, withExecutionBudget } from "./execution.ts";
@@ -36,7 +37,7 @@ export async function searchByImage(
   assertImageUrl(trimmedUrl);
 
   const { provider = DEFAULT_IMAGE_SEARCH_PROVIDER, ...searchOptions } = options ?? {};
-  assertMaxResults(searchOptions.maxResults);
+  validateMaxResults(searchOptions.maxResults);
   const effectiveSearchOptions = withExecutionBudget(searchOptions);
   throwIfAborted(effectiveSearchOptions.signal);
   const providerName = provider.trim();
@@ -59,12 +60,6 @@ export async function searchByImage(
   }
   throwIfAborted(effectiveSearchOptions.signal);
   return results;
-}
-
-function assertMaxResults(maxResults: number | undefined): void {
-  if (maxResults !== undefined && (!Number.isInteger(maxResults) || maxResults < 1)) {
-    throw new TypeError("maxResults must be a positive integer");
-  }
 }
 
 function assertImageUrl(url: string): void {
