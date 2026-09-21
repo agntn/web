@@ -26,7 +26,10 @@ type OmpTool = {
 const theme = {} as unknown as Theme;
 const customProviderCleanups: Array<() => void> = [];
 
-function captureOmpExtension(): { readonly label: string; readonly tools: Map<string, OmpTool> } {
+async function initializeOmpExtension(): Promise<{
+  readonly label: string;
+  readonly tools: Map<string, OmpTool>;
+}> {
   let label = "";
   const tools = new Map<string, OmpTool>();
   const host = {
@@ -40,8 +43,17 @@ function captureOmpExtension(): { readonly label: string; readonly tools: Map<st
     },
   } as unknown as ExtensionAPI;
 
-  webOmpExtension(host);
+  await webOmpExtension(host);
   return { label, tools };
+}
+
+const initialOmpExtension = await initializeOmpExtension();
+
+function captureOmpExtension(): {
+  readonly label: string;
+  readonly tools: Map<string, OmpTool>;
+} {
+  return initialOmpExtension;
 }
 
 function requiredTool(tools: Readonly<{ get: (name: string) => unknown }>, name: string): OmpTool {

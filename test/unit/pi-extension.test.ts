@@ -29,6 +29,7 @@ type CapturedTool = Readonly<
   Pick<ToolDefinition, "name" | "label" | "parameters" | "execute" | "renderCall" | "renderResult">
 >;
 type CapturedCommand = Parameters<ExtensionAPI["registerCommand"]>[1];
+const initialExtension = await initializeExtension();
 
 describe("Pi extension", () => {
   it("loads and types against current source instead of a stale build", () => {
@@ -1227,14 +1228,13 @@ describe("Pi extension", () => {
     }
   });
 });
-
-function captureExtension(): {
+async function initializeExtension(): Promise<{
   readonly tools: Map<string, CapturedTool>;
   readonly commands: Map<string, CapturedCommand>;
-} {
+}> {
   const tools = new Map<string, CapturedTool>();
   const commands = new Map<string, CapturedCommand>();
-  Reflect.apply(webExtension, undefined, [
+  await Reflect.apply(webExtension, undefined, [
     {
       registerTool(tool: CapturedTool) {
         tools.set(tool.name, tool);
@@ -1245,6 +1245,13 @@ function captureExtension(): {
     },
   ]);
   return { tools, commands };
+}
+
+function captureExtension(): {
+  readonly tools: Map<string, CapturedTool>;
+  readonly commands: Map<string, CapturedCommand>;
+} {
+  return initialExtension;
 }
 
 function captureTools(): Map<string, CapturedTool> {

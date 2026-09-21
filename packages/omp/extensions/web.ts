@@ -4,15 +4,14 @@ import { fileURLToPath } from "node:url";
 import type { AgentToolResult, ExtensionAPI } from "@oh-my-pi/pi-coding-agent";
 import type { ReadOptions, SearchPageOptions } from "../../../src/index.ts";
 
-import {
-  createViewportText,
-  type RenderedToolResult,
-  type RenderOptions,
-  renderWebToolCall,
-  renderWebToolResult,
-  type StatusTheme,
-  type WebToolName,
+import type {
+  RenderedToolResult,
+  RenderOptions,
+  StatusTheme,
+  WebToolName,
 } from "../../../src/tui.ts";
+
+type TuiModule = typeof import("../../../src/tui.ts");
 
 type WebModule = typeof import("../../../src/index.ts");
 
@@ -45,12 +44,14 @@ function toolResult<T>(details: T): AgentToolResult<T> {
   };
 }
 
-export default function webOmpExtension(pi: ExtensionAPI): void {
+export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
+  // Defer terminal rendering code until extension registration.
+  const tui = (await import("../../../src/tui.ts")) as TuiModule;
   const { Type } = pi.typebox;
   const renderers = (name: WebToolName) => ({
     renderCall(args: unknown, options: Readonly<RenderOptions>, theme: Readonly<StatusTheme>) {
-      return createViewportText((width) =>
-        renderWebToolCall(name, args, { ...options, viewportWidth: width }, theme),
+      return tui.createViewportText((width) =>
+        tui.renderWebToolCall(name, args, { ...options, viewportWidth: width }, theme),
       );
     },
     renderResult(
@@ -58,8 +59,8 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
       options: Readonly<RenderOptions>,
       theme: Readonly<StatusTheme>,
     ) {
-      return createViewportText((width) =>
-        renderWebToolResult(
+      return tui.createViewportText((width) =>
+        tui.renderWebToolResult(
           name,
           result,
           result.isError === true,
@@ -69,7 +70,6 @@ export default function webOmpExtension(pi: ExtensionAPI): void {
       );
     },
   });
-
   pi.setLabel("Web");
 
   const searchParameters = Type.Object({
