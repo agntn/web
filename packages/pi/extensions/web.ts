@@ -2,17 +2,11 @@ import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import type { AgentToolResult, ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
-import {
-  createViewportText,
-  formatProviderCapabilities,
-  type RenderedToolResult,
-  type RenderOptions,
-  renderWebToolCall,
-  renderWebToolResult,
-  sanitizeTerminalText,
-  type StatusTheme,
-  type WebToolName,
+import type {
+  RenderedToolResult,
+  RenderOptions,
+  StatusTheme,
+  WebToolName,
 } from "../../../src/tui.ts";
 import type {
   ImageSearchResult,
@@ -33,6 +27,14 @@ import type {
   SearchProviderPagination,
   SearchResult,
 } from "../../../src/index.ts";
+
+type TuiModule = typeof import("../../../src/tui.ts");
+let tuiModule: TuiModule | undefined;
+
+function getTuiModule(): TuiModule {
+  if (!tuiModule) throw new Error("Web extension renderers are not initialized");
+  return tuiModule;
+}
 
 type SearchSingleDetails = {
   readonly mode: "single";
@@ -150,160 +152,11 @@ const MODEL_RESULT_MAX_CHARACTERS = 4_000;
 const MODEL_FIELD_MAX_CHARACTERS = 300;
 const MODEL_TEXT_MAX_CHARACTERS = 900;
 
-const searchParameters = Type.Object({
-  query: Type.Union(
-    [Type.String(), Type.Array(Type.String(), { minItems: 1, maxItems: MAX_BATCH_ITEMS_HARD_CAP })],
-    {
-      description: "Search query, or a batch of search queries.",
-    },
-  ),
-  provider: Type.Optional(Type.String({ description: PROVIDER_HINT })),
-  maxResults: Type.Optional(
-    Type.Integer({
-      description: `Maximum results to return. Defaults to ${DEFAULT_MAX_RESULTS}.`,
-      minimum: 1,
-      maximum: MAX_RESULTS_HARD_CAP,
-    }),
-  ),
-  continuation: Type.Optional(
-    Type.String({
-      description: "Opaque token returned by a previous single search.",
-      maxLength: MAX_SEARCH_CONTINUATION_CHARACTERS,
-    }),
-  ),
-  highlights: Type.Optional(
-    Type.Boolean({
-      description: "Return passages relevant to the query when supported. Defaults to true.",
-    }),
-  ),
-  summary: Type.Optional(
-    Type.Boolean({
-      description: "Request generated summaries or answers when supported. Defaults to false.",
-    }),
-  ),
-  fullText: Type.Optional(
-    Type.Boolean({
-      description: "Request full page text when supported. Defaults to false.",
-    }),
-  ),
-  favicon: Type.Optional(
-    Type.Boolean({ description: "Include favicon URLs on results. Defaults to false." }),
-  ),
-  includeDomains: Type.Optional(
-    Type.Array(Type.String(), {
-      description:
-        'Only return results from these domains (e.g. ["github.com", "stackoverflow.com"]).',
-    }),
-  ),
-  excludeDomains: Type.Optional(
-    Type.Array(Type.String(), {
-      description: "Exclude results from these domains.",
-    }),
-  ),
-  sources: Type.Optional(
-    Type.Array(Type.String(), {
-      description: 'Source types when supported (Firecrawl: "web", "news", "images").',
-    }),
-  ),
-  categories: Type.Optional(
-    Type.Array(Type.String(), {
-      description: 'Category filters when supported (Firecrawl: "research", "pdf", "developer").',
-    }),
-  ),
-  category: Type.Optional(
-    Type.String({
-      description: 'Single search category (e.g. "news", "general"). Provider support varies.',
-    }),
-  ),
-  startPublishedDate: Type.Optional(
-    Type.String({
-      description: 'ISO date filter: only results published after this date (e.g. "2024-01-01").',
-    }),
-  ),
-  endPublishedDate: Type.Optional(
-    Type.String({
-      description: "ISO date filter: only results published before this date.",
-    }),
-  ),
-  timeoutSeconds: Type.Optional(
-    Type.Integer({
-      description:
-        "Give up after this many seconds. Fan-out and batch return what finished by then and report the rest as errors.",
-      minimum: 1,
-      maximum: MAX_TIMEOUT_SECONDS,
-    }),
-  ),
-});
-
-const imageSearchParameters = Type.Object({
-  url: Type.String({ description: "Public HTTP or HTTPS image URL." }),
-  provider: Type.Optional(Type.String({ description: IMAGE_SEARCH_PROVIDER_HINT })),
-  maxResults: Type.Optional(
-    Type.Integer({
-      description: `Maximum matches to return. Defaults to ${DEFAULT_MAX_RESULTS}.`,
-      minimum: 1,
-      maximum: MAX_RESULTS_HARD_CAP,
-    }),
-  ),
-});
-
-const readParameters = Type.Object({
-  url: Type.Union(
-    [Type.String(), Type.Array(Type.String(), { minItems: 1, maxItems: MAX_BATCH_ITEMS_HARD_CAP })],
-    {
-      description: "URL to read, or a batch of URLs.",
-    },
-  ),
-  provider: Type.Optional(Type.String({ description: READ_PROVIDER_HINT })),
-  format: Type.Optional(
-    Type.String({ description: 'Preferred content format: "markdown", "text", or "html".' }),
-  ),
-  maxTokens: Type.Optional(
-    Type.Integer({ description: "Maximum tokens to return when supported.", minimum: 1 }),
-  ),
-  maxChars: Type.Optional(
-    Type.Integer({
-      description: `Maximum page content characters to return. Defaults to ${DEFAULT_READ_MAX_CHARS}.`,
-      minimum: 1,
-      maximum: MAX_READ_MAX_CHARS,
-    }),
-  ),
-  continuation: Type.Optional(
-    Type.String({ description: "Opaque token returned by a truncated read.", maxLength: 1024 }),
-  ),
-  links: Type.Optional(
-    Type.Boolean({ description: "Include the links found on the page. Defaults to false." }),
-  ),
-  images: Type.Optional(
-    Type.Boolean({ description: "Include the image URLs found on the page. Defaults to false." }),
-  ),
-  targetSelector: Type.Optional(
-    Type.String({ description: "CSS selector to target when supported." }),
-  ),
-  removeSelector: Type.Optional(
-    Type.String({ description: "CSS selector to remove when supported." }),
-  ),
-  timeout: Type.Optional(
-    Type.Integer({ description: "Provider timeout in seconds when supported.", minimum: 1 }),
-  ),
-  noCache: Type.Optional(Type.Boolean({ description: "Bypass provider cache when supported." })),
-  timeoutSeconds: Type.Optional(
-    Type.Integer({
-      description:
-        "Give up after this many seconds. A batch returns the URLs that finished by then and reports the rest as errors.",
-      minimum: 1,
-      maximum: MAX_TIMEOUT_SECONDS,
-    }),
-  ),
-});
-
-const emptyParameters = Type.Object({});
-
-function statusRenderers(name: WebToolName) {
+function statusRenderers(name: WebToolName, tui: Readonly<TuiModule>) {
   return {
     renderCall(args: unknown, theme: Readonly<StatusTheme>, context: Readonly<RenderOptions>) {
-      return createViewportText((width) =>
-        renderWebToolCall(name, args, { ...context, viewportWidth: width }, theme),
+      return tui.createViewportText((width) =>
+        tui.renderWebToolCall(name, args, { ...context, viewportWidth: width }, theme),
       );
     },
     renderResult(
@@ -312,8 +165,8 @@ function statusRenderers(name: WebToolName) {
       theme: Readonly<StatusTheme>,
       context?: Readonly<{ isError?: boolean }>,
     ) {
-      return createViewportText((width) =>
-        renderWebToolResult(
+      return tui.createViewportText((width) =>
+        tui.renderWebToolResult(
           name,
           result,
           context?.isError === true,
@@ -325,7 +178,167 @@ function statusRenderers(name: WebToolName) {
   };
 }
 
-export default function webExtension(pi: ExtensionAPI) {
+export default async function webExtension(pi: ExtensionAPI) {
+  const [{ Type }, tui] = await Promise.all([
+    import("typebox"),
+    // Defer Pi's schema and terminal rendering dependencies until registration.
+    import("../../../src/tui.ts") as Promise<TuiModule>,
+  ]);
+  tuiModule = tui;
+  const searchParameters = Type.Object({
+    query: Type.Union(
+      [
+        Type.String(),
+        Type.Array(Type.String(), { minItems: 1, maxItems: MAX_BATCH_ITEMS_HARD_CAP }),
+      ],
+      {
+        description: "Search query, or a batch of search queries.",
+      },
+    ),
+    provider: Type.Optional(Type.String({ description: PROVIDER_HINT })),
+    maxResults: Type.Optional(
+      Type.Integer({
+        description: `Maximum results to return. Defaults to ${DEFAULT_MAX_RESULTS}.`,
+        minimum: 1,
+        maximum: MAX_RESULTS_HARD_CAP,
+      }),
+    ),
+    continuation: Type.Optional(
+      Type.String({
+        description: "Opaque token returned by a previous single search.",
+        maxLength: MAX_SEARCH_CONTINUATION_CHARACTERS,
+      }),
+    ),
+    highlights: Type.Optional(
+      Type.Boolean({
+        description: "Return passages relevant to the query when supported. Defaults to true.",
+      }),
+    ),
+    summary: Type.Optional(
+      Type.Boolean({
+        description: "Request generated summaries or answers when supported. Defaults to false.",
+      }),
+    ),
+    fullText: Type.Optional(
+      Type.Boolean({
+        description: "Request full page text when supported. Defaults to false.",
+      }),
+    ),
+    favicon: Type.Optional(
+      Type.Boolean({ description: "Include favicon URLs on results. Defaults to false." }),
+    ),
+    includeDomains: Type.Optional(
+      Type.Array(Type.String(), {
+        description:
+          'Only return results from these domains (e.g. ["github.com", "stackoverflow.com"]).',
+      }),
+    ),
+    excludeDomains: Type.Optional(
+      Type.Array(Type.String(), {
+        description: "Exclude results from these domains.",
+      }),
+    ),
+    sources: Type.Optional(
+      Type.Array(Type.String(), {
+        description: 'Source types when supported (Firecrawl: "web", "news", "images").',
+      }),
+    ),
+    categories: Type.Optional(
+      Type.Array(Type.String(), {
+        description: 'Category filters when supported (Firecrawl: "research", "pdf", "developer").',
+      }),
+    ),
+    category: Type.Optional(
+      Type.String({
+        description: 'Single search category (e.g. "news", "general"). Provider support varies.',
+      }),
+    ),
+    startPublishedDate: Type.Optional(
+      Type.String({
+        description: 'ISO date filter: only results published after this date (e.g. "2024-01-01").',
+      }),
+    ),
+    endPublishedDate: Type.Optional(
+      Type.String({
+        description: "ISO date filter: only results published before this date.",
+      }),
+    ),
+    timeoutSeconds: Type.Optional(
+      Type.Integer({
+        description:
+          "Give up after this many seconds. Fan-out and batch return what finished by then and report the rest as errors.",
+        minimum: 1,
+        maximum: MAX_TIMEOUT_SECONDS,
+      }),
+    ),
+  });
+
+  const imageSearchParameters = Type.Object({
+    url: Type.String({ description: "Public HTTP or HTTPS image URL." }),
+    provider: Type.Optional(Type.String({ description: IMAGE_SEARCH_PROVIDER_HINT })),
+    maxResults: Type.Optional(
+      Type.Integer({
+        description: `Maximum matches to return. Defaults to ${DEFAULT_MAX_RESULTS}.`,
+        minimum: 1,
+        maximum: MAX_RESULTS_HARD_CAP,
+      }),
+    ),
+  });
+
+  const readParameters = Type.Object({
+    url: Type.Union(
+      [
+        Type.String(),
+        Type.Array(Type.String(), { minItems: 1, maxItems: MAX_BATCH_ITEMS_HARD_CAP }),
+      ],
+      {
+        description: "URL to read, or a batch of URLs.",
+      },
+    ),
+    provider: Type.Optional(Type.String({ description: READ_PROVIDER_HINT })),
+    format: Type.Optional(
+      Type.String({ description: 'Preferred content format: "markdown", "text", or "html".' }),
+    ),
+    maxTokens: Type.Optional(
+      Type.Integer({ description: "Maximum tokens to return when supported.", minimum: 1 }),
+    ),
+    maxChars: Type.Optional(
+      Type.Integer({
+        description: `Maximum page content characters to return. Defaults to ${DEFAULT_READ_MAX_CHARS}.`,
+        minimum: 1,
+        maximum: MAX_READ_MAX_CHARS,
+      }),
+    ),
+    continuation: Type.Optional(
+      Type.String({ description: "Opaque token returned by a truncated read.", maxLength: 1024 }),
+    ),
+    links: Type.Optional(
+      Type.Boolean({ description: "Include the links found on the page. Defaults to false." }),
+    ),
+    images: Type.Optional(
+      Type.Boolean({ description: "Include the image URLs found on the page. Defaults to false." }),
+    ),
+    targetSelector: Type.Optional(
+      Type.String({ description: "CSS selector to target when supported." }),
+    ),
+    removeSelector: Type.Optional(
+      Type.String({ description: "CSS selector to remove when supported." }),
+    ),
+    timeout: Type.Optional(
+      Type.Integer({ description: "Provider timeout in seconds when supported.", minimum: 1 }),
+    ),
+    noCache: Type.Optional(Type.Boolean({ description: "Bypass provider cache when supported." })),
+    timeoutSeconds: Type.Optional(
+      Type.Integer({
+        description:
+          "Give up after this many seconds. A batch returns the URLs that finished by then and report the rest as errors.",
+        minimum: 1,
+        maximum: MAX_TIMEOUT_SECONDS,
+      }),
+    ),
+  });
+
+  const emptyParameters = Type.Object({});
   pi.registerTool({
     name: "web_search",
     label: "Web Search",
@@ -343,7 +356,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Forward domain, source, category, and date filters when the user gives concrete values.",
     ],
     parameters: searchParameters,
-    ...statusRenderers("web_search"),
+    ...statusRenderers("web_search", tui),
     async execute(
       _toolCallId,
       params,
@@ -536,7 +549,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Use web_search_image for reverse image lookup. Use web_search for text queries and web_read for page content.",
     ],
     parameters: imageSearchParameters,
-    ...statusRenderers("web_search_image"),
+    ...statusRenderers("web_search_image", tui),
     async execute(_toolCallId, params, signal): Promise<AgentToolResult<ImageSearchDetails>> {
       const web = await loadWeb();
       const provider = normalizeImageSearchProviderInput(
@@ -570,7 +583,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Use web_search for query-to-URL search; use web_read for URL-to-content reading.",
     ],
     parameters: readParameters,
-    ...statusRenderers("web_read"),
+    ...statusRenderers("web_read", tui),
     async execute(_toolCallId, params, signal): Promise<AgentToolResult<ReadDetails>> {
       const web = await loadWeb();
       const readProvider = normalizeReadProviderInput(params.provider, web.readProviders());
@@ -649,7 +662,7 @@ export default function webExtension(pi: ExtensionAPI) {
       "Use web_providers before web_search if provider availability, limits, fields, or option support is unclear.",
     ],
     parameters: emptyParameters,
-    ...statusRenderers("web_providers"),
+    ...statusRenderers("web_providers", tui),
     async execute(
       _toolCallId,
       _params,
@@ -947,7 +960,7 @@ function formatProviderStatus(s: Readonly<ProviderStatus>): string {
   const symbol = providerStatusSymbol(s);
   const envLabel = s.envVar ? ` (${s.envVar})` : "";
   const reachabilityNote = s.configured && s.reachable === false ? " - unreachable" : "";
-  return `${symbol} ${s.name}${envLabel}${reachabilityNote} ${formatProviderCapabilities(s)}`;
+  return `${symbol} ${s.name}${envLabel}${reachabilityNote} ${getTuiModule().formatProviderCapabilities(s)}`;
 }
 
 function providerStatusSymbol(status: Readonly<ProviderStatus>): string {
@@ -1207,7 +1220,7 @@ function formatPagination(pagination: SearchPagination): readonly string[] {
   return pagination.status === "next" || pagination.status === "unknown"
     ? [
         "",
-        `Continuation (${pagination.status}): ${sanitizeTerminalText(pagination.continuation, MAX_SEARCH_CONTINUATION_CHARACTERS)}`,
+        `Continuation (${pagination.status}): ${getTuiModule().sanitizeTerminalText(pagination.continuation, MAX_SEARCH_CONTINUATION_CHARACTERS)}`,
       ]
     : [];
 }
@@ -1228,7 +1241,7 @@ function formatProviderPaginations(
     "Provider continuations:",
     ...continuing.map(
       ({ provider, pagination }) =>
-        `  ${sanitizeTerminalText(provider, 80)}: ${sanitizeTerminalText(pagination.continuation, MAX_SEARCH_CONTINUATION_CHARACTERS)}`,
+        `  ${getTuiModule().sanitizeTerminalText(provider, 80)}: ${getTuiModule().sanitizeTerminalText(pagination.continuation, MAX_SEARCH_CONTINUATION_CHARACTERS)}`,
     ),
   ];
 }
@@ -1273,7 +1286,7 @@ function formatReadResult(result: ReadResultView): readonly string[] {
   if (result.content) lines.push("", result.content);
   if (result.truncated) {
     const continuation = result.continuation
-      ? `; continuation=${sanitizeTerminalText(result.continuation, 1024)}`
+      ? `; continuation=${getTuiModule().sanitizeTerminalText(result.continuation, 1024)}`
       : "";
     lines.push("", `[truncated${continuation}]`);
   }
@@ -1291,5 +1304,5 @@ function formatUrlList(label: string, urls: readonly string[] | undefined): read
 }
 
 function truncateSingleLine(text: string, maxLength: number): string {
-  return sanitizeTerminalText(text, maxLength);
+  return getTuiModule().sanitizeTerminalText(text, maxLength);
 }

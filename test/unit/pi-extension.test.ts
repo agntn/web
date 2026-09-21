@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import stringWidth from "string-width";
-import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import webExtension, { resolveWebModuleUrl } from "../../packages/pi/extensions/web.ts";
 import {
   builtinProviders,
@@ -29,8 +29,16 @@ type CapturedTool = Readonly<
   Pick<ToolDefinition, "name" | "label" | "parameters" | "execute" | "renderCall" | "renderResult">
 >;
 type CapturedCommand = Parameters<ExtensionAPI["registerCommand"]>[1];
+type CapturedExtension = {
+  readonly tools: Map<string, CapturedTool>;
+  readonly commands: Map<string, CapturedCommand>;
+};
+let initialExtension: CapturedExtension | undefined;
 
 describe("Pi extension", () => {
+  beforeAll(async () => {
+    initialExtension = await initializeExtension();
+  });
   it("loads and types against current source instead of a stale build", () => {
     expect(fileURLToPath(resolveWebModuleUrl())).toBe(
       fileURLToPath(new URL("../../src/index.ts", import.meta.url)),
@@ -112,12 +120,19 @@ describe("Pi extension", () => {
       theme,
       { isError: true },
     ]);
+    const partialError: unknown = Reflect.apply(read.renderResult, read, [
+      { content: [{ type: "text", text: "Provider failed" }] },
+      { expanded: false, isPartial: true },
+      theme,
+      { isError: true },
+    ]);
 
     expect(renderedText(call)).not.toMatch(/\p{Cc}/u);
     expect(renderedText(call)).not.toContain("bad");
     expect(renderedText(call, 80).split("\n")).toHaveLength(1);
     expect(stringWidth(renderedText(call, 80))).toBeLessThanOrEqual(80);
     expect(renderedText(result)).toBe("✗ Provider failed");
+    expect(renderedText(partialError)).toBe("✗ Provider failed");
   });
 
   it("advertises every built-in text search provider", () => {
@@ -1227,14 +1242,13 @@ describe("Pi extension", () => {
     }
   });
 });
-
-function captureExtension(): {
+async function initializeExtension(): Promise<{
   readonly tools: Map<string, CapturedTool>;
   readonly commands: Map<string, CapturedCommand>;
-} {
+}> {
   const tools = new Map<string, CapturedTool>();
   const commands = new Map<string, CapturedCommand>();
-  Reflect.apply(webExtension, undefined, [
+  await Reflect.apply(webExtension, undefined, [
     {
       registerTool(tool: CapturedTool) {
         tools.set(tool.name, tool);
@@ -1245,6 +1259,11 @@ function captureExtension(): {
     },
   ]);
   return { tools, commands };
+}
+
+function captureExtension(): CapturedExtension {
+  if (!initialExtension) throw new Error("Pi extension test setup did not run");
+  return initialExtension;
 }
 
 function captureTools(): Map<string, CapturedTool> {

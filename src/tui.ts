@@ -58,7 +58,11 @@ const TERMINAL_CONTENT_UNSAFE =
 const TERMINAL_CONTENT_SEPARATOR = /[\p{Zl}\p{Zp}]/u;
 const TERMINAL_LAYOUT = new Set(["\t", "\n"]);
 const MALFORMED_SURROGATE = /\p{Cs}/gu;
-const GRAPHEME_SEGMENTER = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+let graphemeSegmenter: Intl.Segmenter | undefined;
+
+function getGraphemeSegmenter(): Intl.Segmenter {
+  return (graphemeSegmenter ??= new Intl.Segmenter(undefined, { granularity: "grapheme" }));
+}
 
 const PRESENTATION: Readonly<Record<WebToolName, { symbol: string; label: string }>> = {
   web_search: { symbol: "⌕", label: "Web Search" },
@@ -78,7 +82,7 @@ function clip(text: string, max: number): string {
   if (stringWidth(text) <= max) return text;
   let clipped = "";
   let width = 0;
-  for (const { segment } of GRAPHEME_SEGMENTER.segment(text)) {
+  for (const { segment } of getGraphemeSegmenter().segment(text)) {
     const segmentWidth = stringWidth(segment);
     if (width + segmentWidth > max - 1) break;
     clipped += segment;
@@ -335,8 +339,13 @@ export function renderWebToolCall(
 }
 
 function resultText(result: Readonly<RenderedToolResult>): string {
+  const content = result.content;
+  if (content?.length === 1) {
+    const first = content[0];
+    return isRecord(first) && typeof first.text === "string" ? first.text.trimEnd() : "";
+  }
   const parts: string[] = [];
-  for (const part of result.content ?? []) {
+  for (const part of content ?? []) {
     if (isRecord(part) && typeof part.text === "string") parts.push(part.text);
   }
   return parts.join("\n").trimEnd();
@@ -613,10 +622,11 @@ export function renderWebToolResult(
   options: Readonly<RenderOptions>,
   theme: Readonly<StatusTheme>,
 ): string {
-  const text = resultText(result);
-  if (isError || result.isError === true) return renderFailure(text, options, theme);
+  if (isError || result.isError === true) {
+    return renderFailure(resultText(result), options, theme);
+  }
   if (options.isPartial === true) return renderPartial(name, options, theme);
-
+  const text = resultText(result);
   const meta = resultMeta(name, result.details);
   const header = renderSummary(name, meta, options, theme);
   const body =
