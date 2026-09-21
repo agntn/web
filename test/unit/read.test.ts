@@ -391,7 +391,7 @@ describe("readUrl", () => {
 
     const result = await readUrl("https://example.com", { provider: providerName, maxChars: 5 });
 
-    expect(read).toHaveBeenCalledWith("https://example.com", {});
+    expect(read).toHaveBeenCalledWith("https://example.com", { links: false });
     expect(result).toMatchObject({ content: "abcde", truncated: true });
     expect(result.continuation).toBeTypeOf("string");
     expect(result).not.toHaveProperty("text");
@@ -426,7 +426,12 @@ describe("readUrl", () => {
     });
     const unbounded = await readUrl("https://example.com", { provider: providerName });
 
-    expect(read.mock.calls.map(([, options]) => options)).toEqual([{}, {}, {}, {}]);
+    expect(read.mock.calls.map(([, options]) => options)).toEqual([
+      { links: false },
+      { links: true },
+      { links: true },
+      {},
+    ]);
     expect(bounded).toMatchObject({ content: "abcde", truncated: true });
     expect(bounded).not.toHaveProperty("links");
     expect(bounded).not.toHaveProperty("images");
@@ -465,10 +470,11 @@ describe("readUrl", () => {
       concurrency: 3,
     });
     expect(second).toMatchObject({ content: "cd", truncated: true });
+    const request = read.mock.lastCall?.[1];
     expect(read.mock.lastCall?.[0]).toBe("https://example.com");
-    expect(read.mock.lastCall?.[1]?.maxTokens).toBe(50);
-    expect(read.mock.lastCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
-    expect(Reflect.ownKeys(read.mock.lastCall?.[1] ?? {})).toEqual(["maxTokens", "signal"]);
+    expect(request).toMatchObject({ maxTokens: 50, links: false });
+    expect(request?.signal).toBeInstanceOf(AbortSignal);
+    expect(Reflect.ownKeys(request ?? {})).toEqual(["maxTokens", "links", "signal"]);
 
     content = "ab😀changed";
     await expect(

@@ -136,6 +136,8 @@ export interface ReadOptions extends ExecutionOptions {
   removeSelector?: string;
   timeout?: number;
   noCache?: boolean;
+  /** False skips TinyFish link extraction. */
+  readonly links?: boolean;
 }
 
 /** OAuth access for the ChatGPT Codex backend, not an OpenAI API key. */

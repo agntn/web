@@ -177,8 +177,14 @@ export async function readUrlDetailed(
   }
 
   const response = requestedProviderName
-    ? await readExplicitly(trimmedUrl, effectiveReadOptions, requestedProviderName)
-    : await readAutomatically(trimmedUrl, effectiveReadOptions);
+    ? await readExplicitly(
+        trimmedUrl,
+        effectiveReadOptions,
+        requestedProviderName,
+        maxChars,
+        pageFields,
+      )
+    : await readAutomatically(trimmedUrl, effectiveReadOptions, maxChars, pageFields);
   if (maxChars === undefined) return response;
   return {
     ...response,
@@ -198,10 +204,12 @@ async function readExplicitly(
   url: string,
   options: Readonly<ReadOptions>,
   requestedProvider: string,
+  maxChars: number | undefined,
+  pageFields: Readonly<PageFields>,
 ): Promise<ReadUrlDetailedResult> {
   const provider = resolveReadProviderName(requestedProvider);
   return {
-    result: await readFromProvider(url, options, provider),
+    result: await readFromProvider(url, options, provider, maxChars, pageFields),
     requestedProvider: provider,
     provider,
     attempts: [provider],
@@ -226,7 +234,7 @@ async function continueRead(
   }
 
   const provider = resolveReadProviderName(payload.provider);
-  const result = await readFromProvider(url, readOptions, provider);
+  const result = await readFromProvider(url, readOptions, provider, maxChars, pageFields);
   if (contentFingerprint(result.content) !== payload.contentFingerprint) {
     throw new StaleReadContinuationError();
   }
@@ -260,6 +268,8 @@ function resolveReadProviderName(providerName: string): string {
 async function readAutomatically(
   url: string,
   options: Readonly<ReadOptions>,
+  maxChars: number | undefined,
+  pageFields: Readonly<PageFields>,
 ): Promise<ReadUrlDetailedResult> {
   const providerNames = [DEFAULT_READ_PROVIDER, ...configuredReadProviders(DEFAULT_READ_PROVIDER)];
   const attempts: string[] = [];
@@ -270,7 +280,7 @@ async function readAutomatically(
     attempts.push(providerName);
     try {
       return {
-        result: await readFromProvider(url, options, providerName),
+        result: await readFromProvider(url, options, providerName, maxChars, pageFields),
         requestedProvider: "auto",
         provider: providerName,
         attempts,
@@ -294,13 +304,18 @@ async function readFromProvider(
   url: string,
   options: Readonly<ReadOptions>,
   providerName: string,
+  maxChars: number | undefined,
+  pageFields: Readonly<PageFields>,
 ): Promise<ReadResult> {
   throwIfAborted(options.signal);
   let result: ReadResult;
   try {
     const provider = await createReadProvider(providerName);
     throwIfAborted(options.signal);
-    result = await provider.read(url, providerRequestOptions(options));
+    result = await provider.read(
+      url,
+      providerRequestOptions(boundedReadRequest(options, maxChars, pageFields)),
+    );
   } catch (error) {
     throwIfAborted(options.signal);
     throw error;
@@ -322,6 +337,22 @@ function configuredReadProviders(initialProvider: string): string[] {
       isProviderConfigured(name),
   );
   return [...builtins, ...custom];
+}
+
+/**
+ * An unbounded read still returns links, so only a bound decides extraction.
+ * @param options - Native read options for this call.
+ * @param maxChars - Output bound. Absent when the whole page comes back.
+ * @param fields - Whether the bounded read keeps links.
+ * @returns {ReadOptions} Options the reader should see.
+ */
+function boundedReadRequest(
+  options: Readonly<ReadOptions>,
+  maxChars: number | undefined,
+  fields: Readonly<PageFields>,
+): ReadOptions {
+  if (maxChars === undefined) return options;
+  return { ...options, links: fields.links };
 }
 
 function readMaxChars(value: number | undefined): number | undefined {
