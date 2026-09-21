@@ -622,9 +622,11 @@ export function renderWebToolResult(
   options: Readonly<RenderOptions>,
   theme: Readonly<StatusTheme>,
 ): string {
+  if (isError || result.isError === true) {
+    return renderFailure(resultText(result), options, theme);
+  }
   if (options.isPartial === true) return renderPartial(name, options, theme);
   const text = resultText(result);
-  if (isError || result.isError === true) return renderFailure(text, options, theme);
   const meta = resultMeta(name, result.details);
   const header = renderSummary(name, meta, options, theme);
   const body =
