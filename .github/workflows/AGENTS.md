@@ -7,10 +7,10 @@ CI and npm package publishing workflows for this repository.
 ## Conventions
 
 - Pin actions to full, verified commit SHAs and retain the exact release tag in a comment.
-- Install dependencies with `pnpm` according to `packageManager` in the root `package.json`.
+- Set up Vite+, Node.js and pnpm with `voidzero-dev/setup-vp` pinned to a verified commit SHA.
 - npm OIDC publishing requires a runner hosted by GitHub, `contents: read`, `id-token: write`, and no `NPM_TOKEN` or `NODE_AUTH_TOKEN`.
 - Only `publish.yml` publishes the root package for `v*` tags; do not add another workflow with the same trigger.
-- Preserve the typecheck, build, lint, and test order in `test.yml`.
+- Preserve the check, pack and test order in `test.yml`.
 
 ## Key files
 

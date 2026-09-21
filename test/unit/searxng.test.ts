@@ -1,5 +1,5 @@
 import { isAvailabilityProvider, isPaginatedSearchProvider } from "../../src/core/provider.ts";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vite-plus/test";
 
 const mockGetJSON =
   vi.fn<(url: string, headers?: Readonly<Record<string, string>>) => Promise<unknown>>();

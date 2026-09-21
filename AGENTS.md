@@ -46,14 +46,14 @@ test/unit/                # Public behavior and provider contract tests
 | Change TUI rendering | `src/tui.ts` + both extension adapters                                  | Keep collapsed rows compact, expanded previews bounded, and every interpolated value safe for terminals                                                           |
 | Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                                    | The low level SDK `Server` uses TypeBox schemas; every error branch goes through `errorResult`; executor guards check boundaries again when hosts skip validation |
 | Add tests            | `test/`                                                                 | Mirror public behavior, not implementation details                                                                                                                |
-| Change build outputs | `build.config.ts` + `package.json`                                      | Keep `entries` and `exports` aligned                                                                                                                              |
-| Change CI flow       | `.github/workflows/test.yml`                                            | Order stays `typecheck -> build -> test`                                                                                                                          |
+| Change build outputs | `vite.config.ts` + `package.json`                                       | Keep `pack.entry` and `exports` aligned                                                                                                                           |
+| Change CI flow       | `.github/workflows/test.yml`                                            | Order stays `check -> pack -> test`                                                                                                                               |
 | Change release flow  | `.github/workflows/publish.yml`                                         | Publish through npm OIDC only from `v*` tags                                                                                                                      |
 
 ## CONVENTIONS
 
 - ESM-only package, no CommonJS output
-- `obuild` owns build artifacts; `tsc` is typecheck-only
+- Vite+ owns checks, tests and packaging; `vp pack` emits the library through its `pack` config
 - Public API stays export-barrel-driven from `src/index.ts`
 - CLI should be thin and call reusable functions from `src/index.ts`
 - Prefer normalized models over provider-shaped raw objects
@@ -74,11 +74,11 @@ Seven files must be updated. Missing any causes a bug (test failure, missing fro
 2. `src/providers/index.ts` - add a manifest entry with the capabilities the class implements (`search`, `searchImage`, `read`, `pagination`, `availability`) and `load: () => import("./<name>.ts").then((m) => m.<Name>Provider)`; a cap or category list the adapter also clamps to lives in `src/core/providers.ts` so the two never drift
 3. `src/core/providers.ts` - add to `builtinProviders` and `providerApiKeyEnvVars` (null when self-hosted like searxng), and to `providerDetectionOrder` when automatic selection may pick it
 4. `src/core/read.ts` - add to `readProviderNames` if provider supports read/scrape; `src/core/image.ts` - `imageSearchProviderNames` for reverse image search
-5. `build.config.ts` - nothing: every file in `src/providers/` is a bundle input, so `dist/providers/<name>.mjs` and the `./providers/*` export exist as soon as the file does
+5. `vite.config.ts` - nothing: the `pack.entry` glob makes every file in `src/providers/` a bundle input, so `dist/providers/<name>.mjs` and the `./providers/*` export exist as soon as the file does
 6. `packages/pi/extensions/web.ts` and `packages/omp/extensions/web.ts` - update provider descriptions and tool schemas; execution validates against live registries
 7. `test/unit/<name>.ts` + `test/index.test.ts` - add provider tests + update hardcoded expected list; `test/unit/providers-manifest.test.ts` fails when the entry and the class disagree, and `test/unit/lazy-loading.test.ts` mocks every provider module, so add the new one there
 
-After: `pnpm typecheck && pnpm test:run && pnpm build`
+After: `vp check && vp test && vp pack`
 
 Note: tool descriptions are frozen at session start. Execution accepts custom names from the live capability registry; a new session is required before descriptions advertise a newly added built in provider.
 
@@ -97,11 +97,11 @@ Note: tool descriptions are frozen at session start. Execution accepts custom na
 ## COMMANDS
 
 ```bash
-pnpm install
-pnpm typecheck
-pnpm build
-pnpm test:run
-pnpm release
-pnpm docs         # Docus site + explorer on :3000, bundles src/ itself
-pnpm docs:build   # Cloudflare Workers build of the docs
+vp install
+vp check
+vp pack
+vp test
+vp run release
+vp run docs         # Docus site + explorer on :3000, bundles src/ itself
+vp run docs:build   # Cloudflare Workers build of the docs
 ```

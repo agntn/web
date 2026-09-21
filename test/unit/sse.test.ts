@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { Client } from "../../src/core/client.ts";
 import { HTTPError } from "../../src/core/errors.ts";
 

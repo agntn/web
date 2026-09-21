@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import manifest from "../../package.json" with { type: "json" };
 import { Provider } from "../../src/core/provider.ts";
 import { UnknownProviderError } from "../../src/core/errors.ts";
@@ -18,8 +18,8 @@ import { listProviders } from "../../src/core/resolve.ts";
 import type { ProviderConfig } from "../../src/core/types.ts";
 
 /**
- * Each provider module records its own evaluation. vitest runs a mock factory the first time the
- * module is imported, so the list is the import order the registry under test actually caused.
+ * Each provider module records its own evaluation. The Vite+ test runner invokes a mock factory
+ * when the module is first imported, so the list is the import order the registry actually caused.
  */
 const loaded = vi.hoisted(() => {
   const modules: string[] = [];

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, it, expect, vi } from "vitest";
+import { afterEach, beforeEach, describe, it, expect, vi } from "vite-plus/test";
 import { readUrl, readUrlDetailed } from "../../src/core/read.ts";
 import { readBatch, readBatchDetailed } from "../../src/core/batch.ts";
 import { register } from "../../src/core/registry.ts";
@@ -439,7 +439,10 @@ describe("readUrl", () => {
   it("continues on Unicode boundaries and detects changed content", async () => {
     const providerName = `continuable-reader-${Math.random().toString(36).slice(2)}`;
     let content = "ab😀cdef";
-    const read = vi.fn(async () => ({ url: "https://example.com", content }));
+    const read = vi.fn(async (_url: string, _options?: Readonly<ReadOptions>) => ({
+      url: "https://example.com",
+      content,
+    }));
     registerReader(providerName, read);
 
     const first = await readUrl("https://example.com", {

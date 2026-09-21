@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vite-plus/test";
 import { asSchema } from "ai";
 
 const mockPostJSON =
@@ -293,18 +293,21 @@ describe("searchTool", () => {
     }
     customProviderCleanups.push(register(AiProvider));
 
-    for (const [schema, input] of [
-      [searchTool.inputSchema, { query: "custom query", provider: providerName }],
-      [
-        searchImageTool.inputSchema,
-        { url: "https://example.com/input.jpg", provider: providerName },
-      ],
-      [readTool.inputSchema, { url: "https://example.com", provider: providerName }],
-    ] as const) {
-      const validate = asSchema(schema).validate;
-      if (!validate) throw new TypeError("Tool schema has no validator");
-      await expect(validate(input)).resolves.toMatchObject({ success: true });
+    const searchValidate = asSchema(searchTool.inputSchema).validate;
+    const imageValidate = asSchema(searchImageTool.inputSchema).validate;
+    const readValidate = asSchema(readTool.inputSchema).validate;
+    if (!searchValidate || !imageValidate || !readValidate) {
+      throw new TypeError("Tool schema has no validator");
     }
+    await expect(
+      searchValidate({ query: "custom query", provider: providerName }),
+    ).resolves.toMatchObject({ success: true });
+    await expect(
+      imageValidate({ url: "https://example.com/input.jpg", provider: providerName }),
+    ).resolves.toMatchObject({ success: true });
+    await expect(
+      readValidate({ url: "https://example.com", provider: providerName }),
+    ).resolves.toMatchObject({ success: true });
 
     await expect(
       searchTool.execute!(

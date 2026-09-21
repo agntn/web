@@ -1,6 +1,6 @@
 # TEST SCOPE
 
-Tests exercise public behavior and real integration seams with Vitest.
+Tests exercise public behavior and real integration seams with the Vite+ test runner.
 
 ## Conventions
 

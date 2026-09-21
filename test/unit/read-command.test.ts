@@ -1,6 +1,6 @@
 import { runCommand } from "citty";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MockInstance } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { MockInstance } from "vite-plus/test";
 import {
   AuthError,
   EmptyUrlError,
@@ -78,7 +78,7 @@ function runRead(overrides: Readonly<Partial<ReadRunArgs>> = {}) {
     args: makeArgs(overrides),
     rawArgs: [],
     cmd: readCommand,
-  } satisfies ReadRunInput;
+  } as unknown as ReadRunInput;
   if (!readCommand.run) throw new Error("readCommand.run is not defined");
   return Promise.resolve(readCommand.run(context) as unknown);
 }

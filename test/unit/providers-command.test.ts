@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vite-plus/test";
 
 const mockLog = vi.fn<(message: unknown) => void>();
 
@@ -204,7 +204,7 @@ describe("providers command", () => {
       await providersCommand.run!({ args: { json: true } } as never);
       const before = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
       const tavBefore = before.find((provider) => provider.name === "tavily");
-      expect(tavBefore.configured).toBe(false);
+      expect(tavBefore?.configured).toBe(false);
 
       writes.length = 0;
       process.env.TAVILY_API_KEY = "test-key";
@@ -212,7 +212,7 @@ describe("providers command", () => {
       await providersCommand.run!({ args: { json: true } } as never);
       const after = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
       const tavAfter = after.find((provider) => provider.name === "tavily");
-      expect(tavAfter.configured).toBe(true);
+      expect(tavAfter?.configured).toBe(true);
     });
 
     it("lists a registered custom provider", async () => {
