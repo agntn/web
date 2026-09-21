@@ -7,7 +7,7 @@
     "build": "NUXT_SITE_URL=https://web.agntn.dev nuxt build --extends docus",
     "generate": "NUXT_SITE_URL=https://web.agntn.dev nuxt generate --extends docus",
     "preview": "nuxt preview --extends docus",
-    "deploy": "pnpm build && wrangler deploy"
+    "deploy": "vp run build && vp exec wrangler deploy"
   },
   "dependencies": {
     "better-sqlite3": "12.11.1",
@@ -16,11 +16,13 @@
     "ofetch": "1.5.1",
     "zod": "4.5.4"
   },
-  "packageManager": "pnpm@11.3.0",
   "devDependencies": {
     "@iconify-json/lucide": "1.2.133",
     "@iconify-json/simple-icons": "1.2.96",
     "@iconify-json/vscode-icons": "1.2.77",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
     "wrangler": "4.128.0"
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }

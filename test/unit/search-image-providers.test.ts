@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MockInstance } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { MockInstance } from "vite-plus/test";
 import type { ProviderEntry } from "../../src/core/registry.ts";
 import type { ImageSearchResult, ProviderConfig } from "../../src/core/types.ts";
 

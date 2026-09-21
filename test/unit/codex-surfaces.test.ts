@@ -1,7 +1,7 @@
 import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { runCommand } from "citty";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { searchTool } from "../../src/ai.ts";
 import searchCommand from "../../src/commands/search.ts";
 import { createMcpServer } from "../../src/mcp.ts";

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import * as ompTypebox from "@oh-my-pi/omptype/typebox";
 import type { ExtensionAPI, Theme, ToolDefinition } from "@oh-my-pi/pi-coding-agent";
 import stringWidth from "string-width";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import webOmpExtension from "../../packages/omp/extensions/web.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";

@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MockInstance } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { MockInstance } from "vite-plus/test";
 import { HTTPError, SearchNotSupportedError, UnknownProviderError } from "../../src/core/errors.ts";
 
 const mockLog = vi.fn<(message: unknown) => void>();
@@ -75,7 +75,7 @@ function runSearch(overrides: Readonly<Partial<SearchRunArgs>> = {}) {
     args: makeArgs(overrides),
     rawArgs: [],
     cmd: searchCommand,
-  } as SearchRunInput;
+  } as unknown as SearchRunInput;
   return Promise.resolve(searchCommand.run!(context) as unknown);
 }
 
@@ -109,7 +109,7 @@ describe("search command", () => {
   });
 
   it("exposes an opaque continuation argument", () => {
-    expect(searchCommand.args?.continuation).toMatchObject({ type: "string" });
+    expect(searchCommand.args).toMatchObject({ continuation: { type: "string" } });
   });
 
   it("falls through automatic providers after HTTP 402", async () => {

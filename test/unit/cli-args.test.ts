@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { normalizeMainArgs } from "../../src/cli-args.ts";
 
 describe("CLI main args", () => {

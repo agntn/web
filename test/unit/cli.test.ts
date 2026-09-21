@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { describe, it } from "vitest";
+import { describe, it } from "vite-plus/test";
 import { builtinProviders } from "../../src/core/providers.ts";
 
 const execute = promisify(execFile);

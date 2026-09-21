@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import stringWidth from "string-width";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import webExtension, { resolveWebModuleUrl } from "../../packages/pi/extensions/web.ts";
 import {
   builtinProviders,

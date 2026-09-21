@@ -60,17 +60,18 @@
     "access": "public"
   },
   "scripts": {
-    "build": "obuild",
-    "dev": "obuild --stub",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.build.json && tsc --noEmit -p tsconfig.extensions.json",
-    "test": "vitest",
-    "test:run": "vitest --run",
-    "prepack": "pnpm run build",
-    "release": "pnpm test:run && pnpm build && changelogen --release --push",
-    "lint": "pnpm build && oxlint . && oxfmt --check .",
-    "lint:fix": "pnpm build && oxlint . --fix && oxfmt .",
-    "docs": "pnpm --dir docs dev",
-    "docs:build": "pnpm --dir docs build"
+    "build": "vp pack",
+    "dev": "vp pack --watch",
+    "check": "vp check",
+    "typecheck": "vp check --no-fmt --no-lint",
+    "test": "vp test",
+    "test:run": "vp test --run",
+    "prepack": "vp pack",
+    "release": "vp test --run && vp pack && changelogen --release --push",
+    "lint": "vp pack && vp check",
+    "lint:fix": "vp pack && vp check --fix",
+    "docs": "vp -C docs run dev",
+    "docs:build": "vp -C docs run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.30.0",
@@ -90,12 +91,9 @@
     "@types/node": "latest",
     "ai": "6.0.286",
     "changelogen": "latest",
-    "obuild": "latest",
-    "oxfmt": "0.68.0",
-    "oxlint": "1.83.0",
-    "oxlint-tsgolint": "7.0.2002",
     "typescript": "7.0.2",
-    "vitest": "latest"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": ">=0.86.1 <1",

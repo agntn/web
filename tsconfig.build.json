@@ -3,5 +3,5 @@
   "compilerOptions": {
     "rootDir": "."
   },
-  "include": ["build.config.ts"]
+  "include": ["vite.config.ts"]
 }

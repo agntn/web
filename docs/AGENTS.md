@@ -26,18 +26,18 @@ docs/
 ## Commands
 
 ```bash
-pnpm install          # from docs/
-pnpm dev              # http://localhost:3000
-pnpm build            # Cloudflare Workers output in .output/, content routes prerendered
-pnpm deploy           # build, then wrangler deploy to web.agntn.dev
-pnpm generate         # static output only; the /api routes need the worker
+vp install          # from docs/
+vp run dev          # http://localhost:3000
+vp run build        # Cloudflare Workers output in .output/, content routes prerendered
+vp run deploy       # build, then wrangler deploy to web.agntn.dev
+vp run generate     # static output only; the /api routes need the worker
 ```
 
 Deployment: Workers Builds with root directory `docs`. It installs `docs/` and nothing else, which is enough because the library is bundled from `../src` (next paragraph). Nitro preset `cloudflare_module`. Nuxt Content needs a D1 binding named `DB` and the response cache a KV binding named `CACHE`; `wrangler.jsonc` carries both and the `NUXT_SITE_URL` var, Nitro merges it into the generated `.output/server/wrangler.json`. Create them once with `wrangler d1 create agntn-web` and `wrangler kv namespace create CACHE` and put the ids in `wrangler.jsonc`; the ids there are placeholders until then.
 
 Provider keys are Worker secrets, never vars: `wrangler secret put BRAVE_API_KEY` and so on for every provider the explorer should answer for. With `nodejs_compat` and the compatibility date in `wrangler.jsonc`, the runtime exposes them on `process.env`, which is where the library reads them. A provider without a secret is reported as `configured: false` by `/api/providers` and answers `503` on `/api/search`. SearXNG is left out of fan-out on the worker because it would point at `localhost:8080`.
 
-`@agntn/web` is an alias in `nuxt.config.ts` for `../src/index.ts`. Nitro bundles the checkout's sources into the worker, so `dist/` and the root `node_modules` are never touched. The subgraph under `src/index.ts` imports `ofetch` and `zod` from npm; both are dependencies of `docs/package.json`, because a bare import in `../src` resolves upwards from the importer and reaches `docs/node_modules` only as Nitro's fallback, once the root has none. A new npm import that `src/index.ts` can reach needs an entry there or the deploy breaks. The CLI, MCP and tool entries stay out of the alias. obuild defines `__AGNTN_WEB_BUILD_ID__` for `dist/`; `nuxt.config.ts` defines it through `nitro.replace` with the same `createSourceBuildId`, otherwise the prerender hashes `/` and fails on `/build.config.ts`. The providers load through the manifest's `import()` on the first `create()`, so the worker gets one chunk per adapter and nothing in the library graph needs `sideEffects` to survive tree-shaking.
+`@agntn/web` is an alias in `nuxt.config.ts` for `../src/index.ts`. Nitro bundles the checkout's sources into the worker, so `dist/` and the root `node_modules` are never touched. The subgraph under `src/index.ts` imports `ofetch` and `zod` from npm; both are dependencies of `docs/package.json`, because a bare import in `../src` resolves upwards from the importer and reaches `docs/node_modules` only as Nitro's fallback, once the root has none. A new npm import that `src/index.ts` can reach needs an entry there or the deploy breaks. The CLI, MCP and tool entries stay out of the alias. Vite+ Pack defines `__AGNTN_WEB_BUILD_ID__` for `dist/`; `nuxt.config.ts` defines it through `nitro.replace` with the same `createSourceBuildId`, otherwise the prerender hashes `/` and fails on `/vite.config.ts`. The providers load through the manifest's `import()` on the first `create()`, so the worker gets one chunk per adapter and nothing in the library graph needs `sideEffects` to survive tree-shaking.
 
 Resolution traps, both caused by the repo root being a pnpm workspace:
 

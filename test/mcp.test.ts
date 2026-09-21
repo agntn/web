@@ -2,7 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { type TSchema } from "typebox";
 import { Value } from "typebox/value";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const mockGetJSON = vi.fn();
 const mockPostJSON = vi.fn();
@@ -345,10 +345,15 @@ describe("web MCP server", () => {
       name: "web_search",
       arguments: { query: "test query", provider: "brave", maxResults: 1 },
     });
-    const first = firstResponse.structuredContent?.result as {
-      readonly pagination: { readonly status: string; readonly continuation?: string };
-    };
-    if (first.pagination.continuation === undefined) throw new Error("missing continuation");
+    const structured = firstResponse.structuredContent as
+      | {
+          readonly result?: {
+            readonly pagination: { readonly status: string; readonly continuation?: string };
+          };
+        }
+      | undefined;
+    const first = structured?.result;
+    if (first?.pagination.continuation === undefined) throw new Error("missing continuation");
     const secondResponse = await client.callTool({
       name: "web_search",
       arguments: {

@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { build } from "obuild";
-import { describe, expect, it, onTestFinished } from "vitest";
+import { build } from "vite-plus/pack";
+import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { builtinProviders } from "../src/index.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -11,7 +11,7 @@ const versionEntry = "test/fixtures/bundle-entry-version.mjs";
 
 /**
  * Bundles one consumer entry against dist/ the way a consumer's bundler would: trusting
- * package.json about side effects, which obuild ignores while it builds a library.
+ * package.json about side effects.
  * @param entry - Consumer entry, relative to the repo root.
  * @returns {Promise<string>} The output directory, removed when the test finishes.
  */
@@ -20,26 +20,16 @@ async function bundleConsumer(entry: string): Promise<string> {
   const outDir = mkdtempSync(join(root, "node_modules/.cache/web-bundle-"));
   onTestFinished(() => rmSync(outDir, { recursive: true, force: true }));
 
+  const outputName = entry.slice(0, -".mjs".length);
   await build({
     cwd: root,
-    entries: [
-      {
-        type: "bundle",
-        input: `./${entry}`,
-        outDir: relative(root, outDir),
-        dts: false,
-        license: false,
-      },
-    ],
-    hooks: {
-      /**
-       * obuild keeps every module's side effects while it builds a library; a consumer's bundler trusts package.json instead.
-       * @param {InputOptions} config - Rolldown options obuild assembled for the entry.
-       */
-      rolldownConfig(config) {
-        config.treeshake = true;
-      },
-    },
+    entry: { [outputName]: entry },
+    outDir,
+    dts: false,
+    clean: false,
+    hash: false,
+    fixedExtension: true,
+    treeshake: true,
   });
   return outDir;
 }

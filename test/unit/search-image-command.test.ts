@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MockInstance } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import type { MockInstance } from "vite-plus/test";
 
 const { mockError, mockInfo, mockLog, mockSearchByImage } = vi.hoisted(() => ({
   mockError: vi.fn(),

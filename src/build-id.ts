@@ -9,7 +9,7 @@ import { resolve } from "node:path";
  */
 export function createSourceBuildId(projectRoot: string): string {
   const paths = [
-    "build.config.ts",
+    "vite.config.ts",
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
