@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.7.1
+
+[compare changes](https://github.com/agntn/web/compare/v0.7.0...v0.7.1)
+
+### 🔥 Performance
+
+- Lazy-load extension dependencies ([#178](https://github.com/agntn/web/pull/178))
+
+### 🩹 Fixes
+
+- **search:** Reject invalid result limits ([#180](https://github.com/agntn/web/pull/180))
+
+### 🏡 Chore
+
+- Migrate tooling to Vite+ ([#176](https://github.com/agntn/web/pull/176))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.7.0
 
 [compare changes](https://github.com/agntn/web/compare/v0.6.0...v0.7.0)
