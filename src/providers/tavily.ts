@@ -10,6 +10,7 @@ import { Client } from "../core/client.ts";
 import { Provider } from "../core/provider.ts";
 import { TAVILY_SEARCH_TOPICS } from "../core/providers.ts";
 import { AuthError, HTTPError, PaymentError, WebError, normalizeError } from "../core/errors.ts";
+import { utcDay } from "../core/dates.ts";
 
 type TavilyTopic = (typeof TAVILY_SEARCH_TOPICS)[number];
 
@@ -168,17 +169,13 @@ function searchBody(
     include_published_date: true,
     include_domains: options.includeDomains,
     exclude_domains: options.excludeDomains,
-    ...(options.startPublishedDate ? { start_date: tavilyDate(options.startPublishedDate) } : {}),
-    ...(options.endPublishedDate ? { end_date: tavilyDate(options.endPublishedDate) } : {}),
+    ...(options.startPublishedDate ? { start_date: utcDay(options.startPublishedDate) } : {}),
+    ...(options.endPublishedDate ? { end_date: utcDay(options.endPublishedDate) } : {}),
   } satisfies TavilySearchRequest;
 }
 
 function isTavilyTopic(category: string | undefined): category is TavilyTopic {
   return TAVILY_SEARCH_TOPICS.some((topic) => topic === category);
-}
-
-function tavilyDate(value: string): string {
-  return value.slice(0, 10);
 }
 
 /**

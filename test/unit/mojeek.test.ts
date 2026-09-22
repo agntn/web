@@ -102,6 +102,18 @@ describe("mojeek provider", () => {
     });
   });
 
+  it("takes the day of each bound in UTC, so offsets cannot flip the window", async () => {
+    const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
+    await provider.search("independent search", {
+      startPublishedDate: "2026-06-02T01:00:00+05:00",
+      endPublishedDate: "2026-06-01T23:00:00Z",
+    });
+
+    const request = new URL(mockGetJSON.mock.calls[0][0]);
+    expect(request.searchParams.get("since")).toBe("20260601");
+    expect(request.searchParams.get("before")).toBe("20260601");
+  });
+
   it("derives continuation from the response offset when Mojeek normalizes the request", async () => {
     mockGetJSON.mockResolvedValueOnce({
       response: {

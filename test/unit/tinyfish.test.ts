@@ -173,6 +173,35 @@ describe("tinyfish provider", () => {
     ]);
   });
 
+  it.each([
+    [
+      "news",
+      "2026-06-02T01:00:00+05:00",
+      "2026-06-01T23:00:00Z",
+      "after_date",
+      "before_date",
+      "2026-06-01",
+    ],
+    [
+      "research_paper",
+      "2026-01-01T01:00:00+05:00",
+      "2025-12-31T23:00:00Z",
+      "pub_year_min",
+      "pub_year_max",
+      "2025",
+    ],
+  ])(
+    "takes the %s bounds in UTC, so offsets cannot flip the window",
+    async (category, startPublishedDate, endPublishedDate, startParam, endParam, expected) => {
+      const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+      await provider.search("web agents", { category, startPublishedDate, endPublishedDate });
+
+      const params = new URL(mockGetJSON.mock.calls[0][0]).searchParams;
+      expect(params.get(startParam)).toBe(expected);
+      expect(params.get(endParam)).toBe(expected);
+    },
+  );
+
   it("continues with TinyFish page state and stops at its documented maximum", async () => {
     const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
     if (!isPaginatedSearchProvider(provider)) throw new Error("TinyFish must paginate");

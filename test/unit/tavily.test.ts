@@ -260,6 +260,18 @@ describe("tavily provider", () => {
       expect(body.end_date).toBe("2026-09-01");
     });
 
+    it("takes the day of each bound in UTC, so offsets cannot flip the window", async () => {
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
+      await provider.search("test query", {
+        startPublishedDate: "2026-06-02T01:00:00+05:00",
+        endPublishedDate: "2026-06-01T23:00:00Z",
+      });
+
+      const [, body] = mockPostJSON.mock.calls[0];
+      expect(body.start_date).toBe("2026-06-01");
+      expect(body.end_date).toBe("2026-06-01");
+    });
+
     it.each(["general", "news", "finance"])("passes category %s as topic", async (category) => {
       const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", { category });
