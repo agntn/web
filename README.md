@@ -137,7 +137,7 @@ That's most of it, really. `create("brave")` instead of `create("exa")` and noth
 | **mojeek**       | `MOJEEK_API_KEY`                                     | search              | domains, dates               | yes   |
 | **openai-codex** | Existing login, optional `OPENAI_CODEX_ACCESS_TOKEN` | search              | none                         |       |
 | **searxng**      | None, your own instance                              | search              | category                     | yes   |
-| **serpapi**      | `SERPAPI_API_KEY`                                    | search, searchImage | none                         | yes   |
+| **serpapi**      | `SERPAPI_API_KEY`                                    | search, searchImage | dates                        | yes   |
 | **serpbase**     | `SERPBASE_API_KEY`                                   | search              | category                     | yes   |
 | **tavily**       | `TAVILY_API_KEY`                                     | search, read        | domains, category, dates     |       |
 | **tinyfish**     | `TINYFISH_API_KEY`                                   | search, read        | domains, category, dates     | yes   |

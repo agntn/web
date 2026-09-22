@@ -249,6 +249,62 @@ describe("serpapi provider", () => {
       expect(url).toContain("num=5");
     });
 
+    it("sends the date window as a Google custom date range", async () => {
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
+      await provider.search("test query", {
+        startPublishedDate: "2021-01-01",
+        endPublishedDate: "2021-12-31T12:00:00Z",
+      });
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(new URL(url).searchParams.get("tbs")).toBe("cdr:1,cd_min:1/1/2021,cd_max:12/31/2021");
+    });
+
+    it("takes the day of each bound in UTC", async () => {
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
+      await provider.search("test query", {
+        startPublishedDate: "2026-06-02T01:00:00+05:00",
+        endPublishedDate: "2026-06-30T23:00:00-02:00",
+      });
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(new URL(url).searchParams.get("tbs")).toBe("cdr:1,cd_min:6/1/2026,cd_max:7/1/2026");
+    });
+
+    it("sends a lone bound alone", async () => {
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
+      await provider.search("test query", { startPublishedDate: "2021-01-01" });
+      await provider.search("test query", { endPublishedDate: "2019-12-31" });
+
+      const [[start], [end]] = mockGetJSON.mock.calls;
+      expect(new URL(start).searchParams.get("tbs")).toBe("cdr:1,cd_min:1/1/2021");
+      expect(new URL(end).searchParams.get("tbs")).toBe("cdr:1,cd_max:12/31/2019");
+    });
+
+    it("sends no tbs without a date bound", async () => {
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
+      await provider.search("test query", { includeDomains: ["example.com"] });
+
+      const [url] = mockGetJSON.mock.calls[0];
+      expect(url).not.toContain("tbs=");
+    });
+
+    it("keeps the date range on the next page", async () => {
+      mockGetJSON.mockResolvedValueOnce({
+        ...serpApiResponse,
+        serpapi_pagination: { next: "https://serpapi.com/search?start=10" },
+      });
+      const provider = await createSearchProvider("serpapi", { apiKey: "test-key" });
+      if (!isPaginatedSearchProvider(provider)) throw new Error("SerpAPI must paginate");
+      const options = { startPublishedDate: "2021-01-01", maxResults: 10 };
+      const first = await provider.searchPage("test query", options);
+      await provider.searchPage("test query", options, first.continuation);
+
+      const [, [next]] = mockGetJSON.mock.calls;
+      expect(new URL(next).searchParams.get("start")).toBe("10");
+      expect(new URL(next).searchParams.get("tbs")).toBe("cdr:1,cd_min:1/1/2021");
+    });
+
     it("walks a Google page in slices of maxResults", async () => {
       const organic = serpApiResponse.organic_results[0];
       mockGetJSON.mockResolvedValue({

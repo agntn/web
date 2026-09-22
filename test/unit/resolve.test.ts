@@ -192,7 +192,7 @@ describe("resolve", () => {
           ],
           categories: ["news", "research_paper"],
         },
-        serpapi: { filters: [] },
+        serpapi: { filters: ["startPublishedDate", "endPublishedDate"] },
         serpbase: {
           filters: ["category"],
           categories: ["images", "image", "news", "videos", "video"],
@@ -311,7 +311,7 @@ describe("resolve", () => {
       expect(matrix.serpapi).toEqual({
         search: {
           supported: true,
-          filters: [],
+          filters: ["startPublishedDate", "endPublishedDate"],
           contentOptions: [],
           pagination: true,
           resultLimit: { default: 10 },

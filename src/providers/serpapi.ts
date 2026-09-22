@@ -12,6 +12,7 @@ import {
   WebError,
   normalizeError,
 } from "../core/errors.ts";
+import { utcDay } from "../core/dates.ts";
 
 interface SerpApiResult {
   readonly position: number;
@@ -86,7 +87,7 @@ export class SerpApiProvider extends Provider {
     try {
       const page = serpApiPage(continuation);
       const limit = resultLimit(options?.maxResults);
-      const url = `${this.baseURL}/search?engine=google&q=${encodeURIComponent(query)}&api_key=${this.apiKey}&num=${limit}${page.start === 0 ? "" : `&start=${page.start}`}`;
+      const url = `${this.baseURL}/search?engine=google&q=${encodeURIComponent(query)}&api_key=${this.apiKey}&num=${limit}${page.start === 0 ? "" : `&start=${page.start}`}${dateRangeParam(options)}`;
       const response = await this.client.getJSON<SerpApiSearchResponse>(
         url,
         undefined,
@@ -140,6 +141,31 @@ export class SerpApiProvider extends Provider {
 function resultLimit(maxResults?: number): number {
   if (maxResults === undefined || !Number.isFinite(maxResults)) return 10;
   return Math.max(Math.trunc(maxResults), 1);
+}
+
+/**
+ * Google's custom date range, `tbs=cdr:1,cd_min:M/D/YYYY,cd_max:M/D/YYYY`. Either bound may be
+ * left out and Google keeps the other one, so a lone bound goes out alone.
+ * @param options - Search options requested by the caller.
+ * @returns {string} The `tbs` query parameter, or nothing without a date bound.
+ */
+function dateRangeParam(options?: SearchRequestOptions): string {
+  const start = options?.startPublishedDate;
+  const end = options?.endPublishedDate;
+  if (!start && !end) return "";
+  const min = start ? `,cd_min:${googleDay(start)}` : "";
+  const max = end ? `,cd_max:${googleDay(end)}` : "";
+  return `&tbs=${encodeURIComponent(`cdr:1${min}${max}`)}`;
+}
+
+/**
+ * Google reads the range month first, as `M/D/YYYY`.
+ * @param value - ISO 8601 date or datetime.
+ * @returns {string} The UTC day as `M/D/YYYY`.
+ */
+function googleDay(value: string): string {
+  const [year, month, day] = utcDay(value).split("-");
+  return `${Number(month)}/${Number(day)}/${year}`;
 }
 
 /** Google `start` offset of the page plus the position inside it where the next slice begins. */
