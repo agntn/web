@@ -112,6 +112,15 @@ describe("search command", () => {
     expect(searchCommand.args).toMatchObject({ continuation: { type: "string" } });
   });
 
+  it("selects providers automatically when the provider argument is blank", async () => {
+    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+
+    await runSearch({ provider: "   " });
+
+    expect(mockDetectAvailableProvidersAsync).toHaveBeenCalled();
+    expect(mockCreate).toHaveBeenCalledWith("exa", expect.anything());
+  });
+
   it("falls through automatic providers after HTTP 402", async () => {
     const results = [{ url: "https://example.com", title: "Example", snippet: "Result" }];
     mockSearch

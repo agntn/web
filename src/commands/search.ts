@@ -196,7 +196,7 @@ function parseSearchArguments(args: SearchCommandArgs): ParsedSearchArguments {
 
   return {
     query: queries.length === 1 ? queries[0] : queries,
-    provider: args.provider || undefined,
+    provider: optionalText(args.provider),
     options: parseSearchOptions(args, maxResults.value),
     json: args.json,
   };
