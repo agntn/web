@@ -60,6 +60,21 @@ describe("HTTPError", () => {
     expect(error.message).toBe("HTTP 422: https://example.com: DNS failed");
   });
 
+  it("should quote the start of a long body without changing the body", () => {
+    const body = `<html>${"<p>Checking your browser</p>".repeat(8000)}</html>`;
+    const error = new HTTPError(403, "https://example.com", body);
+
+    expect(error.body).toBe(body);
+    expect(error.message).toBe(`HTTP 403: https://example.com: ${body.slice(0, 999)}…`);
+  });
+
+  it("should keep a whole surrogate pair at the end of a quoted body", () => {
+    const body = `${"a".repeat(998)}😀${"b".repeat(100)}`;
+    const error = new HTTPError(502, "https://example.com", body);
+
+    expect(error.message).toBe(`HTTP 502: https://example.com: ${"a".repeat(998)}…`);
+  });
+
   it("should identify 429 as rate limit", () => {
     const error = new HTTPError(429, "https://example.com", "");
     expect(error.isRateLimit()).toBe(true);
@@ -140,6 +155,14 @@ describe("normalizeError", () => {
       expect(error.provider).toBe("exa");
       expect(error.message).toContain("Invalid API key");
     }
+  });
+
+  it("should quote the start of a long 401 body in AuthError", () => {
+    const body = `<html>${"<p>Access denied</p>".repeat(8000)}</html>`;
+    const error = normalizeError(new HTTPError(401, "https://example.com", body), "exa");
+
+    expect(error).toBeInstanceOf(AuthError);
+    expect(error.message).toBe(`Authentication failed: ${body.slice(0, 999)}…`);
   });
 
   it("should convert HTTPError 401 to AuthError with unknown provider by default", () => {
