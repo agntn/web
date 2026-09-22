@@ -396,7 +396,12 @@ export default async function webExtension(pi: ExtensionAPI) {
               ...executionOptions,
             });
             return {
-              content: [{ type: "text", text: formatSearchBatch(outcomes) }],
+              content: [
+                {
+                  type: "text",
+                  text: formatSearchBatch(web.batchWithoutRepeatedEvidence(outcomes)),
+                },
+              ],
               details: {
                 mode: "batch",
                 queries: params.query,
@@ -428,7 +433,7 @@ export default async function webExtension(pi: ExtensionAPI) {
                   text: withHeader(
                     header,
                     formatAllResults(
-                      results,
+                      web.withoutRepeatedEvidence(results),
                       response.errors,
                       response.filterReports,
                       response.providerPagination,
@@ -987,7 +992,7 @@ type SearchAllEvidenceView = SearchResultView & {
 };
 type SearchAllResultView = SearchAllEvidenceView & {
   readonly providers: readonly string[];
-  readonly evidence: readonly SearchAllEvidenceView[];
+  readonly evidence?: readonly SearchAllEvidenceView[];
 };
 type SearchBatchItemView =
   | { readonly query: string; readonly error: string }
@@ -1101,8 +1106,7 @@ function hasResultProvenance(result: SearchResultView): result is SearchAllResul
     typeof result.provider === "string" &&
     "providers" in result &&
     Array.isArray(result.providers) &&
-    "evidence" in result &&
-    Array.isArray(result.evidence)
+    (!("evidence" in result) || Array.isArray(result.evidence))
   );
 }
 
@@ -1135,6 +1139,8 @@ function formatImageSearchResults(
 }
 
 function formatSearchAllModelResult(result: SearchAllResultView, index: number): string {
+  const records = result.evidence ?? [];
+  if (records.length === 0) return formatModelResult(result, index, result.providers.join(", "));
   const header = formatModelResult(
     result,
     index,
@@ -1142,7 +1148,7 @@ function formatSearchAllModelResult(result: SearchAllResultView, index: number):
     Math.floor(MODEL_RESULT_MAX_CHARACTERS / 3),
   );
   const heading = "\n   Evidence:\n";
-  const separators = Math.max(0, result.evidence.length - 1);
+  const separators = Math.max(0, records.length - 1);
   const remainingCharacters =
     MODEL_RESULT_MAX_CHARACTERS -
     Array.from(header).length -
@@ -1150,25 +1156,22 @@ function formatSearchAllModelResult(result: SearchAllResultView, index: number):
     separators;
   const evidenceMaxCharacters = Math.max(
     2,
-    Math.floor(remainingCharacters / Math.max(1, result.evidence.length)),
+    Math.floor(remainingCharacters / Math.max(1, records.length)),
   );
-  const evidence = result.evidence.map((record, evidenceIndex) =>
+  const evidence = records.map((record, evidenceIndex) =>
     formatModelResult(record, evidenceIndex, record.provider, evidenceMaxCharacters),
   );
   return truncateModelResult(`${header}${heading}${evidence.join("\n")}`);
 }
 
 function formatAllResults(
-  results: readonly SearchAllResultView[],
+  results: readonly SearchResultView[],
   errors: readonly ProviderErrorView[],
   filterReports: readonly SearchFilterReport[],
   providerPagination: readonly SearchProviderPagination[],
   providerMetadata: readonly SearchProviderMetadata[],
 ): readonly string[] {
-  const lines =
-    results.length === 0
-      ? ["No results."]
-      : results.map((result, index) => formatSearchAllModelResult(result, index));
+  const lines = results.length === 0 ? ["No results."] : [...formatBatchResults(results, "all")];
   lines.push(
     ...formatFilterReports(filterReports),
     ...formatProviderPaginations(providerPagination),
