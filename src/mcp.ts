@@ -11,6 +11,7 @@ import { webToolTitle } from "./tui.ts";
 import { builtinProviders } from "./core/providers.ts";
 import { searchProviders, searchImageProviders, readProviders } from "./core/registry.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";
+import { optionalText } from "./core/options.ts";
 import { imageSearchProviderNames, searchByImage } from "./core/image.ts";
 import {
   DEFAULT_AGENT_READ_MAX_CHARS,
@@ -691,7 +692,7 @@ function stringArg(name: string, value: unknown): string | undefined {
   if (typeof value !== "string") {
     throw new TypeError(`${name} must be a string`);
   }
-  return value;
+  return optionalText(value);
 }
 
 function searchInputArg(value: unknown): string | readonly string[] {
@@ -703,9 +704,10 @@ function searchInputArg(value: unknown): string | readonly string[] {
 }
 
 function searchProviderArg(value: unknown): string | undefined {
-  if (value === undefined || value === "auto") return undefined;
-  if (value === "all") return value;
-  const provider = searchProviders().find((name) => name === value);
+  const requested = stringArg("provider", value);
+  if (requested === undefined || requested === "auto") return undefined;
+  if (requested === "all") return requested;
+  const provider = searchProviders().find((name) => name === requested);
   if (!provider) {
     throw new TypeError(`provider must be one of: auto, all, ${searchProviders().join(", ")}`);
   }
@@ -713,8 +715,9 @@ function searchProviderArg(value: unknown): string | undefined {
 }
 
 function imageSearchProviderArg(value: unknown): string | undefined {
-  if (value === undefined) return undefined;
-  const provider = searchImageProviders().find((name) => name === value);
+  const requested = stringArg("provider", value);
+  if (requested === undefined) return undefined;
+  const provider = searchImageProviders().find((name) => name === requested);
   if (!provider) {
     throw new TypeError(`provider must be one of: ${searchImageProviders().join(", ")}`);
   }
@@ -722,8 +725,9 @@ function imageSearchProviderArg(value: unknown): string | undefined {
 }
 
 function readProviderArg(value: unknown): string | undefined {
-  if (value === undefined || value === "auto") return undefined;
-  const provider = readProviders().find((name) => name === value);
+  const requested = stringArg("provider", value);
+  if (requested === undefined || requested === "auto") return undefined;
+  const provider = readProviders().find((name) => name === requested);
   if (!provider) {
     throw new TypeError(`provider must be one of: auto, ${readProviders().join(", ")}`);
   }

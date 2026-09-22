@@ -235,9 +235,10 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
         ctx?.modelRegistry?.authStorage,
         async () => {
           const provider = normalizeSearchProvider(params.provider, web.searchProviders());
+          const continuation = optionalText(params.continuation);
           const options: SearchPageOptions = {
             maxResults: params.maxResults,
-            continuation: params.continuation,
+            continuation,
             highlights: params.highlights,
             summary: params.summary,
             fullText: params.fullText,
@@ -257,7 +258,7 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
           };
 
           if (Array.isArray(params.query)) {
-            if (params.continuation !== undefined) {
+            if (continuation !== undefined) {
               throw new TypeError("continuation is only supported for a single query");
             }
             const outcomes = await web.searchBatch(params.query, {
@@ -336,12 +337,13 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
       const web = await loadWeb();
       const provider = normalizeReadProvider(params.provider, web.readProviders());
       const providerLabel = provider ?? "auto";
+      const continuation = optionalText(params.continuation);
       const options = {
         provider,
         format: normalizeReadFormat(params.format),
         maxTokens: params.maxTokens,
         maxChars: params.maxChars ?? DEFAULT_READ_MAX_CHARS,
-        continuation: params.continuation,
+        continuation,
         links: params.links,
         images: params.images,
         targetSelector: params.targetSelector,
@@ -349,7 +351,7 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
         timeout: params.timeout,
         noCache: params.noCache,
       };
-      if (Array.isArray(params.url) && params.continuation !== undefined) {
+      if (Array.isArray(params.url) && continuation !== undefined) {
         throw new TypeError("continuation is only supported for a single URL");
       }
       const deadline = web.deadlineAfterSeconds(params.timeoutSeconds);
@@ -402,22 +404,32 @@ function normalizeSearchProvider(
   value: string | undefined,
   providers: readonly string[],
 ): string | undefined {
-  if (value === undefined || value === "auto") return undefined;
-  if (value === "all") return value;
-  const provider = providers.find((candidate) => candidate === value);
-  if (!provider) throw new TypeError(`Unknown search provider: ${value}`);
+  const requested = optionalText(value);
+  if (requested === undefined || requested === "auto") return undefined;
+  if (requested === "all") return requested;
+  const provider = providers.find((candidate) => candidate === requested);
+  if (!provider) throw new TypeError(`Unknown search provider: ${requested}`);
   return provider;
 }
 
 function normalizeImageProvider(value: string | undefined, providers: readonly string[]): string {
-  const selected = value ?? providers[0];
+  const selected = optionalText(value) ?? providers[0];
   const provider = providers.find((candidate) => candidate === selected);
   if (!provider) throw new TypeError(`Unknown image search provider: ${selected ?? "none"}`);
   return provider;
 }
 
+/**
+ * Reads an optional text parameter, treating a blank value as an omitted one.
+ * @param value - Parameter as the model supplied it.
+ * @returns {string | undefined} The value, or undefined when it is blank.
+ */
+function optionalText(value: string | undefined): string | undefined {
+  return value?.trim() ? value : undefined;
+}
+
 function normalizeReadFormat(value: string | undefined): ReadOptions["format"] {
-  if (value === undefined || value === "") return undefined;
+  if (optionalText(value) === undefined) return undefined;
   if (value === "markdown" || value === "text" || value === "html") return value;
   throw new TypeError(`Unknown read format: ${value}`);
 }
@@ -426,8 +438,9 @@ function normalizeReadProvider(
   value: string | undefined,
   providers: readonly string[],
 ): string | undefined {
-  if (value === undefined || value === "auto") return undefined;
-  const provider = providers.find((candidate) => candidate === value);
-  if (!provider) throw new TypeError(`Unknown read provider: ${value}`);
+  const requested = optionalText(value);
+  if (requested === undefined || requested === "auto") return undefined;
+  const provider = providers.find((candidate) => candidate === requested);
+  if (!provider) throw new TypeError(`Unknown read provider: ${requested}`);
   return provider;
 }

@@ -1127,16 +1127,22 @@ describe("web MCP executors", () => {
     }
   });
 
-  it("rejects blank read providers before the default-provider fallback", async () => {
-    await expect(executeRead({ url: "https://example.com", provider: "" })).rejects.toBeInstanceOf(
-      TypeError,
-    );
+  it("reads through automatic selection when the provider arrives blank", async () => {
+    mockGetJSON.mockResolvedValue({
+      code: 200,
+      status: 20000,
+      data: { url: "https://example.com", content: "page" },
+    });
+
     await expect(
       executeRead({ url: "https://example.com", provider: "   " }),
+    ).resolves.toMatchObject({ requestedProvider: "auto", provider: "jina" });
+    await expect(
+      executeRead({ url: "https://example.com", provider: "nope" }),
     ).rejects.toBeInstanceOf(TypeError);
   });
 
-  it("passes schema-valid empty optional values through untouched", async () => {
+  it("takes schema-valid empty optional values as unset", async () => {
     vi.stubEnv("JINA_API_KEY", "test-key");
     await executeSearch({ query: "test", provider: "jina", category: "", includeDomains: [] });
 

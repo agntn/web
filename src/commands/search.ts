@@ -15,6 +15,7 @@ import type {
   SearchProviderResult,
 } from "../core/all.ts";
 import type { SearchFilterReport } from "../core/search-filters.ts";
+import { optionalText } from "../core/options.ts";
 import { MAX_SEARCH_CONTINUATION_LENGTH } from "../core/search-continuation.ts";
 import type {
   ReadonlySearchResult,
@@ -188,7 +189,7 @@ function parseSearchArguments(args: SearchCommandArgs): ParsedSearchArguments {
   if (queries.some((query) => !query.trim())) {
     return exitWithError("Search query cannot be empty.");
   }
-  const continuation = continuationError(args.continuation, queries, args.provider);
+  const continuation = continuationError(optionalText(args.continuation), queries, args.provider);
   if (continuation !== undefined) return exitWithError(continuation);
   const maxResults = parseMaxResults(args["max-results"]);
   if (!maxResults.ok) return exitWithError(maxResults.message);
@@ -226,7 +227,7 @@ function parseSearchOptions(args: SearchCommandArgs, maxResults: number): Search
   const categories = parseList(args.categories);
   return {
     maxResults,
-    ...(args.continuation === undefined ? {} : { continuation: args.continuation }),
+    ...(optionalText(args.continuation) === undefined ? {} : { continuation: args.continuation }),
     highlights: args.highlights,
     ...parseContentOptions(args),
     ...(includeDomains === undefined ? {} : { includeDomains }),

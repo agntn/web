@@ -739,4 +739,55 @@ describe("OMP extension", () => {
     expect(rendered).toContain("jina ·");
     expect(rendered).not.toContain('{"runtime"');
   });
+  it("takes blank optional strings as unset", async () => {
+    const providerName = `blank-omp-${Math.random().toString(36).slice(2)}`;
+    class BlankProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://blank.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, BlankProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com", title: "Blank", snippet: "Blank" }];
+      }
+
+      async read(url: string) {
+        return { url, content: "Blank page" };
+      }
+    }
+    customProviderCleanups.push(register(BlankProvider));
+    const { tools } = captureOmpExtension();
+
+    const search = await requiredTool(tools, "web_search").execute(
+      "blank-search",
+      {
+        query: ["first", "second"],
+        provider: providerName,
+        continuation: "",
+        category: "",
+        startPublishedDate: "",
+      },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const read = await requiredTool(tools, "web_read").execute(
+      "blank-read",
+      {
+        url: ["https://example.com/a", "https://example.com/b"],
+        provider: providerName,
+        continuation: "",
+        format: "",
+        targetSelector: "",
+      },
+      undefined,
+      undefined,
+      {} as never,
+    );
+
+    expect(search.details).toMatchObject({ mode: "batch" });
+    expect(read.details).toMatchObject({ mode: "batch" });
+  });
 });

@@ -27,6 +27,7 @@ import {
   ProviderFallbackError,
   type ProviderFailure,
 } from "./fallback.ts";
+import { normalizeSearchOptions } from "./options.ts";
 import { createSearchProvider, has } from "./registry.ts";
 import { isDetailedSearchProvider, isPaginatedSearchProvider } from "./provider.ts";
 import { decodeSearchContinuation, encodeSearchContinuation } from "./search-continuation.ts";
@@ -128,13 +129,14 @@ export async function searchAll(
  * `signal` still rejects. Automatic selection probes reachability inside each
  * provider's slot, so a hanging endpoint costs only that provider.
  * @param {string} query - Search query.
- * @param {SearchAllOptions} options - Provider and result options.
+ * @param {SearchAllOptions} requestedOptions - Provider and result options.
  * @returns {Promise<SearchAllResponse>} Results and provider failures.
  */
 export async function searchAllDetailed(
   query: string,
-  options?: SearchAllOptions,
+  requestedOptions?: SearchAllOptions,
 ): Promise<SearchAllResponse> {
+  const options = normalizeSearchOptions(requestedOptions);
   validateSearchInput(query, options);
 
   const { providers: requestedProviders, continuation, ...searchOptions } = options ?? {};
@@ -159,13 +161,14 @@ export async function searchAllDetailed(
 /**
  * Search through automatic providers in order, continuing after eligible transient failures.
  * @param query - Search query.
- * @param options - Search options forwarded to the selected provider.
+ * @param requestedOptions - Search options forwarded to the selected provider.
  * @returns {Promise<SearchWithFallbackResult>} Results, provider, and attempt diagnostics.
  */
 export async function searchWithFallback(
   query: string,
-  options?: Readonly<SearchPageOptions>,
+  requestedOptions?: Readonly<SearchPageOptions>,
 ): Promise<SearchWithFallbackResult> {
+  const options = normalizeSearchOptions(requestedOptions);
   validateSearchInput(query, options);
   const effectiveOptions = withExecutionBudget(options);
   throwIfAborted(effectiveOptions.signal);
@@ -186,14 +189,15 @@ export async function searchWithFallback(
  * Search one named provider and report filters it could not apply.
  * @param providerName - Registered provider name.
  * @param query - Search query.
- * @param options - Search options forwarded to the provider.
+ * @param requestedOptions - Search options forwarded to the provider.
  * @returns {Promise<SearchProviderResult>} Results and effective filter diagnostics.
  */
 export async function searchProviderDetailed(
   providerName: string,
   query: string,
-  options?: Readonly<SearchPageOptions>,
+  requestedOptions?: Readonly<SearchPageOptions>,
 ): Promise<SearchProviderResult> {
+  const options = normalizeSearchOptions(requestedOptions);
   validateSearchInput(query, options);
   validateProviderNames([providerName]);
   return searchProvider(providerName, query, options);
@@ -201,12 +205,13 @@ export async function searchProviderDetailed(
 
 /**
  * Resolve the automatic provider order once for a batch of searches.
- * @param options - Search options forwarded to every selected provider.
+ * @param requestedOptions - Search options forwarded to every selected provider.
  * @returns {Promise<PreparedSearchWithFallback>} Search function using the resolved provider order.
  */
 export async function prepareSearchWithFallback(
-  options?: Readonly<Omit<SearchPageOptions, "continuation">>,
+  requestedOptions?: Readonly<Omit<SearchPageOptions, "continuation">>,
 ): Promise<PreparedSearchWithFallback> {
+  const options = normalizeSearchOptions(requestedOptions);
   validateMaxResults(options?.maxResults);
   validateDateFilters(options?.startPublishedDate, options?.endPublishedDate);
   const effectiveOptions = withExecutionBudget(options);

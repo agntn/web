@@ -59,6 +59,7 @@ test/unit/                # Public behavior and provider contract tests
 - Prefer normalized models over provider-shaped raw objects
 - Keep capability names explicit and topically aligned: `search*` for query → results, `searchImage*`/`searchByImage` for image URL → matches, and `read*`/`readUrl` for URL → content
 - Keep capability order consistent across APIs and documentation: search, search image, read
+- Blank optional text inputs count as unset on every surface; `src/core/options.ts` owns that normalization and required inputs keep rejecting empty values
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible
 - Built in capability lists are the source for static descriptions; `searchProviders()`, `searchImageProviders()`, and `readProviders()` are the live execution contract
