@@ -1,3 +1,5 @@
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   searchAllDetailed,
@@ -7,8 +9,9 @@ import {
 import { readBatchDetailed, searchBatch } from "../../src/core/batch.ts";
 import { readUrlDetailed } from "../../src/core/read.ts";
 import { searchByImage } from "../../src/core/image.ts";
+import { asSchema } from "ai";
 import { readTool, searchTool } from "../../src/ai.ts";
-import { executeRead, executeSearch } from "../../src/mcp.ts";
+import { createMcpServer, executeRead, executeSearch } from "../../src/mcp.ts";
 import { InvalidDateFilterError, InvalidSearchContinuationError } from "../../src/core/errors.ts";
 import { Provider } from "../../src/core/provider.ts";
 import { register } from "../../src/core/registry.ts";
@@ -298,5 +301,35 @@ describe("blank optional AI SDK arguments", () => {
     );
 
     expect(response).toMatchObject({ provider: "exa" });
+  });
+});
+
+describe("blank optional arguments through schema validation", () => {
+  it("passes a blank read format through the MCP tool schema", async () => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMcpServer();
+    const client = new Client({ name: "blank-options-test", version: "1.0.0" });
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+    try {
+      const result = await client.callTool({
+        name: "web_read",
+        arguments: { url: "https://example.com", provider: "jina", format: "", continuation: "" },
+      });
+
+      expect(result.isError).not.toBe(true);
+      expect(readCalls[0]?.format).toBeUndefined();
+    } finally {
+      await Promise.all([client.close(), server.close()]);
+    }
+  });
+
+  it("passes a blank read format through the AI SDK tool schema", async () => {
+    const validate = asSchema(readTool.inputSchema).validate;
+    if (!validate) throw new TypeError("Read schema has no validator");
+
+    await expect(
+      validate({ url: "https://example.com", provider: "", format: "", continuation: "" }),
+    ).resolves.toMatchObject({ success: true });
   });
 });

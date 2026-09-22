@@ -453,8 +453,8 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
           }),
         ),
         format: Type.Optional(
-          Type.Enum(["markdown", "text", "html"], {
-            description: "Preferred content format.",
+          Type.Union([Type.Enum(["markdown", "text", "html"]), Type.Literal("")], {
+            description: "Preferred content format. An empty string means the provider default.",
           }),
         ),
         maxTokens: Type.Optional(

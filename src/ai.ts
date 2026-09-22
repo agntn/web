@@ -191,7 +191,10 @@ export const readTool = tool({
       .describe(
         `Read provider to use. Built in providers: ${readProviderNames.join(", ")}. Automatic selection starts with Jina and falls back after eligible payment, conflict, rate limit, timeout, or server failures. Registered custom providers are validated at execution time.`,
       ),
-    format: z.enum(["markdown", "text", "html"]).optional().describe("Preferred content format."),
+    format: z
+      .union([z.enum(["markdown", "text", "html"]), z.literal("")])
+      .optional()
+      .describe("Preferred content format. An empty string means the provider default."),
     maxTokens: z
       .number()
       .int()
@@ -271,7 +274,7 @@ export const readTool = tool({
     const normalizedProvider = requestedProvider === "auto" ? undefined : requestedProvider;
     const readOptions = {
       provider: normalizedProvider,
-      format,
+      format: format === "" ? undefined : format,
       maxTokens,
       maxChars: maxChars ?? DEFAULT_AGENT_READ_MAX_CHARS,
       continuation: readContinuation,
