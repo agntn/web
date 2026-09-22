@@ -487,6 +487,64 @@ describe("readUrl", () => {
     ).rejects.toThrow(StaleReadContinuationError);
   });
 
+  it.each([
+    ["", 3, [""]],
+    ["ab", 3, ["ab"]],
+    ["abc", 3, ["abc"]],
+    ["abcdef", 3, ["abc", "def"]],
+    ["abcdefg", 3, ["abc", "def", "g"]],
+    ["😀a𐀀b", 2, ["😀a", "𐀀b"]],
+    ["a\u0301😀b", 1, ["a", "\u0301", "😀", "b"]],
+    ["\uD800a\uDC00", 1, ["\uD800", "a", "\uDC00"]],
+  ] as const)("pages %j with a %i code point bound", async (content, maxChars, pages) => {
+    const providerName = "page-boundary-reader";
+    registerReader(providerName, async (url) => ({ url, content }));
+    let continuation: string | undefined;
+
+    for (const [index, expected] of pages.entries()) {
+      const result = await readUrl("https://example.com", {
+        provider: providerName,
+        maxChars,
+        continuation,
+      });
+      const truncated = index < pages.length - 1;
+      expect(result.content).toBe(expected);
+      expect(result.truncated).toBe(truncated);
+      if (truncated) expect(result.continuation).toBeTypeOf("string");
+      else expect(result).not.toHaveProperty("continuation");
+      continuation = result.continuation;
+    }
+  });
+
+  it("returns the rest of a continued read when the bound is removed", async () => {
+    const providerName = "unbounded-continuation-reader";
+    registerReader(providerName, async (url) => ({ url, content: "a😀bc𐀀d" }));
+    const first = await readUrl("https://example.com", { provider: providerName, maxChars: 2 });
+
+    const rest = await readUrl("https://example.com", {
+      provider: providerName,
+      continuation: first.continuation,
+    });
+
+    expect(rest).toEqual({ url: "https://example.com", content: "bc𐀀d", truncated: false });
+  });
+
+  it("detects changes past the end of the requested page", async () => {
+    const providerName = "changed-tail-reader";
+    let content = `${"😀".repeat(100)}original`;
+    registerReader(providerName, async (url) => ({ url, content }));
+    const first = await readUrl("https://example.com", { provider: providerName, maxChars: 2 });
+    content = `${"😀".repeat(100)}modified`;
+
+    await expect(
+      readUrl("https://example.com", {
+        provider: providerName,
+        maxChars: 2,
+        continuation: first.continuation,
+      }),
+    ).rejects.toThrow(StaleReadContinuationError);
+  });
+
   it("pins automatic continuations to the effective reader", async () => {
     const readFromContext = vi.fn().mockResolvedValue({
       url: "https://example.com",
