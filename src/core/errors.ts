@@ -1,6 +1,7 @@
 import { stripVTControlCharacters } from "node:util";
 
 const ERROR_MESSAGE_UNSAFE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
+const MESSAGE_BODY_MAX_CHARACTERS = 1000;
 
 export function validateMaxResults(maxResults: number | undefined): void {
   if (maxResults !== undefined && (!Number.isInteger(maxResults) || maxResults < 1)) {
@@ -53,11 +54,26 @@ export class PaymentError extends HTTPError {
 
 function formatHTTPErrorMessage(statusCode: number, url: string, body: string): string {
   const header = `HTTP ${statusCode}: ${url}`;
-  const safeBody = stripVTControlCharacters(body)
+  const excerpt = bodyExcerpt(body);
+  return excerpt.length > 0 ? `${header}: ${excerpt}` : header;
+}
+
+/**
+ * Quote a response body in an error message, safe for terminals and bounded.
+ * A proxy or bot check can answer with a whole HTML page, and the message travels into every failure an agent reads.
+ * @param body - Raw response body, kept whole on {@link HTTPError.body}.
+ * @returns {string} Single-line body text, cut with an ellipsis past {@link MESSAGE_BODY_MAX_CHARACTERS}.
+ */
+function bodyExcerpt(body: string): string {
+  const safe = stripVTControlCharacters(body)
     .replaceAll(ERROR_MESSAGE_UNSAFE, " ")
     .replaceAll(/\s+/g, " ")
     .trim();
-  return safeBody.length > 0 ? `${header}: ${safeBody}` : header;
+  if (safe.length <= MESSAGE_BODY_MAX_CHARACTERS) return safe;
+
+  const end = MESSAGE_BODY_MAX_CHARACTERS - 1;
+  const splitsPair = (safe.codePointAt(end - 1) ?? 0) > 0xffff;
+  return `${safe.slice(0, splitsPair ? end - 1 : end)}…`;
 }
 
 /** Thrown when a provider rejects the API key (HTTP 401). */
@@ -292,7 +308,7 @@ export function normalizeError(error: unknown, provider?: string): WebError {
   if (error instanceof PaymentError) return error;
   if (error instanceof HTTPError && error.statusCode === 401) {
     return new AuthError(
-      `Authentication failed: ${error.body || "Invalid or missing API key"}`,
+      `Authentication failed: ${bodyExcerpt(error.body) || "Invalid or missing API key"}`,
       provider || "unknown",
     );
   }
