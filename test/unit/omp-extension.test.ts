@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import webOmpExtension from "../../packages/omp/extensions/web.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { completedEvents, sse } from "../fixtures/codex.ts";
+import { builtinProviders, providerApiKeyEnvVar } from "../../src/core/providers.ts";
 import { Provider, register } from "../../src/index.ts";
 import type { ProviderStatus } from "../../src/index.ts";
 import type { ProviderConfig, SearchRequestOptions, SearchResult } from "../../src/core/types.ts";
@@ -652,6 +653,79 @@ describe("OMP extension", () => {
     expect(lean.details).not.toHaveProperty("results.0.favicon");
     expect(JSON.stringify(lean.content)).not.toContain("favicon");
     expect(requested.details).toMatchObject({ results: [{ favicon }] });
+  });
+
+  it("sends each fanout provider record to the model once", async () => {
+    for (const provider of builtinProviders) {
+      const envVar = providerApiKeyEnvVar(provider);
+      if (envVar) vi.stubEnv(envVar, undefined);
+    }
+    vi.stubEnv("EXA_API_KEY", "test-exa");
+    vi.stubEnv("BRAVE_API_KEY", "test-brave");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: unknown) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url === "https://api.exa.ai/search") {
+          return Response.json({
+            requestId: "request",
+            results: [{ id: "exa-result", title: "Exa result", url: "https://example.com/same" }],
+          });
+        }
+        if (url.startsWith("https://api.search.brave.com/res/v1/web/search")) {
+          return Response.json({
+            web: {
+              results: [
+                {
+                  title: "Brave result",
+                  url: "https://example.com/same",
+                  description: "duplicate",
+                  extra_snippets: [],
+                  meta_url: { favicon: "" },
+                },
+              ],
+            },
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      }),
+    );
+    resetDefaultClientForTests();
+    const search = requiredTool(captureOmpExtension().tools, "web_search");
+
+    const single = await search.execute(
+      "search-call",
+      { query: "test query", provider: "all" },
+      undefined,
+      undefined,
+      {} as never,
+    );
+    const batch = await search.execute(
+      "search-call",
+      { query: ["test query"], provider: "all" },
+      undefined,
+      undefined,
+      {} as never,
+    );
+
+    const brave = { provider: "brave", title: "Brave result", snippet: "duplicate" };
+    const text = (result: Readonly<{ content: readonly unknown[] }>): string =>
+      (result.content[0] as { text: string }).text;
+    expect(single.details).toHaveProperty("results.0.evidence", [
+      expect.objectContaining({ provider: "exa", title: "Exa result" }),
+      expect.objectContaining(brave),
+    ]);
+    expect(JSON.parse(text(single))).toMatchObject({
+      mode: "all",
+      results: [{ provider: "exa", providers: ["exa", "brave"], evidence: [brave] }],
+    });
+    expect(JSON.parse(text(batch))).toMatchObject({
+      mode: "batch",
+      outcomes: [{ results: [{ provider: "exa", evidence: [brave] }] }],
+    });
+    for (const result of [single, batch]) {
+      expect(text(result).match(/Exa result/gu)).toHaveLength(1);
+    }
   });
 
   it("keeps links and images out of a read unless asked", async () => {

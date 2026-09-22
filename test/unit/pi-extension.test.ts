@@ -916,8 +916,12 @@ describe("Pi extension", () => {
       await expect(execution).resolves.toHaveProperty(
         "content.0.text",
         expect.stringMatching(
-          /Providers: exa, brave[\s\S]*Evidence:[\s\S]*2\. Brave result[\s\S]*Snippet: duplicate[\s\S]*Providers: brave/,
+          /Providers: exa, brave[\s\S]*Evidence:\n1\. Brave result[\s\S]*Snippet: duplicate[\s\S]*Providers: brave/,
         ),
+      );
+      await expect(execution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.not.stringMatching(/Exa result[\s\S]*Exa result/),
       );
 
       const batchExecution: unknown = Reflect.apply(
@@ -936,6 +940,10 @@ describe("Pi extension", () => {
         expect.stringMatching(
           /\[1\] first query \[provider=all\]\n\n1\. Exa result[\s\S]*Providers: exa, brave[\s\S]*\[2\] second query \[provider=all\]\n\n1\. Exa result[\s\S]*Providers: exa, brave/,
         ),
+      );
+      await expect(batchExecution).resolves.toHaveProperty(
+        "content.0.text",
+        expect.not.stringMatching(/Exa result[\s\S]*Exa result[\s\S]*\[2\] second query/),
       );
     } finally {
       for (const [envVar, value] of previousEnv) {

@@ -151,6 +151,12 @@ export {
   deadlineAfterSeconds,
 } from "./core/execution.ts";
 export { MAX_BATCH_ITEMS, searchBatch, readBatch, readBatchDetailed } from "./core/batch.ts";
+export { batchWithoutRepeatedEvidence, withoutRepeatedEvidence } from "./core/evidence.ts";
+export type {
+  SearchAgentResults,
+  SearchAllAgentResult,
+  SearchBatchAgentItem,
+} from "./core/evidence.ts";
 export type {
   SearchBatchOptions,
   SearchBatchItem,

@@ -21,6 +21,7 @@ import {
   readUrlDetailed,
 } from "./core/read.ts";
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
+import { batchWithoutRepeatedEvidence, withoutRepeatedEvidence } from "./core/evidence.ts";
 import { deadlineAfterSeconds, MAX_AGENT_TIMEOUT_SECONDS } from "./core/execution.ts";
 import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
@@ -59,7 +60,7 @@ const searchAllResultSchema = strictObject({
   ...searchResultProperties,
   provider: Type.String(),
   providers: Type.Array(Type.String()),
-  evidence: Type.Array(searchAllEvidenceSchema),
+  evidence: Type.Optional(Type.Array(searchAllEvidenceSchema)),
 });
 const searchFilterReportSchema = strictObject({
   provider: Type.String(),
@@ -599,12 +600,15 @@ async function runSearch(
   searchOptions: Readonly<SearchPageOptions>,
 ): Promise<unknown> {
   if (typeof query !== "string") {
-    return searchBatch(query, { provider: requestedProvider, ...searchOptions });
+    return batchWithoutRepeatedEvidence(
+      await searchBatch(query, { provider: requestedProvider, ...searchOptions }),
+    );
   }
   if (requestedProvider === "all") {
     const response = await searchAllDetailed(query, searchOptions);
     return {
       ...response,
+      results: withoutRepeatedEvidence(response.results),
       errors: response.errors.map(({ provider, error }) => ({ provider, error: error.message })),
     };
   }

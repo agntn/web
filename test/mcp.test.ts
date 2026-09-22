@@ -480,7 +480,6 @@ describe("web MCP server", () => {
           expect.objectContaining({
             provider: "exa",
             providers: ["exa"],
-            evidence: [expect.objectContaining({ provider: "exa", url: "https://example.com" })],
             url: "https://example.com",
           }),
         ],
@@ -488,6 +487,56 @@ describe("web MCP server", () => {
         errors: [],
       },
     });
+    expect(response.structuredContent).not.toHaveProperty("result.results.0.evidence");
+  });
+
+  it("sends each fanout provider record once", async () => {
+    vi.stubEnv("EXA_API_KEY", "test-key");
+    vi.stubEnv("BRAVE_API_KEY", "test-key");
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
+    mockPostJSON.mockReset();
+    mockPostJSON.mockResolvedValue({
+      requestId: "fanout-request",
+      results: [{ title: "Exa result", url: "https://example.com/same", text: "page" }],
+    });
+    mockGetJSON.mockReset();
+    mockGetJSON.mockResolvedValue({
+      web: {
+        results: [
+          {
+            title: "Brave result",
+            url: "https://example.com/same",
+            description: "duplicate",
+            extra_snippets: [],
+            meta_url: { favicon: "" },
+          },
+        ],
+      },
+    });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search",
+      arguments: { query: "test query", provider: "all" },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(response.structuredContent).toMatchObject({
+      result: {
+        results: [
+          {
+            provider: "exa",
+            title: "Exa result",
+            providers: ["exa", "brave"],
+            evidence: [{ provider: "brave", title: "Brave result", snippet: "duplicate" }],
+          },
+        ],
+      },
+    });
+    expect(response.structuredContent).not.toHaveProperty("result.results.0.evidence.1");
+    const text = (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "";
+    expect(text.match(/Exa result/gu)).toHaveLength(1);
+    expect(JSON.parse(text)).toEqual((response.structuredContent as { result: unknown }).result);
   });
 
   it("returns provider provenance in structured fanout batches", async () => {
@@ -515,13 +564,13 @@ describe("web MCP server", () => {
             expect.objectContaining({
               provider: "exa",
               providers: ["exa"],
-              evidence: [expect.objectContaining({ provider: "exa", url: "https://example.com" })],
               url: "https://example.com",
             }),
           ],
         },
       ],
     });
+    expect(response.structuredContent).not.toHaveProperty("result.0.results.0.evidence");
   });
 
   it("returns reverse image matches as JSON text", async () => {
