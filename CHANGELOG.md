@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.7.2
+
+[compare changes](https://github.com/agntn/web/compare/v0.7.1...v0.7.2)
+
+### 🚀 Enhancements
+
+- **serpapi:** Filter results by date ([#189](https://github.com/agntn/web/pull/189))
+
+### 🔥 Performance
+
+- **read:** Skip scanning past the requested page ([#182](https://github.com/agntn/web/pull/182))
+- Start MCP without the HTTP stack ([#185](https://github.com/agntn/web/pull/185))
+- Shorten search and read continuations ([#188](https://github.com/agntn/web/pull/188))
+- **search:** Send each fan-out record once ([#190](https://github.com/agntn/web/pull/190))
+
+### 🩹 Fixes
+
+- **tinyfish:** Stop fetching links a bound drops ([#181](https://github.com/agntn/web/pull/181))
+- Take blank optional inputs as unset ([#184](https://github.com/agntn/web/pull/184))
+- **errors:** Quote only the start of a long body ([#186](https://github.com/agntn/web/pull/186))
+- **search:** Cut every date bound to its UTC day ([#187](https://github.com/agntn/web/pull/187))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.7.1
 
 [compare changes](https://github.com/agntn/web/compare/v0.7.0...v0.7.1)
