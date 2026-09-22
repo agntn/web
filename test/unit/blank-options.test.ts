@@ -7,7 +7,7 @@ import {
   searchWithFallback,
 } from "../../src/core/all.ts";
 import { readBatchDetailed, searchBatch } from "../../src/core/batch.ts";
-import { readUrlDetailed } from "../../src/core/read.ts";
+import { readUrlDetailed, type ReadUrlOptions } from "../../src/core/read.ts";
 import { searchByImage } from "../../src/core/image.ts";
 import { asSchema } from "ai";
 import { readTool, searchTool } from "../../src/ai.ts";
@@ -305,6 +305,15 @@ describe("blank optional AI SDK arguments", () => {
 });
 
 describe("blank optional arguments through schema validation", () => {
+  it("drops a blank read format handed in from JavaScript", async () => {
+    // A JavaScript caller can pass what the TypeScript union forbids.
+    const format = "  " as ReadUrlOptions["format"];
+
+    await readUrlDetailed("https://example.com", { provider: "jina", format });
+
+    expect(readCalls[0]?.format).toBeUndefined();
+  });
+
   it("passes a blank read format through the MCP tool schema", async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     const server = createMcpServer();
@@ -314,7 +323,7 @@ describe("blank optional arguments through schema validation", () => {
     try {
       const result = await client.callTool({
         name: "web_read",
-        arguments: { url: "https://example.com", provider: "jina", format: "", continuation: "" },
+        arguments: { url: "https://example.com", provider: "jina", format: "  ", continuation: "" },
       });
 
       expect(result.isError).not.toBe(true);
@@ -329,7 +338,7 @@ describe("blank optional arguments through schema validation", () => {
     if (!validate) throw new TypeError("Read schema has no validator");
 
     await expect(
-      validate({ url: "https://example.com", provider: "", format: "", continuation: "" }),
+      validate({ url: "https://example.com", provider: "", format: "  ", continuation: "" }),
     ).resolves.toMatchObject({ success: true });
   });
 });

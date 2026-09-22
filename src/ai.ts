@@ -192,9 +192,9 @@ export const readTool = tool({
         `Read provider to use. Built in providers: ${readProviderNames.join(", ")}. Automatic selection starts with Jina and falls back after eligible payment, conflict, rate limit, timeout, or server failures. Registered custom providers are validated at execution time.`,
       ),
     format: z
-      .union([z.enum(["markdown", "text", "html"]), z.literal("")])
+      .union([z.enum(["markdown", "text", "html"]), z.string().regex(/^\s*$/u)])
       .optional()
-      .describe("Preferred content format. An empty string means the provider default."),
+      .describe("Preferred content format. A blank string means the provider default."),
     maxTokens: z
       .number()
       .int()
@@ -274,7 +274,7 @@ export const readTool = tool({
     const normalizedProvider = requestedProvider === "auto" ? undefined : requestedProvider;
     const readOptions = {
       provider: normalizedProvider,
-      format: format === "" ? undefined : format,
+      format: readFormat(format),
       maxTokens,
       maxChars: maxChars ?? DEFAULT_AGENT_READ_MAX_CHARS,
       continuation: readContinuation,
@@ -308,3 +308,13 @@ export const providersTool = tool({
     providers: listProviders(),
   }),
 });
+
+/**
+ * Reads the format argument, treating a blank placeholder as the provider default.
+ * @param format - Format as the model supplied it.
+ * @returns {"markdown" | "text" | "html" | undefined} Requested format, or undefined when blank.
+ */
+function readFormat(format?: string): "markdown" | "text" | "html" | undefined {
+  if (format === "markdown" || format === "text" || format === "html") return format;
+  return undefined;
+}

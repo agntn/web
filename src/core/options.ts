@@ -10,6 +10,7 @@ interface BlankableSearchOptions {
 /** Optional read inputs a caller may fill with a blank placeholder. */
 interface BlankableReadOptions {
   readonly continuation?: string;
+  readonly format?: string;
   readonly targetSelector?: string;
   readonly removeSelector?: string;
 }
@@ -64,11 +65,12 @@ export function normalizeReadOptions<TOptions extends BlankableReadOptions>(
   options?: TOptions,
 ): TOptions | undefined {
   if (options === undefined) return options;
-  const { continuation, targetSelector, removeSelector, ...rest } = options;
-  if (!isBlank(continuation, targetSelector, removeSelector)) return options;
+  const { continuation, format, targetSelector, removeSelector, ...rest } = options;
+  if (!isBlank(continuation, format, targetSelector, removeSelector)) return options;
   return {
     ...rest,
     ...(optionalText(continuation) === undefined ? {} : { continuation }),
+    ...(optionalText(format) === undefined ? {} : { format }),
     ...(optionalText(targetSelector) === undefined ? {} : { targetSelector }),
     ...(optionalText(removeSelector) === undefined ? {} : { removeSelector }),
   } as TOptions;
