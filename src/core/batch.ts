@@ -193,8 +193,8 @@ type BatchOutcome<TResult> =
       readonly failures?: readonly ProviderFailure[];
     };
 
-type ReadonlySearchAllEvidence = ReadonlySearchResult & { readonly provider: string };
-type ReadonlySearchAllResult = ReadonlySearchAllEvidence & {
+export type ReadonlySearchAllEvidence = ReadonlySearchResult & { readonly provider: string };
+export type ReadonlySearchAllResult = ReadonlySearchAllEvidence & {
   readonly providers: readonly string[];
   readonly evidence: readonly ReadonlySearchAllEvidence[];
 };

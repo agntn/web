@@ -37,9 +37,9 @@ const DEFAULT_READ_MAX_CHARS = 20_000;
 const MAX_READ_MAX_CHARS = 200_000;
 const MAX_TIMEOUT_SECONDS = 3_600;
 
-function toolResult<T>(details: T): AgentToolResult<T> {
+function toolResult<T>(details: T, modelView: unknown = details): AgentToolResult<T> {
   return {
-    content: [{ type: "text", text: JSON.stringify(details) }],
+    content: [{ type: "text", text: JSON.stringify(modelView) }],
     details,
   };
 }
@@ -265,13 +265,16 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
               provider,
               ...executionOptions,
             });
-            return toolResult({ mode: "batch" as const, provider, outcomes });
+            return toolResult(
+              { mode: "batch" as const, provider, outcomes },
+              { mode: "batch", provider, outcomes: web.batchWithoutRepeatedEvidence(outcomes) },
+            );
           }
           const query = params.query.trim();
           if (!query) throw new web.EmptyQueryError();
           if (provider === "all") {
             const response = await web.searchAllDetailed(query, executionOptions);
-            return toolResult({
+            const details = {
               mode: "all" as const,
               count: response.results.length,
               ...response,
@@ -279,6 +282,10 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
                 provider: failedProvider,
                 error: error.message,
               })),
+            };
+            return toolResult(details, {
+              ...details,
+              results: web.withoutRepeatedEvidence(details.results),
             });
           }
           if (provider !== undefined) {
