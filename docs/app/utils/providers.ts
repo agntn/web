@@ -209,7 +209,7 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     search: true,
     searchImage: true,
     read: false,
-    filters: [],
+    filters: ["startPublishedDate", "endPublishedDate"],
     categories: [],
     contentOptions: [],
     pagination: true,

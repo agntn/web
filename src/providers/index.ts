@@ -145,7 +145,7 @@ export const builtins: readonly ProviderEntry[] = [
   {
     name: "serpapi",
     search: {
-      filters: [],
+      filters: ["startPublishedDate", "endPublishedDate"],
       contentOptions: [],
       resultLimit: { default: 10 },
       resultFields: ["publishedDate", "image", "favicon", "metadata"],
