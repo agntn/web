@@ -6,11 +6,14 @@ import {
 } from "../../src/core/all.ts";
 import { readBatchDetailed, searchBatch } from "../../src/core/batch.ts";
 import { readUrlDetailed } from "../../src/core/read.ts";
+import { searchByImage } from "../../src/core/image.ts";
+import { readTool, searchTool } from "../../src/ai.ts";
 import { executeRead, executeSearch } from "../../src/mcp.ts";
 import { InvalidDateFilterError, InvalidSearchContinuationError } from "../../src/core/errors.ts";
 import { Provider } from "../../src/core/provider.ts";
 import { register } from "../../src/core/registry.ts";
 import type {
+  ImageSearchResult,
   ProviderConfig,
   ReadOptions,
   ReadResult,
@@ -92,6 +95,30 @@ function registerReadProvider(name: string): void {
   }
 
   cleanups.push(register(BlankReadProvider));
+}
+
+function registerImageProvider(name: string): void {
+  class BlankImageProvider extends Provider {
+    static readonly providerName = name;
+    static readonly defaultBaseURL = "https://image.example.com";
+
+    constructor(config: Readonly<ProviderConfig>) {
+      super(config, BlankImageProvider);
+    }
+
+    async searchByImage(): Promise<ImageSearchResult[]> {
+      return [
+        {
+          pageUrl: "https://example.com/page",
+          imageUrl: "https://example.com/image.jpg",
+          title: "Blank",
+          provider: name,
+        },
+      ];
+    }
+  }
+
+  cleanups.push(register(BlankImageProvider));
 }
 
 beforeEach(() => {
@@ -179,6 +206,21 @@ describe("blank optional inputs", () => {
     expect(readCalls[0]?.removeSelector).toBeUndefined();
   });
 
+  it("batches queries automatically when the provider arrives blank", async () => {
+    const outcomes = await searchBatch(["first", "second"], { provider: "" });
+
+    expect(outcomes).toHaveLength(2);
+    for (const outcome of outcomes) expect(outcome).not.toHaveProperty("error");
+  });
+
+  it("searches an image through the default provider when the provider arrives blank", async () => {
+    registerImageProvider("serpapi");
+
+    const matches = await searchByImage("https://example.com/input.jpg", { provider: "" });
+
+    expect(matches).toMatchObject([{ provider: "serpapi" }]);
+  });
+
   it("reads a batch when the continuation arrives blank", async () => {
     const outcomes = await readBatchDetailed(["https://example.com"], {
       provider: "jina",
@@ -222,5 +264,39 @@ describe("blank optional MCP arguments", () => {
     await expect(executeRead({ url: "https://example.com", format: "pdf" })).rejects.toThrow(
       TypeError,
     );
+  });
+});
+
+describe("blank optional AI SDK arguments", () => {
+  it("batches queries when the continuation and provider arrive blank", async () => {
+    const outcomes = await searchTool.execute?.(
+      { query: ["first", "second"], provider: "", continuation: "", category: "" },
+      { toolCallId: "blank-search", messages: [] },
+    );
+
+    expect(outcomes).toHaveLength(2);
+  });
+
+  it("reads a batch when the continuation and provider arrive blank", async () => {
+    const outcomes = await readTool.execute?.(
+      {
+        url: ["https://example.com/a", "https://example.com/b"],
+        provider: "",
+        continuation: "",
+        targetSelector: "",
+      },
+      { toolCallId: "blank-read", messages: [] },
+    );
+
+    expect(outcomes).toHaveLength(2);
+  });
+
+  it("searches one query when the provider arrives blank", async () => {
+    const response = await searchTool.execute?.(
+      { query: "test", provider: "" },
+      { toolCallId: "blank-single", messages: [] },
+    );
+
+    expect(response).toMatchObject({ provider: "exa" });
   });
 });

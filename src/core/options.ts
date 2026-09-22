@@ -1,5 +1,6 @@
 /** Optional search inputs a caller may fill with a blank placeholder. */
 interface BlankableSearchOptions {
+  readonly provider?: string;
   readonly continuation?: string;
   readonly category?: string;
   readonly startPublishedDate?: string;
@@ -39,10 +40,14 @@ export function normalizeSearchOptions<TOptions extends BlankableSearchOptions>(
   options?: TOptions,
 ): TOptions | undefined {
   if (options === undefined) return options;
-  const { continuation, category, startPublishedDate, endPublishedDate, ...rest } = options;
-  if (!isBlank(continuation, category, startPublishedDate, endPublishedDate)) return options;
+  const { provider, continuation, category, startPublishedDate, endPublishedDate, ...rest } =
+    options;
+  if (!isBlank(provider, continuation, category, startPublishedDate, endPublishedDate)) {
+    return options;
+  }
   return {
     ...rest,
+    ...(optionalText(provider) === undefined ? {} : { provider }),
     ...(optionalText(continuation) === undefined ? {} : { continuation }),
     ...(optionalText(category) === undefined ? {} : { category }),
     ...(optionalText(startPublishedDate) === undefined ? {} : { startPublishedDate }),
