@@ -569,6 +569,17 @@ describe("readUrl", () => {
     expect(readFromContext).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps a continuation short enough for an agent to copy back", async () => {
+    registerReader("short-token-reader", async (url) => ({ url, content: "a".repeat(100_000) }));
+
+    const first = await readUrl("https://example.com/a/long/path", {
+      provider: "short-token-reader",
+      maxChars: 50_000,
+    });
+
+    expect(first.continuation?.length).toBeLessThanOrEqual(128);
+  });
+
   it("rejects malformed, modified, and mismatched continuation tokens", async () => {
     const providerName = `token-reader-${Math.random().toString(36).slice(2)}`;
     registerReader(providerName, async (url) => ({ url, content: "abcdef" }));
@@ -579,14 +590,9 @@ describe("readUrl", () => {
 
     const first = await readUrl("https://example.com", { provider: providerName, maxChars: 3 });
     if (!first.continuation) throw new Error("Missing continuation token");
-    const envelope = JSON.parse(Buffer.from(first.continuation, "base64url").toString("utf8")) as {
-      payload: string;
-      checksum: string;
-    };
-    const payload = JSON.parse(envelope.payload) as { offset: number };
-    payload.offset += 1;
-    envelope.payload = JSON.stringify(payload);
-    const modified = Buffer.from(JSON.stringify(envelope)).toString("base64url");
+    const fields = first.continuation.split(".");
+    fields[2] = Buffer.from("4").toString("base64url");
+    const modified = fields.join(".");
     await expect(
       readUrl("https://example.com", {
         provider: providerName,

@@ -1142,14 +1142,34 @@ describe("searchAllDetailed", () => {
     });
     const first = await searchProviderDetailed("brave", "test", { maxResults: 1 });
     if (first.pagination.status !== "next") throw new Error("expected another page");
-    const index = Math.floor(first.pagination.continuation.length / 2);
-    const current = first.pagination.continuation[index];
-    const corrupted = `${first.pagination.continuation.slice(0, index)}${current === "A" ? "B" : "A"}${first.pagination.continuation.slice(index + 1)}`;
+    const token = first.pagination.continuation;
+    const corrupted = Array.from(
+      { length: token.length },
+      (_, index) =>
+        `${token.slice(0, index)}${token[index] === "A" ? "B" : "A"}${token.slice(index + 1)}`,
+    );
+    const fields = token.split(".");
+    fields[1] = `${fields[1]?.slice(0, -1)}R`;
+    corrupted.push(fields.join("."));
 
-    await expect(
-      searchProviderDetailed("brave", "test", { maxResults: 1, continuation: corrupted }),
-    ).rejects.toThrow(InvalidSearchContinuationError);
+    for (const continuation of corrupted) {
+      await expect(
+        searchProviderDetailed("brave", "test", { maxResults: 1, continuation }),
+      ).rejects.toThrow(InvalidSearchContinuationError);
+    }
     expect(mockGetJSON).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a continuation short enough for an agent to copy back", async () => {
+    process.env.BRAVE_API_KEY = "test-brave";
+    mockGetJSON.mockResolvedValueOnce({
+      query: { more_results_available: true },
+      web: { results: [] },
+    });
+    const first = await searchProviderDetailed("brave", "test", { maxResults: 1 });
+    if (first.pagination.status !== "next") throw new Error("expected another page");
+
+    expect(first.pagination.continuation.length).toBeLessThanOrEqual(40);
   });
 
   it("rejects one continuation for fanout and batch searches", async () => {
