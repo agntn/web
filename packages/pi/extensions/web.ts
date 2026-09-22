@@ -589,11 +589,12 @@ export default async function webExtension(pi: ExtensionAPI) {
       const readProvider = normalizeReadProviderInput(params.provider, web.readProviders());
       const readProviderLabel = readProvider ?? "auto";
       const format = normalizeReadFormat(params.format);
+      const continuation = optionalText(params.continuation);
       const readOptions: ReadUrlOptions = stripUndefinedRead({
         format,
         maxTokens: params.maxTokens,
         maxChars: params.maxChars ?? DEFAULT_READ_MAX_CHARS,
-        continuation: params.continuation,
+        continuation,
         links: params.links,
         images: params.images,
         targetSelector: params.targetSelector,
@@ -602,7 +603,7 @@ export default async function webExtension(pi: ExtensionAPI) {
         noCache: params.noCache,
       });
 
-      if (Array.isArray(params.url) && params.continuation !== undefined) {
+      if (Array.isArray(params.url) && continuation !== undefined) {
         throw new TypeError("continuation is only supported for a single URL");
       }
       const deadline = web.deadlineAfterSeconds(params.timeoutSeconds);
@@ -835,8 +836,17 @@ function normalizeReadProviderInput(
   return rawProvider;
 }
 
+/**
+ * Reads an optional text parameter, treating a blank value as an omitted one.
+ * @param value - Parameter as the model supplied it.
+ * @returns {string | undefined} The value, or undefined when it is blank.
+ */
+function optionalText(value: string | undefined): string | undefined {
+  return value?.trim() ? value : undefined;
+}
+
 function normalizeReadFormat(format: string | undefined): ReadOptions["format"] {
-  if (format === undefined || format === "") return undefined;
+  if (optionalText(format) === undefined) return undefined;
   if (format === "markdown" || format === "text" || format === "html") return format;
   throw new Error('Invalid read format. Expected "markdown", "text", or "html".');
 }

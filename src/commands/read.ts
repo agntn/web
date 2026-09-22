@@ -1,6 +1,7 @@
 import { defineCommand } from "citty";
 import { consola } from "consola";
 import { sanitizeTerminalContent, sanitizeTerminalText } from "../tui.ts";
+import { optionalText } from "../core/options.ts";
 import { providerApiKeyEnvVar } from "../core/providers.ts";
 import {
   AuthError,
@@ -108,7 +109,8 @@ function parseReadArguments(args: ReadCommandArgs, maxBatchItems: number): Parse
   if (urls.length > maxBatchItems) {
     return exitWithError(`Cannot read more than ${maxBatchItems} URLs at once.`);
   }
-  if (urls.length > 1 && args.continuation !== undefined) {
+  const continuation = optionalText(args.continuation);
+  if (urls.length > 1 && continuation !== undefined) {
     return exitWithError("--continuation is only supported for a single URL.");
   }
   const format = parseFormat(args.format);
@@ -124,7 +126,7 @@ function parseReadArguments(args: ReadCommandArgs, maxBatchItems: number): Parse
       format: format.value,
       maxTokens: maxTokens.value,
       maxChars: maxChars.value,
-      continuation: args.continuation,
+      continuation,
       ...pageFieldOptions(args),
     },
   };
@@ -282,7 +284,7 @@ function parseOptionalPositiveInt(
 }
 
 function parseFormat(input: string | undefined): ParsedFormat {
-  if (input === undefined || input === "") {
+  if (optionalText(input) === undefined) {
     return { ok: true, value: undefined };
   }
   if (input === "markdown" || input === "text" || input === "html") {

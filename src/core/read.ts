@@ -13,6 +13,7 @@ import {
   ProviderFallbackError,
   type ProviderFailure,
 } from "./fallback.ts";
+import { normalizeReadOptions } from "./options.ts";
 import { createReadProvider, has, readProviders } from "./registry.ts";
 import { isProviderConfigured } from "./resolve.ts";
 import {
@@ -140,16 +141,17 @@ export async function readUrl(
 /**
  * Reads a URL and reports the effective provider after automatic fallback.
  * @param url - URL to read.
- * @param options - Provider, native read options, and portable output options.
+ * @param requestedOptions - Provider, native read options, and portable output options.
  * @returns {Promise<ReadUrlDetailedResult>} Result, provider, attempts, and failures.
  */
 export async function readUrlDetailed(
   url: string,
-  options?: Readonly<ReadUrlOptions>,
+  requestedOptions?: Readonly<ReadUrlOptions>,
 ): Promise<ReadUrlDetailedResult> {
   const trimmedUrl = url.trim();
   if (!trimmedUrl) throw new EmptyUrlError();
 
+  const options = normalizeReadOptions(requestedOptions);
   const {
     provider: requestedProviderInput,
     maxChars: maxCharsInput,

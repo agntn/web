@@ -9,6 +9,7 @@ import {
   type SearchProviderPagination,
   type SearchProviderResult,
 } from "./all.ts";
+import { normalizeReadOptions, normalizeSearchOptions } from "./options.ts";
 import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
 import { ProviderFallbackError, type ProviderFailure } from "./fallback.ts";
 import { settleWithConcurrency, throwIfAborted, withExecutionBudget } from "./execution.ts";
@@ -76,13 +77,14 @@ export type ReadBatchDetailedItem =
 /**
  * Searches independent queries in parallel while preserving input order and failures.
  * @param queries - Search queries to execute.
- * @param options - Shared provider and search options.
+ * @param requestedOptions - Shared provider and search options.
  * @returns {Promise<readonly SearchBatchItem[]>} One result or error for every query.
  */
 export async function searchBatch(
   queries: readonly string[],
-  options?: Readonly<SearchBatchOptions>,
+  requestedOptions?: Readonly<SearchBatchOptions>,
 ): Promise<readonly SearchBatchItem[]> {
+  const options = normalizeSearchOptions(requestedOptions);
   validateBatch(queries, "query", EmptyQueryError);
   validateMaxResults(options?.maxResults);
 
@@ -150,13 +152,14 @@ export async function readBatch(
 /**
  * Reads independent URLs and reports effective provider provenance per item.
  * @param urls - URLs to read.
- * @param options - Shared provider and read options.
+ * @param requestedOptions - Shared provider and read options.
  * @returns {Promise<readonly ReadBatchDetailedItem[]>} Detailed outcomes for every URL.
  */
 export async function readBatchDetailed(
   urls: readonly string[],
-  options?: Readonly<ReadUrlOptions>,
+  requestedOptions?: Readonly<ReadUrlOptions>,
 ): Promise<readonly ReadBatchDetailedItem[]> {
+  const options = normalizeReadOptions(requestedOptions);
   validateBatch(urls, "URL", EmptyUrlError);
   if (options?.continuation !== undefined) {
     throw new TypeError("continuation is only supported for a single URL");

@@ -13,6 +13,7 @@ import {
 import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
 import { deadlineAfterSeconds, MAX_AGENT_TIMEOUT_SECONDS } from "./core/execution.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
+import { optionalText } from "./core/options.ts";
 import { listProviders } from "./core/resolve.ts";
 import { MAX_SEARCH_CONTINUATION_LENGTH } from "./core/search-continuation.ts";
 import { runtimeInfo } from "./version.ts";
@@ -109,10 +110,12 @@ export const searchTool = tool({
     },
     { abortSignal },
   ) => {
-    const normalizedProvider = providerName === "auto" ? undefined : providerName;
+    const requestedProvider = optionalText(providerName);
+    const normalizedProvider = requestedProvider === "auto" ? undefined : requestedProvider;
+    const searchContinuation = optionalText(continuation);
     const searchOptions = {
       maxResults,
-      continuation,
+      continuation: searchContinuation,
       highlights,
       summary,
       fullText,
@@ -129,7 +132,7 @@ export const searchTool = tool({
     };
 
     if (Array.isArray(query)) {
-      if (continuation !== undefined) {
+      if (searchContinuation !== undefined) {
         throw new TypeError("continuation is only supported for a single query");
       }
       return searchBatch(query, { provider: normalizedProvider, ...searchOptions });
@@ -188,7 +191,10 @@ export const readTool = tool({
       .describe(
         `Read provider to use. Built in providers: ${readProviderNames.join(", ")}. Automatic selection starts with Jina and falls back after eligible payment, conflict, rate limit, timeout, or server failures. Registered custom providers are validated at execution time.`,
       ),
-    format: z.enum(["markdown", "text", "html"]).optional().describe("Preferred content format."),
+    format: z
+      .union([z.enum(["markdown", "text", "html"]), z.string().regex(/^\s*$/u)])
+      .optional()
+      .describe("Preferred content format. A blank string means the provider default."),
     maxTokens: z
       .number()
       .int()
@@ -260,16 +266,18 @@ export const readTool = tool({
     },
     { abortSignal },
   ) => {
-    if (Array.isArray(url) && continuation !== undefined) {
+    const readContinuation = optionalText(continuation);
+    if (Array.isArray(url) && readContinuation !== undefined) {
       throw new TypeError("continuation is only supported for a single URL");
     }
-    const normalizedProvider = provider === "auto" ? undefined : provider;
+    const requestedProvider = optionalText(provider);
+    const normalizedProvider = requestedProvider === "auto" ? undefined : requestedProvider;
     const readOptions = {
       provider: normalizedProvider,
-      format,
+      format: readFormat(format),
       maxTokens,
       maxChars: maxChars ?? DEFAULT_AGENT_READ_MAX_CHARS,
-      continuation,
+      continuation: readContinuation,
       links,
       images,
       targetSelector,
@@ -300,3 +308,13 @@ export const providersTool = tool({
     providers: listProviders(),
   }),
 });
+
+/**
+ * Reads the format argument, treating a blank placeholder as the provider default.
+ * @param format - Format as the model supplied it.
+ * @returns {"markdown" | "text" | "html" | undefined} Requested format, or undefined when blank.
+ */
+function readFormat(format?: string): "markdown" | "text" | "html" | undefined {
+  if (format === "markdown" || format === "text" || format === "html") return format;
+  return undefined;
+}

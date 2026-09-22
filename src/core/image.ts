@@ -7,6 +7,7 @@ import {
 } from "./errors.ts";
 import { createImageSearchProvider, has, searchImageProviders } from "./registry.ts";
 import { providerRequestOptions, throwIfAborted, withExecutionBudget } from "./execution.ts";
+import { optionalText } from "./options.ts";
 import type { ImageSearchOptions, ImageSearchResult } from "./types.ts";
 
 /** Built-in providers that accept an image URL as a search input. */
@@ -36,11 +37,11 @@ export async function searchByImage(
   if (!trimmedUrl) throw new EmptyImageUrlError();
   assertImageUrl(trimmedUrl);
 
-  const { provider = DEFAULT_IMAGE_SEARCH_PROVIDER, ...searchOptions } = options ?? {};
+  const { provider, ...searchOptions } = options ?? {};
   validateMaxResults(searchOptions.maxResults);
   const effectiveSearchOptions = withExecutionBudget(searchOptions);
   throwIfAborted(effectiveSearchOptions.signal);
-  const providerName = provider.trim();
+  const providerName = optionalText(provider)?.trim() ?? DEFAULT_IMAGE_SEARCH_PROVIDER;
   const registeredOrBuiltin =
     has(providerName) || (builtinProviders as readonly string[]).includes(providerName);
   if (registeredOrBuiltin && !searchImageProviders().includes(providerName)) {

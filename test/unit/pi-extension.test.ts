@@ -1241,6 +1241,56 @@ describe("Pi extension", () => {
       resetDefaultClientForTests();
     }
   });
+  it("takes blank optional strings as unset", async () => {
+    const providerName = `blankprovider${Math.random().toString(36).slice(2)}`;
+    class BlankProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://blank.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, BlankProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://example.com", title: "Blank", snippet: "Blank" }];
+      }
+
+      async read(url: string) {
+        return { url, content: "Blank page" };
+      }
+    }
+    customProviderCleanups.push(register(BlankProvider));
+    const tools = captureTools();
+    const searchTool = tools.get("web_search");
+    const readTool = tools.get("web_read");
+    if (!searchTool || !readTool) throw new Error("web tools were not registered");
+    const run = (tool: CapturedTool, params: Readonly<Record<string, unknown>>) =>
+      Reflect.apply(tool.execute.bind(tool), undefined, [
+        "blank-call",
+        params,
+        undefined,
+        undefined,
+        undefined,
+      ]) as Promise<{ readonly details: Readonly<Record<string, unknown>> }>;
+
+    const search = await run(searchTool, {
+      query: ["first", "second"],
+      provider: providerName,
+      continuation: "",
+      category: "",
+      startPublishedDate: "",
+    });
+    const read = await run(readTool, {
+      url: ["https://example.com/a", "https://example.com/b"],
+      provider: providerName,
+      continuation: "",
+      format: "",
+      targetSelector: "",
+    });
+
+    expect(search.details).toMatchObject({ mode: "batch" });
+    expect(read.details).toMatchObject({ mode: "batch" });
+  });
 });
 async function initializeExtension(): Promise<{
   readonly tools: Map<string, CapturedTool>;
