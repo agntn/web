@@ -424,24 +424,27 @@ function sliceContent(
   let characterOffset = 0;
   let codeUnitOffset = 0;
   let startCodeUnit = content.length;
-  let endCodeUnit = content.length;
   const requestedEnd = maxChars === undefined ? Number.POSITIVE_INFINITY : offset + maxChars;
 
   for (const character of content) {
     if (characterOffset === offset) startCodeUnit = codeUnitOffset;
-    if (characterOffset === requestedEnd) endCodeUnit = codeUnitOffset;
+    if (characterOffset === requestedEnd) {
+      return {
+        content: content.slice(startCodeUnit, codeUnitOffset),
+        truncated: true,
+        nextOffset: characterOffset,
+      };
+    }
     codeUnitOffset += character.length;
     characterOffset += 1;
   }
   if (characterOffset === offset) startCodeUnit = codeUnitOffset;
-  if (characterOffset === requestedEnd) endCodeUnit = codeUnitOffset;
   if (offset > characterOffset) throw new InvalidReadContinuationError();
 
-  const nextOffset = Math.min(requestedEnd, characterOffset);
   return {
-    content: content.slice(startCodeUnit, endCodeUnit),
-    truncated: nextOffset < characterOffset,
-    nextOffset,
+    content: content.slice(startCodeUnit),
+    truncated: false,
+    nextOffset: characterOffset,
   };
 }
 
