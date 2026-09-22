@@ -7,7 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { Type, type TProperties, type TSchema } from "typebox";
 import { Value } from "typebox/value";
-import { webToolTitle } from "./tui.ts";
+import { webToolTitle } from "./tool-titles.ts";
 import { builtinProviders } from "./core/providers.ts";
 import { searchProviders, searchImageProviders, readProviders } from "./core/registry.ts";
 import { searchAllDetailed, searchProviderDetailed, searchWithFallback } from "./core/all.ts";

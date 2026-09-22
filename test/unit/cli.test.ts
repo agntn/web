@@ -148,6 +148,8 @@ describe.concurrent("web usage paths", () => {
     expect(code).toBe(0);
     const packages = new Set(loaded.map(packageOf));
     expect(packages).toContain("@modelcontextprotocol/sdk");
+    expect(packages).not.toContain("ofetch");
+    expect(packages).not.toContain("string-width");
     expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
     expect(providerModules(loaded)).toEqual([]);
   });
@@ -176,6 +178,7 @@ describe.concurrent("web data paths", () => {
     ]);
     expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
     expect(providerModules(loaded)).toEqual([]);
+    expect(new Set(loaded.map(packageOf))).not.toContain("ofetch");
   });
 
   it("web search loads the one adapter the provider flag names", async ({ expect }) => {
