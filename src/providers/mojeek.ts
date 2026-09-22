@@ -8,6 +8,7 @@ import {
   WebError,
   normalizeError,
 } from "../core/errors.ts";
+import { utcDay } from "../core/dates.ts";
 
 interface MojeekSearchEnvelope {
   readonly response?: MojeekSearchResponse;
@@ -149,7 +150,7 @@ function dateParams(options?: SearchRequestOptions): Record<string, string> {
 }
 
 function mojeekDate(value: string): string {
-  return value.slice(0, 10).replaceAll("-", "");
+  return utcDay(value).replaceAll("-", "");
 }
 
 function successfulResponse(envelope: Readonly<MojeekSearchEnvelope>): MojeekSearchResponse {

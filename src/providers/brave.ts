@@ -1,6 +1,7 @@
 import type { SearchResult, SearchRequestOptions, ProviderConfig } from "../core/types.ts";
 import { Provider, type ProviderSearchPage } from "../core/provider.ts";
 import { AuthError, InvalidSearchContinuationError, normalizeError } from "../core/errors.ts";
+import { utcDay } from "../core/dates.ts";
 
 interface BraveResult {
   readonly title: string;
@@ -85,21 +86,10 @@ function braveSearchUrl(
  * @returns {string} The `freshness` query parameter, or nothing without a date bound.
  */
 function freshnessParam(options: SearchRequestOptions): string {
-  const start = day(options.startPublishedDate);
-  const end = day(options.endPublishedDate);
-  if (start === undefined && end === undefined) return "";
-  return `&freshness=${start ?? FRESHNESS_FLOOR}to${end ?? day(new Date().toISOString())}`;
-}
-
-/**
- * The day in UTC, so two bounds with different offsets keep the order the core checked them in.
- * @param value - ISO 8601 date or datetime, or nothing.
- * @returns {string | undefined} `YYYY-MM-DD`, cut from the text when it does not parse.
- */
-function day(value?: string): string | undefined {
-  if (!value) return undefined;
-  const time = Date.parse(value);
-  return Number.isNaN(time) ? value.slice(0, 10) : new Date(time).toISOString().slice(0, 10);
+  const { startPublishedDate: start, endPublishedDate: end } = options;
+  if (!start && !end) return "";
+  const from = start ? utcDay(start) : FRESHNESS_FLOOR;
+  return `&freshness=${from}to${utcDay(end || new Date().toISOString())}`;
 }
 
 function braveContinuation(

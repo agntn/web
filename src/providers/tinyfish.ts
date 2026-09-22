@@ -15,6 +15,7 @@ import {
   WebError,
   normalizeError,
 } from "../core/errors.ts";
+import { utcDay } from "../core/dates.ts";
 
 interface TinyfishSearchResult {
   readonly position?: number;
@@ -192,15 +193,19 @@ function dateSearchParams(options?: SearchRequestOptions): Record<string, string
 
 function publicationYearParams(options: SearchRequestOptions): Record<string, string> {
   return {
-    ...(options.startPublishedDate ? { pub_year_min: options.startPublishedDate.slice(0, 4) } : {}),
-    ...(options.endPublishedDate ? { pub_year_max: options.endPublishedDate.slice(0, 4) } : {}),
+    ...(options.startPublishedDate
+      ? { pub_year_min: utcDay(options.startPublishedDate).slice(0, 4) }
+      : {}),
+    ...(options.endPublishedDate
+      ? { pub_year_max: utcDay(options.endPublishedDate).slice(0, 4) }
+      : {}),
   };
 }
 
 function calendarDateParams(options: SearchRequestOptions): Record<string, string> {
   return {
-    ...(options.startPublishedDate ? { after_date: options.startPublishedDate.slice(0, 10) } : {}),
-    ...(options.endPublishedDate ? { before_date: options.endPublishedDate.slice(0, 10) } : {}),
+    ...(options.startPublishedDate ? { after_date: utcDay(options.startPublishedDate) } : {}),
+    ...(options.endPublishedDate ? { before_date: utcDay(options.endPublishedDate) } : {}),
   };
 }
 
