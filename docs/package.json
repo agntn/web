@@ -17,9 +17,9 @@
     "zod": "4.5.4"
   },
   "devDependencies": {
-    "@iconify-json/lucide": "1.2.133",
+    "@iconify-json/lucide": "1.2.134",
     "@iconify-json/simple-icons": "1.2.96",
-    "@iconify-json/vscode-icons": "1.2.77",
+    "@iconify-json/vscode-icons": "1.2.78",
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "wrangler": "4.128.0"
