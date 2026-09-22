@@ -1,4 +1,3 @@
-import { ofetch, FetchError } from "ofetch";
 import type { $Fetch } from "ofetch";
 import type { ClientOptions } from "./types.ts";
 import { HTTPError, RateLimitError, parseRetryAfter } from "./errors.ts";
@@ -12,39 +11,59 @@ const DEFAULT_USER_AGENT = `agntn-web/${version}`;
 const RETRY_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 const MAX_CAUSE_DEPTH = 8;
 
+type Ofetch = typeof import("ofetch");
+let ofetchModule: Promise<Ofetch> | undefined;
+
+/**
+ * Loads ofetch with the first request. Its Node entry imports `node:http` and `node:https`, so a
+ * static import made every MCP server start and every provider listing pay for an HTTP stack
+ * they never used.
+ * @returns {Promise<Ofetch>} The cached ofetch module.
+ */
+function loadOfetch(): Promise<Ofetch> {
+  ofetchModule ??= import("ofetch");
+  return ofetchModule;
+}
+
 /** HTTP client with exponential backoff retry and error mapping to web error types. */
 export class Client {
   readonly maxRetries: number;
   readonly baseDelay: number;
   readonly timeout: number;
   readonly userAgent: string;
-  private readonly fetch: $Fetch;
+  private fetch: Promise<$Fetch> | undefined;
 
   constructor(options: Readonly<ClientOptions> = {}) {
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.baseDelay = options.baseDelay ?? DEFAULT_BASE_DELAY;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT;
     this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
+  }
 
+  /** @returns {Promise<$Fetch>} The ofetch instance, created with the first request. */
+  private fetcher(): Promise<$Fetch> {
     const maxRetries = this.maxRetries;
     const baseDelay = this.baseDelay;
 
-    this.fetch = ofetch.create({
-      retry: this.maxRetries,
-      retryDelay(context) {
-        const remaining = typeof context.options.retry === "number" ? context.options.retry : 0;
-        const attempt = maxRetries - remaining;
-        const delay = baseDelay * Math.pow(2, attempt - 1);
-        const jitter = delay * Math.random() * 0.1;
-        return delay + jitter;
-      },
-      retryStatusCodes: [408, 429, 500, 502, 503, 504],
-      timeout: this.timeout,
-      headers: {
-        Accept: "application/json",
-        "User-Agent": this.userAgent,
-      },
-    });
+    this.fetch ??= loadOfetch().then(({ ofetch }) =>
+      ofetch.create({
+        retry: maxRetries,
+        retryDelay(context) {
+          const remaining = typeof context.options.retry === "number" ? context.options.retry : 0;
+          const attempt = maxRetries - remaining;
+          const delay = baseDelay * Math.pow(2, attempt - 1);
+          const jitter = delay * Math.random() * 0.1;
+          return delay + jitter;
+        },
+        retryStatusCodes: [408, 429, 500, 502, 503, 504],
+        timeout: this.timeout,
+        headers: {
+          Accept: "application/json",
+          "User-Agent": this.userAgent,
+        },
+      }),
+    );
+    return this.fetch;
   }
 
   /**
@@ -60,14 +79,15 @@ export class Client {
     signal?: Readonly<AbortSignal>,
   ): Promise<T> {
     try {
+      const fetch = await this.fetcher();
       return signal
         ? await this.fetchWithCancellation(
-            (attemptSignal) => this.fetch<T>(url, { headers, signal: attemptSignal, retry: false }),
+            (attemptSignal) => fetch<T>(url, { headers, signal: attemptSignal, retry: false }),
             signal,
           )
-        : await this.fetch<T>(url, { headers, signal });
+        : await fetch<T>(url, { headers, signal });
     } catch (error) {
-      throw this.mapError(error, url);
+      throw await this.mapError(error, url);
     }
   }
 
@@ -86,10 +106,11 @@ export class Client {
     signal?: Readonly<AbortSignal>,
   ): Promise<T> {
     try {
+      const fetch = await this.fetcher();
       return signal
         ? await this.fetchWithCancellation(
             (attemptSignal) =>
-              this.fetch<T>(url, {
+              fetch<T>(url, {
                 method: "POST",
                 body,
                 headers,
@@ -98,14 +119,14 @@ export class Client {
               }),
             signal,
           )
-        : await this.fetch<T>(url, {
+        : await fetch<T>(url, {
             method: "POST",
             body,
             headers,
             signal,
           });
     } catch (error) {
-      throw this.mapError(error, url);
+      throw await this.mapError(error, url);
     }
   }
 
@@ -157,7 +178,8 @@ export class Client {
     signal: Readonly<AbortSignal>,
   ): Promise<Readonly<ReadableStream<Uint8Array>>> {
     const safeUrl = sanitizeUrl(url);
-    const response = await this.fetch.raw<unknown, "stream">(url, {
+    const fetch = await this.fetcher();
+    const response = await fetch.raw<unknown, "stream">(url, {
       method: "POST",
       body,
       headers: { ...headers, Accept: "text/event-stream" },
@@ -187,13 +209,15 @@ export class Client {
     request: (signal: Readonly<AbortSignal>) => Promise<T>,
     signal: Readonly<AbortSignal>,
   ): Promise<T> {
+    const { FetchError } = await loadOfetch();
     for (let attempt = 0; ; attempt += 1) {
       signal.throwIfAborted();
       try {
         return await this.requestWithTimeout(request, signal);
       } catch (error) {
         signal.throwIfAborted();
-        if (attempt >= this.maxRetries || !isRetryable(error)) throw error;
+        const retryable = error instanceof FetchError && isRetryableStatus(error.statusCode);
+        if (attempt >= this.maxRetries || !retryable) throw error;
         await abortableDelay(this.retryDelay(attempt), signal);
       }
     }
@@ -231,7 +255,8 @@ export class Client {
     return delay + delay * Math.random() * 0.1;
   }
 
-  private mapError(error: unknown, url: string): Error {
+  private async mapError(error: unknown, url: string): Promise<Error> {
+    const { FetchError } = await loadOfetch();
     if (error instanceof FetchError) {
       if (error.statusCode === 429) {
         const retryAfter = parseRetryAfter(error.response?.headers.get("Retry-After"));
@@ -284,9 +309,7 @@ function errorSummary(error: Readonly<Error>): string {
   return "code" in error && typeof error.code === "string" ? error.code : error.name;
 }
 
-function isRetryable(error: unknown): boolean {
-  if (!(error instanceof FetchError)) return false;
-  const statusCode = error.statusCode ?? 0;
+function isRetryableStatus(statusCode = 0): boolean {
   return statusCode === 0 || RETRY_STATUS_CODES.has(statusCode);
 }
 

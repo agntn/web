@@ -4,9 +4,9 @@ import stringWidth from "string-width";
 
 import type { ProviderCapabilities, ProviderResultLimit } from "./core/provider.ts";
 import type { ProviderStatus } from "./core/resolve.ts";
+import { webToolTitle, type WebToolName } from "./tool-titles.ts";
 
-/** Web tools with dedicated Pi and OMP presentation. */
-export type WebToolName = "web_search" | "web_search_image" | "web_read" | "web_providers";
+export { webToolTitle, type WebToolName };
 
 /** Colors used by the shared web presentation. */
 export type StatusColor =
@@ -63,13 +63,6 @@ let graphemeSegmenter: Intl.Segmenter | undefined;
 function getGraphemeSegmenter(): Intl.Segmenter {
   return (graphemeSegmenter ??= new Intl.Segmenter(undefined, { granularity: "grapheme" }));
 }
-
-const PRESENTATION: Readonly<Record<WebToolName, { symbol: string; label: string }>> = {
-  web_search: { symbol: "⌕", label: "Web Search" },
-  web_search_image: { symbol: "▧", label: "Search by Image" },
-  web_read: { symbol: "↗", label: "Web Read" },
-  web_providers: { symbol: "◫", label: "Web Providers" },
-};
 
 function cutAt(text: string, end: number): string {
   const last = text.codePointAt(end - 1);
@@ -296,15 +289,6 @@ function inputMeta(name: WebToolName, record: Readonly<Record<string, unknown>>)
     ...(provider ? [sanitizeTerminalText(provider, META_WIDTH)] : []),
     ...operationMeta,
   ].slice(0, 4);
-}
-
-/** Return the symbol and label used by native tool menus.
- * @param name - Registered web tool name.
- * @returns {string} Stable symbol and label.
- */
-export function webToolTitle(name: WebToolName): string {
-  const item = PRESENTATION[name];
-  return `${item.symbol} ${item.label}`;
 }
 
 /** Render one compact, terminal-safe tool call row.
