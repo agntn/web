@@ -1,6 +1,6 @@
-import { createHash } from "node:crypto";
 import type { ReadOptions, ReadResult } from "./types.ts";
 import { builtinProviders } from "./providers.ts";
+import { fingerprint, openContinuation, sealContinuation } from "./continuation.ts";
 import {
   EmptyUrlError,
   InvalidReadContinuationError,
@@ -97,17 +97,10 @@ export interface ReadUrlDetailedResult {
 }
 
 interface ReadContinuationPayload {
-  readonly version: 1;
   readonly provider: string;
   readonly requestedProvider: string;
-  readonly requestFingerprint: string;
   readonly contentFingerprint: string;
   readonly offset: number;
-}
-
-interface ReadContinuationEnvelope {
-  readonly payload: string;
-  readonly checksum: string;
 }
 
 type ReadResultInput = Readonly<Omit<ReadResult, "links" | "images" | "metadata">> & {
@@ -124,6 +117,7 @@ interface PageFields {
 
 const DEFAULT_READ_PROVIDER: ReadProviderName = "jina";
 const MAX_CONTINUATION_LENGTH = 1_024;
+const READ_CONTINUATION = "@agntn/web/read-continuation/v2";
 
 /**
  * Reads a URL while preserving the original result contract.
@@ -227,17 +221,14 @@ async function continueRead(
   continuation: string,
   pageFields: Readonly<PageFields>,
 ): Promise<ReadUrlDetailedResult> {
-  const payload = decodeContinuation(continuation);
-  if (
-    payload.requestFingerprint !== requestFingerprint(url, readOptions) ||
-    (requestedProvider !== "auto" && requestedProvider !== payload.requestedProvider)
-  ) {
+  const payload = decodeContinuation(continuation, readRequest(url, readOptions));
+  if (requestedProvider !== "auto" && requestedProvider !== payload.requestedProvider) {
     throw new InvalidReadContinuationError();
   }
 
   const provider = resolveReadProviderName(payload.provider);
   const result = await readFromProvider(url, readOptions, provider, maxChars, pageFields);
-  if (contentFingerprint(result.content) !== payload.contentFingerprint) {
+  if (fingerprint(result.content) !== payload.contentFingerprint) {
     throw new StaleReadContinuationError();
   }
 
@@ -398,14 +389,15 @@ function pageReadResult(
     ...rest
   } = result;
   const continuation = page.truncated
-    ? encodeContinuation({
-        version: 1,
-        provider: context.provider,
-        requestedProvider: context.requestedProvider,
-        requestFingerprint: requestFingerprint(context.url, context.readOptions),
-        contentFingerprint: contentFingerprint(result.content),
-        offset: page.nextOffset,
-      })
+    ? encodeContinuation(
+        {
+          provider: context.provider,
+          requestedProvider: context.requestedProvider,
+          contentFingerprint: fingerprint(result.content),
+          offset: page.nextOffset,
+        },
+        readRequest(context.url, context.readOptions),
+      )
     : undefined;
   return {
     ...rest,
@@ -450,79 +442,47 @@ function sliceContent(
   };
 }
 
-function requestFingerprint(url: string, options: Readonly<ReadOptions>): string {
-  return fingerprint(
-    JSON.stringify([
-      url,
-      options.format ?? null,
-      options.maxTokens ?? null,
-      options.targetSelector ?? null,
-      options.removeSelector ?? null,
-      options.timeout ?? null,
-      options.noCache === true,
-    ]),
+function readRequest(url: string, options: Readonly<ReadOptions>): string {
+  return JSON.stringify([
+    url,
+    options.format ?? null,
+    options.maxTokens ?? null,
+    options.targetSelector ?? null,
+    options.removeSelector ?? null,
+    options.timeout ?? null,
+    options.noCache === true,
+  ]);
+}
+
+function encodeContinuation(payload: Readonly<ReadContinuationPayload>, request: string): string {
+  return sealContinuation(
+    READ_CONTINUATION,
+    [
+      payload.provider,
+      payload.requestedProvider,
+      String(payload.offset),
+      payload.contentFingerprint,
+    ],
+    request,
   );
 }
 
-function contentFingerprint(content: string): string {
-  return fingerprint(content);
-}
-
-function fingerprint(value: string): string {
-  return createHash("sha256").update(value).digest("base64url");
-}
-
-function encodeContinuation(payload: Readonly<ReadContinuationPayload>): string {
-  const serializedPayload = JSON.stringify(payload);
-  const envelope: ReadContinuationEnvelope = {
-    payload: serializedPayload,
-    checksum: continuationChecksum(serializedPayload),
-  };
-  return Buffer.from(JSON.stringify(envelope)).toString("base64url");
-}
-
-function decodeContinuation(token: string): ReadContinuationPayload {
-  if (!token || token.length > MAX_CONTINUATION_LENGTH) throw new InvalidReadContinuationError();
-  try {
-    const envelope: unknown = JSON.parse(Buffer.from(token, "base64url").toString("utf8"));
-    if (!isReadContinuationEnvelope(envelope)) throw new InvalidReadContinuationError();
-    if (envelope.checksum !== continuationChecksum(envelope.payload)) {
-      throw new InvalidReadContinuationError();
-    }
-    const payload: unknown = JSON.parse(envelope.payload);
-    if (!isReadContinuationPayload(payload)) throw new InvalidReadContinuationError();
-    return payload;
-  } catch (error) {
-    if (error instanceof InvalidReadContinuationError) throw error;
+function decodeContinuation(token: string, request: string): ReadContinuationPayload {
+  const fields =
+    token.length <= MAX_CONTINUATION_LENGTH
+      ? openContinuation(READ_CONTINUATION, token, 4, request)
+      : undefined;
+  const [provider, requestedProvider, offset, contentFingerprint] = fields ?? [];
+  if (!provider || !requestedProvider || !offset || !contentFingerprint) {
     throw new InvalidReadContinuationError();
   }
+  return { provider, requestedProvider, contentFingerprint, offset: continuationOffset(offset) };
 }
 
-function continuationChecksum(payload: string): string {
-  return fingerprint(`@agntn/web/read-continuation/v1\0${payload}`);
-}
-
-function isReadContinuationEnvelope(value: unknown): value is ReadContinuationEnvelope {
-  if (typeof value !== "object" || value === null) return false;
-  const envelope = value as Readonly<Record<string, unknown>>;
-  return typeof envelope.payload === "string" && typeof envelope.checksum === "string";
-}
-
-function isReadContinuationPayload(value: unknown): value is ReadContinuationPayload {
-  if (typeof value !== "object" || value === null) return false;
-  const payload = value as Readonly<Record<string, unknown>>;
-  const strings = [
-    payload.provider,
-    payload.requestedProvider,
-    payload.requestFingerprint,
-    payload.contentFingerprint,
-  ];
-  const hasRequiredStrings = strings.every((item) => typeof item === "string" && item.length > 0);
-  return (
-    payload.version === 1 &&
-    hasRequiredStrings &&
-    typeof payload.offset === "number" &&
-    Number.isSafeInteger(payload.offset) &&
-    payload.offset >= 0
-  );
+function continuationOffset(value: string): number {
+  const offset = Number(value);
+  if (!/^(?:0|[1-9]\d*)$/u.test(value) || !Number.isSafeInteger(offset)) {
+    throw new InvalidReadContinuationError();
+  }
+  return offset;
 }
