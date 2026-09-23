@@ -91,6 +91,7 @@
     "@types/node": "latest",
     "ai": "6.0.286",
     "changelogen": "latest",
+    "jiti": "2.7.0",
     "typescript": "7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"

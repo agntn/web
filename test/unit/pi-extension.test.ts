@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
+import { createJiti } from "jiti/static";
 import stringWidth from "string-width";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import webExtension, { resolveWebModuleUrl } from "../../packages/pi/extensions/web.ts";
@@ -1300,6 +1301,64 @@ describe("Pi extension", () => {
     expect(read.details).toMatchObject({ mode: "batch" });
   });
 });
+
+describe("Pi host loader", () => {
+  it("reads every URL of a batch that lands on one reader", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      const page = decodeURIComponent(url.replace("https://r.jina.ai/", ""));
+      return Response.json({
+        code: 200,
+        status: 20000,
+        data: { url: page, content: `Read ${page}` },
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      const readTool = (await registerThroughHostLoader()).get("web_read");
+      if (!readTool) throw new Error("web_read was not registered");
+      const urls = ["https://example.com/a", "https://example.com/b", "https://example.com/c"];
+      const result = (await Reflect.apply(readTool.execute.bind(readTool), undefined, [
+        "host-batch-call",
+        { url: urls, provider: "jina" },
+        undefined,
+        undefined,
+        undefined,
+      ])) as { readonly content: readonly { readonly text: string }[] };
+
+      const text = result.content[0]?.text ?? "";
+      expect(text).not.toContain("Error");
+      for (const url of urls) expect(text).toContain(`Read ${url}`);
+      expect(fetchMock).toHaveBeenCalledTimes(urls.length);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  }, 30_000);
+});
+
+/**
+ * Registers the tools the way a bundled Pi does: through jiti with the module cache off and native
+ * imports disabled, so overlapping imports of one module evaluate it once per importer.
+ * @returns {Promise<Map<string, CapturedTool>>} The tools the extension registered.
+ */
+async function registerThroughHostLoader(): Promise<Map<string, CapturedTool>> {
+  const jiti = createJiti(import.meta.url, { moduleCache: false, tryNative: false });
+  const extension = (await jiti.import(
+    fileURLToPath(new URL("../../packages/pi/extensions/web.ts", import.meta.url)),
+    { default: true },
+  )) as typeof webExtension;
+  const tools = new Map<string, CapturedTool>();
+  await Reflect.apply(extension, undefined, [
+    {
+      registerTool(tool: CapturedTool) {
+        tools.set(tool.name, tool);
+      },
+      registerCommand() {},
+    },
+  ]);
+  return tools;
+}
+
 async function initializeExtension(): Promise<{
   readonly tools: Map<string, CapturedTool>;
   readonly commands: Map<string, CapturedCommand>;

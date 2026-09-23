@@ -67,6 +67,9 @@ importers:
       changelogen:
         specifier: latest
         version: 0.6.2
+      jiti:
+        specifier: 2.7.0
+        version: 2.7.0
       typescript:
         specifier: 7.0.2
         version: 7.0.2
