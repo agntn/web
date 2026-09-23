@@ -40,7 +40,8 @@ interface TavilyResult {
 
 interface TavilySearchResponse {
   readonly results: readonly TavilyResult[];
-  readonly answer?: string;
+  /** `null` unless the request asked for an answer. */
+  readonly answer?: string | null;
   readonly query: string;
 }
 
@@ -109,7 +110,7 @@ export class TavilyProvider extends Provider {
       );
       return {
         results: response.results.map(mapResult),
-        ...(response.answer === undefined ? {} : { metadata: { answer: response.answer } }),
+        ...(typeof response.answer === "string" ? { metadata: { answer: response.answer } } : {}),
       };
     } catch (error) {
       throw normalizeTavilyError(error);
