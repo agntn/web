@@ -215,6 +215,18 @@ describe("tavily provider", () => {
       expect(response.results[0].summary).toBeUndefined();
     });
 
+    it("leaves metadata out when Tavily sends a null answer", async () => {
+      mockPostJSON.mockResolvedValueOnce({ ...tavilyResponse, answer: null });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
+      if (!isDetailedSearchProvider(provider)) {
+        throw new Error("Tavily provider must support detailed search responses");
+      }
+
+      const response = await provider.searchDetailed("test query");
+
+      expect(response).not.toHaveProperty("metadata");
+    });
+
     it("maps maxResults to max_results in body", async () => {
       const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
       await provider.search("test query", { maxResults: 5 });
