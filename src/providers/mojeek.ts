@@ -2,6 +2,7 @@ import type { ProviderConfig, SearchRequestOptions, SearchResult } from "../core
 import { Provider, type ProviderSearchPage } from "../core/provider.ts";
 import {
   AuthError,
+  authenticationFailed,
   InvalidSearchContinuationError,
   DEFAULT_RETRY_AFTER,
   RateLimitError,
@@ -162,7 +163,7 @@ function successfulResponse(envelope: Readonly<MojeekSearchEnvelope>): MojeekSea
     return response;
   }
   if (/^Access Denied(?::|$)/i.test(response.status)) {
-    throw new AuthError(`Authentication failed: ${response.status}`, "mojeek");
+    throw authenticationFailed(response.status, "mojeek");
   }
   if (/daily limit reached/i.test(response.status)) {
     throw new RateLimitError(DEFAULT_RETRY_AFTER);
