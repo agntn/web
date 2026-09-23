@@ -181,7 +181,7 @@ export const searchImageTool = tool({
 
 export const readTool = tool({
   description:
-    "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, TinyFish, or Tavily. Automatic reads report the effective provider and every reader tried after fallback. Each batch item returns its own result or error.",
+    "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, TinyFish, Tavily, or Exa. Automatic reads report the effective provider and every reader tried after fallback. Each batch item returns its own result or error.",
   inputSchema: z.object({
     url: z
       .union([z.string(), z.array(z.string()).min(1).max(MAX_BATCH_ITEMS)])

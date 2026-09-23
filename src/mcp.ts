@@ -436,7 +436,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_read",
       title: webToolTitle("web_read"),
       description:
-        "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, TinyFish, or Tavily. Automatic reads report every provider attempt and failure after fallback.",
+        "Read one URL or a batch of URLs into normalized content using Jina, Context.dev, Firecrawl, TinyFish, Tavily, or Exa. Automatic reads report every provider attempt and failure after fallback.",
       inputSchema: Type.Object({
         url: Type.Union(
           [
