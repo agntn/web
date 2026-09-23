@@ -125,7 +125,7 @@ const activeProvider = computed(() => current.value.provider);
       to="/guide/read"
       link="Reading pages"
       :checks="[
-        'readUrl starts with Jina Reader and moves to Context.dev, Firecrawl or TinyFish when Jina fails in a way that makes sense to retry',
+        'readUrl starts with Jina Reader and moves to Context.dev, Firecrawl, TinyFish, Tavily or Exa when Jina fails in a way that makes sense to retry',
         'maxChars is an exact bound in code points, same on every reader, with a continuation for the rest',
         'readUrlDetailed tells you which reader answered and which ones it tried first',
       ]"
