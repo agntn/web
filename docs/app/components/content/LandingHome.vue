@@ -35,7 +35,7 @@ const activeProvider = computed(() => current.value.provider);
         One query. <span class="text-primary">Every engine.</span>
       </h1>
       <p class="web-enter web-enter-2 mx-auto mt-6 max-w-xl text-base leading-7 text-muted">
-        One interface over Brave, Exa, Tavily, Firecrawl, Jina, SearXNG and five more. Search,
+        One interface over Brave, Exa, Tavily, Firecrawl, Jina, SearXNG and seven more. Search,
         reverse image search and page reading, all in the same shape. Works as a library, a CLI,
         an AI SDK tool or an MCP server, your pick.
       </p>

@@ -7,7 +7,7 @@ const TAGLINE = "Search, reverse image search and page reading from thirteen pro
 
 const { name: siteName } = useSiteConfig();
 
-const PROVIDERS = ["Brave", "Exa", "Tavily", "Firecrawl", "Jina", "SearXNG", "+5"];
+const PROVIDERS = ["Brave", "Exa", "Tavily", "Firecrawl", "Jina", "SearXNG", "+7"];
 </script>
 
 <template>
