@@ -72,7 +72,7 @@ describe("lazy providers", () => {
   it("should answer every listing and capability lookup without loading a provider", () => {
     expect(providers()).toEqual([...builtinProviders]);
     expect(searchProviders()).toEqual([...builtinProviders]);
-    expect(readProviders()).toEqual(["context", "firecrawl", "jina", "tavily", "tinyfish"]);
+    expect(readProviders()).toEqual(["context", "exa", "firecrawl", "jina", "tavily", "tinyfish"]);
     expect(searchImageProviders()).toEqual(["serpapi"]);
     expect(has("brave")).toBe(true);
     expect(has("bing")).toBe(false);

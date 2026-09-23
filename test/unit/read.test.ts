@@ -56,6 +56,7 @@ describe("readUrl", () => {
     "FIRECRAWL_API_KEY",
     "TINYFISH_API_KEY",
     "TAVILY_API_KEY",
+    "EXA_API_KEY",
   ] as const;
   const savedEnv = Object.fromEntries(fallbackEnvKeys.map((key) => [key, process.env[key]]));
 
@@ -192,9 +193,13 @@ describe("readUrl", () => {
   it("preserves built in fallback order independently of registration order", async () => {
     const attempts: string[] = [];
     registerReader("jina", paymentRequired);
+    registerReader("exa", async () => {
+      attempts.push("exa");
+      return { url: "https://example.com", content: "ok" };
+    });
     registerReader("tavily", async () => {
       attempts.push("tavily");
-      return { url: "https://example.com", content: "ok" };
+      throw new HTTPError(429, "https://tavily.example.com", "Tavily rate limited");
     });
     registerReader("tinyfish", async () => {
       attempts.push("tinyfish");
@@ -212,9 +217,10 @@ describe("readUrl", () => {
     process.env.FIRECRAWL_API_KEY = "test-key";
     process.env.TINYFISH_API_KEY = "test-key";
     process.env.TAVILY_API_KEY = "test-key";
+    process.env.EXA_API_KEY = "test-key";
 
     await expect(readUrl("https://example.com")).resolves.toMatchObject({ content: "ok" });
-    expect(attempts).toEqual(["context", "firecrawl", "tinyfish", "tavily"]);
+    expect(attempts).toEqual(["context", "firecrawl", "tinyfish", "tavily", "exa"]);
   });
 
   it("treats a whitespace provider as the default and falls back", async () => {
@@ -696,9 +702,9 @@ describe("readUrl", () => {
   });
 
   it("throws ReadNotSupportedError for search-only built-in providers before constructing them", async () => {
-    delete process.env.EXA_API_KEY;
+    delete process.env.BRAVE_API_KEY;
 
-    await expect(readUrl("https://example.com", { provider: "exa" })).rejects.toThrow(
+    await expect(readUrl("https://example.com", { provider: "brave" })).rejects.toThrow(
       ReadNotSupportedError,
     );
   });

@@ -948,7 +948,11 @@ describe("providersTool", () => {
       expect.arrayContaining(["highlights", "summary", "text"]),
     );
     expect(exa?.capabilities.searchImage).toEqual({ supported: false });
-    expect(exa?.capabilities.read).toEqual({ supported: false });
+    expect(exa?.capabilities.read).toEqual({
+      supported: true,
+      options: ["timeout", "noCache"],
+      formats: ["markdown"],
+    });
   });
 });
 

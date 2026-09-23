@@ -257,7 +257,11 @@ describe("resolve", () => {
           ],
         },
         searchImage: { supported: false },
-        read: { supported: false },
+        read: {
+          supported: true,
+          options: ["timeout", "noCache"],
+          formats: ["markdown"],
+        },
       });
       expect(matrix.firecrawl).toEqual({
         search: {

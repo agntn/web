@@ -29,7 +29,14 @@ import {
   MAX_SEARCH_CONTINUATION_LENGTH,
 } from "./search-continuation.ts";
 
-export const readProviderNames = ["jina", "context", "firecrawl", "tinyfish", "tavily"] as const;
+export const readProviderNames = [
+  "jina",
+  "context",
+  "firecrawl",
+  "tinyfish",
+  "tavily",
+  "exa",
+] as const;
 export type ReadProviderName = (typeof readProviderNames)[number];
 
 /** Default portable content limit used by agent surfaces. */

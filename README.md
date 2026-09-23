@@ -77,7 +77,7 @@ This domain is for use in documentation examples without needing permission. Avo
 [Learn more](https://iana.org/domains/example)
 ```
 
-Reads start at Jina's `r.jina.ai`, which doesn't need a key, and move on to Context.dev, Firecrawl, TinyFish or Tavily when Jina is out of credit, rate limited, down or answers with its 409. The first line tells you who ended up doing the work.
+Reads start at Jina's `r.jina.ai`, which doesn't need a key, and move on to Context.dev, Firecrawl, TinyFish, Tavily or Exa when Jina is out of credit, rate limited, down or answers with its 409. The first line tells you who ended up doing the work.
 
 A handful more, keys permitting:
 
@@ -131,7 +131,7 @@ That's most of it, really. `create("brave")` instead of `create("exa")` and noth
 | ---------------- | ---------------------------------------------------- | ------------------- | ---------------------------- | ----- |
 | **brave**        | `BRAVE_API_KEY`                                      | search              | dates                        | yes   |
 | **context**      | `CONTEXT_DEV_API_KEY`                                | search, read        | domains                      |       |
-| **exa**          | `EXA_API_KEY`                                        | search              | domains, category, dates     |       |
+| **exa**          | `EXA_API_KEY`                                        | search, read        | domains, category, dates     |       |
 | **firecrawl**    | `FIRECRAWL_API_KEY`                                  | search, read        | domains, sources, categories |       |
 | **jina**         | `JINA_API_KEY`, optional for read                    | search, read        | include domains, category    |       |
 | **mojeek**       | `MOJEEK_API_KEY`                                     | search              | domains, dates               | yes   |

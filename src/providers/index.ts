@@ -78,6 +78,10 @@ export const builtins: readonly ProviderEntry[] = [
         "summary",
       ],
     },
+    read: {
+      options: ["timeout", "noCache"],
+      formats: ["markdown"],
+    },
     load: () => import("./exa.ts").then((m) => m.ExaProvider),
   },
   {
