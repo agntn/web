@@ -804,6 +804,7 @@ describe("searchAllDetailed", () => {
       }
     }
     const cleanup = register(HangingProvider);
+    let guard: ReturnType<typeof setTimeout> | undefined;
 
     try {
       const pending = searchAllDetailed("test", {
@@ -813,15 +814,16 @@ describe("searchAllDetailed", () => {
       await collectGarbage();
       const response = await Promise.race([
         pending,
-        new Promise<never>((_resolve, reject) =>
-          setTimeout(() => reject(new Error("the deadline never fired")), 1_000),
-        ),
+        new Promise<never>((_resolve, reject) => {
+          guard = setTimeout(() => reject(new Error("the deadline never fired")), 1_000);
+        }),
       ]);
 
       expect(response.errors).toMatchObject([
         { provider: providerName, error: { name: "TimeoutError" } },
       ]);
     } finally {
+      clearTimeout(guard);
       cleanup();
     }
   });
