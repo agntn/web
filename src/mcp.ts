@@ -297,7 +297,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       name: "web_search",
       title: webToolTitle("web_search"),
       description:
-        'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, OpenAI Codex, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored. Single searches may continue with an opaque token bound to its provider.',
+        'Search the web using multiple search engines (Brave, Context.dev, Exa, Firecrawl, Jina, Marginalia, Mojeek, OpenAI Codex, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG). Pass one query or a batch of queries; each batch item returns its own results or error. Use provider "all" to query all available providers in parallel and get deduplicated results. Responses report filters the selected provider ignored. Single searches may continue with an opaque token bound to its provider.',
       inputSchema: Type.Object({
         query: Type.Union(
           [

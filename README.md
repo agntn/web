@@ -5,22 +5,22 @@
 [![license](https://npmx.dev/api/registry/badge/license/@agntn/web)](https://npmx.dev/package/@agntn/web)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/agntn/web)
 
-🔎 Twelve search APIs, one `{ url, title, snippet }`. You ask Exa, Brave or your own SearXNG the same way, you read the page behind a hit the same way, and nobody has to remember whose key goes in which header.
+🔎 Thirteen search APIs, one `{ url, title, snippet }`. You ask Exa, Brave or your own SearXNG the same way, you read the page behind a hit the same way, and nobody has to remember whose key goes in which header.
 
 ## Why?
 
-Every search API sells the same thing, ten links with a title and a snippet, and every one of them takes the order differently. Exa wants a POST with `x-api-key`, Brave a GET with `X-Subscription-Token`, Tavily puts the key inside the JSON body, why not. Wire three of those into an agent and you have three clients, three response shapes and three ideas of what a date looks like. So this is one class shape in front of twelve of them, search, read and reverse image search, same objects out no matter who answered.
+Every search API sells the same thing, ten links with a title and a snippet, and every one of them takes the order differently. Exa wants a POST with `x-api-key`, Brave a GET with `X-Subscription-Token`, Tavily puts the key inside the JSON body, why not. Wire three of those into an agent and you have three clients, three response shapes and three ideas of what a date looks like. So this is one class shape in front of thirteen of them, search, read and reverse image search, same objects out no matter who answered.
 
 Docs and a live explorer: [web.agntn.dev](https://web.agntn.dev).
 
 ## ✨ Features
 
-- 🧩 **Twelve backends, one contract.** Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, OpenAI Codex, SearXNG, SerpAPI, SerpBase, Tavily and TinyFish, and from your side the difference is a string.
+- 🧩 **Thirteen backends, one contract.** Brave, Context.dev, Exa, Firecrawl, Jina, Marginalia, Mojeek, OpenAI Codex, SearXNG, SerpAPI, SerpBase, Tavily and TinyFish, and from your side the difference is a string.
 - 🔎 **Search, read, reverse image.** Query to results, URL to Markdown, image URL to the pages it shows up on. Three calls, not three packages.
 - 🌐 **`all` means all.** One query goes to every provider you have a key for, comes back deduplicated by URL with the UTM junk stripped, and each hit says which providers agreed on it.
 - 🛟 **Fallback you don't write.** Out of credits on Firecrawl, rate limited on SerpAPI? The next configured provider gets the query and the answer names who actually replied.
 - 📏 **Reads have a ceiling.** `maxChars` is exact, counted in code points, and a page that doesn't fit hands you a continuation token instead of 400 kB you didn't ask for.
-- 📄 **Page two exists.** Brave, Mojeek, SearXNG, SerpAPI, SerpBase and TinyFish page through results with an opaque token that stays pinned to the query it came from.
+- 📄 **Page two exists.** Brave, Marginalia, Mojeek, SearXNG, SerpAPI, SerpBase and TinyFish page through results with an opaque token that stays pinned to the query it came from.
 - 🤖 **One package, six doors.** CLI, library, AI SDK tools, an MCP server, a Pi extension and an OMP extension, and the JSON coming out is the same behind every one.
 - 🔐 **Keys stay out of your logs.** The key is scrubbed from the URL before an error ever gets to say it out loud.
 - 🧠 **Codex search on a login you already have.** Signed into Codex, Pi, OMP or OpenCode? OpenAI web search runs on that, no API key.
@@ -59,7 +59,7 @@ How many r are in strawberry? | AI Roundtable by Opper
 
 Three. All four models agreed, good for them ;)
 
-No subcommand, no flags. Anything that isn't `search`, `read`, `search-image`, `providers` or `mcp` is a query. Which provider answered? The first one with a key in your env, checked in this order: Exa, Brave, Context.dev, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, Mojeek, then a saved Codex login, then a SearXNG on `localhost:8080`. No key anywhere means search has nobody to call and says so. `--provider brave` if you'd rather pick.
+No subcommand, no flags. Anything that isn't `search`, `read`, `search-image`, `providers` or `mcp` is a query. Which provider answered? The first one with a key in your env, checked in this order: Exa, Brave, Context.dev, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, Mojeek, Marginalia, then a saved Codex login, then a SearXNG on `localhost:8080`. No key anywhere means search has nobody to call and says so. `--provider brave` if you'd rather pick.
 
 Reading is different, that one works with nothing in your env:
 
@@ -134,6 +134,7 @@ That's most of it, really. `create("brave")` instead of `create("exa")` and noth
 | **exa**          | `EXA_API_KEY`                                        | search, read        | domains, category, dates     |       |
 | **firecrawl**    | `FIRECRAWL_API_KEY`                                  | search, read        | domains, sources, categories |       |
 | **jina**         | `JINA_API_KEY`, optional for read                    | search, read        | include domains, category    |       |
+| **marginalia**   | `MARGINALIA_API_KEY`, `public` key when named        | search              | none                         | yes   |
 | **mojeek**       | `MOJEEK_API_KEY`                                     | search              | domains, dates               | yes   |
 | **openai-codex** | Existing login, optional `OPENAI_CODEX_ACCESS_TOKEN` | search              | none                         |       |
 | **searxng**      | None, your own instance                              | search              | category                     | yes   |

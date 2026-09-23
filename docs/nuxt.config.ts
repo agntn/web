@@ -44,6 +44,7 @@ export default defineNuxtConfig({
         "lucide:library",
         "lucide:link",
         "lucide:loader-circle",
+        "lucide:notebook-text",
         "lucide:plus",
         "lucide:scan-search",
         "lucide:search",

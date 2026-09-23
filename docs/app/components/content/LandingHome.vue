@@ -87,7 +87,7 @@ const activeProvider = computed(() => current.value.provider);
       :checks="[
         'Every provider answers { url, title, snippet }. Score, dates, highlights and full text come along when the engine has them',
         'A filter the provider cannot do lands in ignoredFilters. Nothing gets dropped quietly',
-        'Brave, Mojeek, SearXNG, SerpAPI, SerpBase and TinyFish page through an opaque continuation token',
+        'Brave, Marginalia, Mojeek, SearXNG, SerpAPI, SerpBase and TinyFish page through an opaque continuation token',
       ]"
     >
       <code class="font-mono text-[13px] text-highlighted">create("brave")</code> reads the key from env
@@ -140,7 +140,7 @@ const activeProvider = computed(() => current.value.provider);
 
     <LandingFeature
       eyebrow="Providers"
-      title="Eleven adapters, one shape"
+      title="Thirteen adapters, one shape"
       to="/providers"
       link="All providers"
       :checks="[
