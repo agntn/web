@@ -28,6 +28,7 @@
     "dist",
     "packages/omp/extensions",
     "packages/pi/extensions",
+    "src/tool-titles.ts",
     "src/tui.ts"
   ],
   "type": "module",

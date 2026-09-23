@@ -1,6 +1,16 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
 import { join, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import * as ompTypebox from "@oh-my-pi/omptype/typebox";
+import { createJiti } from "jiti/static";
 import { build } from "vite-plus/pack";
 import { describe, expect, it, onTestFinished } from "vite-plus/test";
 import { builtinProviders } from "../src/index.ts";
@@ -34,6 +44,26 @@ async function bundleConsumer(entry: string): Promise<string> {
   return outDir;
 }
 
+/**
+ * Copies the files package.json publishes into a directory inside the checkout, so bare imports
+ * resolve through the repo's node_modules the way they would in a consumer's install.
+ * @returns {string} The package directory, removed when the test finishes.
+ */
+function publishedPackage(): string {
+  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+    readonly files: readonly string[];
+  };
+  mkdirSync(join(root, "node_modules/.cache"), { recursive: true });
+  const packageDir = mkdtempSync(join(root, "node_modules/.cache/web-published-"));
+  onTestFinished(() => rmSync(packageDir, { recursive: true, force: true }));
+
+  cpSync(join(root, "package.json"), join(packageDir, "package.json"));
+  for (const entry of manifest.files) {
+    cpSync(join(root, entry), join(packageDir, entry), { recursive: true });
+  }
+  return packageDir;
+}
+
 describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", () => {
   it("keeps every built-in provider listed after a consumer bundles dist/", async () => {
     const outDir = await bundleConsumer(registryEntry);
@@ -58,5 +88,33 @@ describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", ()
 
     expect(bundle.version).toMatch(/^\d+\.\d+\.\d+/u);
     expect(files).toEqual([versionEntry]);
+  });
+
+  /** Pi and OMP load the extension source from the installed package, so every file it imports has to ship. */
+  it("loads the Pi and OMP extensions from the published files", async () => {
+    const packageDir = publishedPackage();
+    const jiti = createJiti(import.meta.url, { moduleCache: false, tryNative: false });
+    const load = (host: string) =>
+      jiti.import<(pi: unknown) => Promise<void>>(
+        join(packageDir, `packages/${host}/extensions/web.ts`),
+        { default: true },
+      );
+
+    const piExtension = await load("pi");
+    const piTools: string[] = [];
+    await piExtension({
+      registerTool: (tool: { readonly name: string }) => piTools.push(tool.name),
+      registerCommand() {},
+    });
+    const ompExtension = await load("omp");
+    const ompTools: string[] = [];
+    await ompExtension({
+      typebox: ompTypebox,
+      setLabel() {},
+      registerTool: (tool: { readonly name: string }) => ompTools.push(tool.name),
+    });
+
+    expect(piTools).toContain("web_search");
+    expect(ompTools).toContain("web_search");
   });
 });
