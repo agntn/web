@@ -46,22 +46,24 @@ interface FirecrawlSearchResponse {
   readonly creditsUsed?: number;
 }
 
+/** Page meta tags plus Firecrawl's own fields about the fetch, in one flat object. */
+interface FirecrawlPageMetadata {
+  readonly title?: string;
+  readonly description?: string;
+  readonly url?: string;
+  readonly ogImage?: string;
+  readonly "og:image"?: string;
+  readonly [key: string]: unknown;
+}
+
 interface FirecrawlScrapeResponse {
   readonly success: boolean;
   readonly data?: {
     readonly markdown?: string;
     readonly html?: string;
-    readonly metadata?: {
-      readonly title?: string;
-      readonly description?: string;
-      readonly sourceURL?: string;
-      readonly language?: string;
-      readonly keywords?: string;
-      readonly ogImage?: string;
-      readonly [key: string]: unknown;
-    };
+    readonly metadata?: FirecrawlPageMetadata;
     readonly links?: readonly string[];
-    readonly warning?: string;
+    readonly warning?: string | null;
   };
 }
 
@@ -212,16 +214,49 @@ function mapScrapeResponse(url: string, response: Readonly<FirecrawlScrapeRespon
   if (!response.success) throw new Error("Firecrawl scrape failed");
 
   const data = response.data ?? {};
+  const page = data.metadata ?? {};
   return {
-    url,
-    title: data.metadata?.title,
-    description: data.metadata?.description,
+    url: page.url || url,
+    title: page.title,
+    description: page.description,
     content: data.markdown ?? data.html ?? "",
     html: data.html,
     links: data.links ? [...data.links] : undefined,
-    image: data.metadata?.ogImage,
-    metadata: data.metadata,
+    image: page.ogImage ?? page["og:image"],
+    metadata: fetchMetadata(url, page, data.warning),
   };
+}
+
+/** Firecrawl's own fields about the fetch, the part of its metadata an agent can act on. */
+const FETCH_METADATA_KEYS = [
+  "statusCode",
+  "error",
+  "contentType",
+  "language",
+  "cachedAt",
+  "creditsUsed",
+] as const;
+
+/**
+ * Firecrawl returns every meta tag of the page next to its own fields, dozens of keys that
+ * repeat the title and description or only matter to a browser. Keep what describes the fetch.
+ * @param url - URL the caller asked for.
+ * @param page - Metadata object of the scrape.
+ * @param warning - Warning Firecrawl attached to the scrape.
+ * @returns {Record<string, unknown>} Fields an agent can act on.
+ */
+function fetchMetadata(
+  url: string,
+  page: Readonly<FirecrawlPageMetadata>,
+  warning: string | null | undefined,
+): Record<string, unknown> {
+  const metadata: Record<string, unknown> = { originalUrl: url };
+  for (const key of FETCH_METADATA_KEYS) {
+    const value = page[key];
+    if (typeof value === "string" || typeof value === "number") metadata[key] = value;
+  }
+  if (typeof warning === "string") metadata.warning = warning;
+  return metadata;
 }
 
 function normalizeFormat(format?: string): "markdown" | "html" {
