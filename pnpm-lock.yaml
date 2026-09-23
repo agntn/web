@@ -25,10 +25,10 @@ importers:
         specifier: 1.30.0
         version: 1.30.0(zod@4.3.6)
       citty:
-        specifier: latest
+        specifier: 0.2.2
         version: 0.2.2
       consola:
-        specifier: latest
+        specifier: 3.4.2
         version: 3.4.2
       ofetch:
         specifier: 1.5.1
@@ -59,13 +59,13 @@ importers:
         specifier: 18.2.6
         version: 18.2.6
       '@types/node':
-        specifier: latest
+        specifier: 26.6.2
         version: 26.6.2
       ai:
         specifier: 6.0.286
         version: 6.0.286(zod@4.3.6)
       changelogen:
-        specifier: latest
+        specifier: 0.6.2
         version: 0.6.2
       jiti:
         specifier: 2.7.0
