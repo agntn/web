@@ -1,5 +1,32 @@
 # Changelog
 
+## v0.7.3
+
+[compare changes](https://github.com/agntn/web/compare/v0.7.2...v0.7.3)
+
+### 🚀 Enhancements
+
+- **exa:** Read a URL through /contents ([#195](https://github.com/agntn/web/pull/195))
+- **marginalia:** Search the small web ([#203](https://github.com/agntn/web/pull/203))
+
+### 🔥 Performance
+
+- **firecrawl:** Trim read metadata to the fetch ([#201](https://github.com/agntn/web/pull/201))
+
+### 🩹 Fixes
+
+- **registry:** Load each provider module once ([#193](https://github.com/agntn/web/pull/193))
+- Split a JSON list string into a batch ([#194](https://github.com/agntn/web/pull/194))
+- **tavily:** Keep a null answer out of metadata ([#198](https://github.com/agntn/web/pull/198))
+- **execution:** Don't let GC drop a deadline ([#199](https://github.com/agntn/web/pull/199))
+- **pack:** Ship tool-titles.ts with the TUI ([#200](https://github.com/agntn/web/pull/200))
+- **errors:** Say which provider refused the key ([#202](https://github.com/agntn/web/pull/202))
+
+### ❤️ Contributors
+
+- Ori ([@oritwoen](https://github.com/oritwoen))
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.7.2
 
 [compare changes](https://github.com/agntn/web/compare/v0.7.1...v0.7.2)
