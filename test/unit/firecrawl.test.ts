@@ -69,8 +69,10 @@ const firecrawlScrapeResponse = {
       sourceURL: "https://www.firecrawl.dev/",
       language: "en",
       ogImage: "https://www.firecrawl.dev/og.png",
+      error: null,
     },
     links: ["https://www.firecrawl.dev/pricing", "https://docs.firecrawl.dev"],
+    warning: null,
   },
 };
 
@@ -439,6 +441,99 @@ describe("firecrawl provider", () => {
         "https://docs.firecrawl.dev",
       ]);
       expect(result.image).toBe("https://www.firecrawl.dev/og.png");
+      expect(result.metadata).toEqual({ originalUrl: "https://example.com", language: "en" });
+    });
+
+    it("keeps what the scrape says about the fetch, not every meta tag", async () => {
+      // Recorded from POST /v2/scrape on 2026-09-23; the page redirects.
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {
+          markdown: "# 404 Not Found",
+          metadata: {
+            "og:image:width": "1024",
+            language: "en-US",
+            "og:title": "404 Not Found - HTTP | MDN",
+            "twitter:card": "summary",
+            "og:image:alt": "The MDN logo",
+            "og:site_name": "MDN Web Docs",
+            "og:description": "The HTTP 404 Not Found client error response status code.",
+            "og:image:height": "1024",
+            position: ["1", "2", "3", "4", "5"],
+            "og:image:type": "image/png",
+            viewport: "width=device-width, initial-scale=1.0",
+            "og:image": "https://developer.mozilla.org/mdn-social-image.46ac2375.png",
+            "og:url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/404",
+            description: "The HTTP 404 Not Found client error response status code.",
+            "og:locale": "en_US",
+            title: "404 Not Found - HTTP | MDN",
+            "twitter:creator": "MozDevNet",
+            favicon: "https://developer.mozilla.org/favicon.ico",
+            scrapeId: "01a0ce5a-0ea2-733c-a851-866796a343e6",
+            sourceURL: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+            url: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/404",
+            statusCode: 200,
+            contentType: "text/html",
+            proxyUsed: "basic",
+            cacheState: "hit",
+            cachedAt: "2026-09-23T10:56:56.515Z",
+            creditsUsed: 1,
+            concurrencyLimited: false,
+          },
+        },
+      });
+
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
+      const result = await provider.read(
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+      );
+
+      expect(result.url).toBe(
+        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status/404",
+      );
+      expect(result.title).toBe("404 Not Found - HTTP | MDN");
+      expect(result.image).toBe("https://developer.mozilla.org/mdn-social-image.46ac2375.png");
+      expect(result.metadata).toEqual({
+        originalUrl: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404",
+        statusCode: 200,
+        contentType: "text/html",
+        language: "en-US",
+        cachedAt: "2026-09-23T10:56:56.515Z",
+        creditsUsed: 1,
+      });
+    });
+
+    it("keeps the status, error and warning of a page that failed", async () => {
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {
+          markdown: "# Example Domain",
+          metadata: {
+            title: "Example Domain",
+            sourceURL: "https://example.com/missing",
+            url: "https://example.com/missing",
+            statusCode: 404,
+            error: "Not Found",
+            contentType: "text/html",
+            cacheState: "miss",
+            creditsUsed: 1,
+          },
+          warning: "The page returned a 404 status code.",
+        },
+      });
+
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
+      const result = await provider.read("https://example.com/missing");
+
+      expect(result.url).toBe("https://example.com/missing");
+      expect(result.metadata).toEqual({
+        originalUrl: "https://example.com/missing",
+        statusCode: 404,
+        error: "Not Found",
+        contentType: "text/html",
+        creditsUsed: 1,
+        warning: "The page returned a 404 status code.",
+      });
     });
 
     it("rejects maxTokens before sending a scrape request", async () => {
