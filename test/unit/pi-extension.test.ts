@@ -1300,6 +1300,65 @@ describe("Pi extension", () => {
     expect(search.details).toMatchObject({ mode: "batch" });
     expect(read.details).toMatchObject({ mode: "batch" });
   });
+
+  it("runs a JSON list sent as a string as a batch", async () => {
+    const providerName = `listprovider${Math.random().toString(36).slice(2)}`;
+    const queries: string[] = [];
+    const urls: string[] = [];
+    class ListProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://list.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, ListProvider);
+      }
+
+      async search(query: string): Promise<SearchResult[]> {
+        queries.push(query);
+        return [{ url: `https://example.com/${queries.length}`, title: query, snippet: query }];
+      }
+
+      async read(url: string) {
+        urls.push(url);
+        return { url, content: `Read ${url}` };
+      }
+    }
+    customProviderCleanups.push(register(ListProvider));
+    const tools = captureTools();
+    const searchTool = tools.get("web_search");
+    const readTool = tools.get("web_read");
+    if (!searchTool || !readTool) throw new Error("web tools were not registered");
+    const run = (tool: CapturedTool, params: Readonly<Record<string, unknown>>) =>
+      Reflect.apply(tool.execute.bind(tool), undefined, [
+        "list-call",
+        params,
+        undefined,
+        undefined,
+        undefined,
+      ]) as Promise<{ readonly details: Readonly<Record<string, unknown>> }>;
+    const tenQueries = Array.from({ length: 10 }, (_, index) => `query ${index + 1}`);
+
+    const search = await run(searchTool, {
+      query: JSON.stringify(tenQueries),
+      provider: providerName,
+    });
+    const read = await run(readTool, {
+      url: ' ["https://example.com/a", "https://example.com/b"] ',
+      provider: providerName,
+    });
+    const literal = await run(searchTool, { query: "[draft] notes", provider: providerName });
+
+    expect(search.details).toMatchObject({ mode: "batch", queries: tenQueries });
+    expect(search.details.outcomes).toHaveLength(10);
+    expect(read.details).toMatchObject({
+      mode: "batch",
+      urls: ["https://example.com/a", "https://example.com/b"],
+    });
+    expect(urls).toEqual(["https://example.com/a", "https://example.com/b"]);
+    expect(literal.details).toMatchObject({ mode: "single" });
+    expect(queries).toHaveLength(11);
+    expect(new Set(queries)).toEqual(new Set([...tenQueries, "[draft] notes"]));
+  });
 });
 
 describe("Pi host loader", () => {

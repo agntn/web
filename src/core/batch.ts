@@ -26,6 +26,30 @@ import type {
 /** Maximum number of network operations accepted by one agent-tool batch. */
 export const MAX_BATCH_ITEMS = 10;
 
+/**
+ * Turns a batch that a tool host serialized into the string branch back into a list.
+ *
+ * Some hosts send `["a","b"]` as one string, which would otherwise run as a single literal
+ * query or URL. Only a JSON array of strings becomes a batch; anything else stays as written, and
+ * the batch functions still reject an empty, blank, or oversized list.
+ * @param input - One query or URL, or a batch of them.
+ * @returns {string | readonly string[]} The batch the host meant, or the input unchanged.
+ */
+export function serializedBatch(input: string | readonly string[]): string | readonly string[] {
+  if (typeof input !== "string") return input;
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("[")) return input;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    return input;
+  }
+  return Array.isArray(parsed) && parsed.every((item): item is string => typeof item === "string")
+    ? parsed
+    : input;
+}
+
 /** Shared search options applied to every query in a batch. */
 export type SearchBatchOptions = SearchPageOptions & {
   readonly provider?: string;

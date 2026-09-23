@@ -20,7 +20,7 @@ import {
   readProviderNames,
   readUrlDetailed,
 } from "./core/read.ts";
-import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
+import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch, serializedBatch } from "./core/batch.ts";
 import { batchWithoutRepeatedEvidence, withoutRepeatedEvidence } from "./core/evidence.ts";
 import { deadlineAfterSeconds, MAX_AGENT_TIMEOUT_SECONDS } from "./core/execution.ts";
 import { EmptyImageUrlError, EmptyQueryError } from "./core/errors.ts";
@@ -652,7 +652,7 @@ export async function executeRead(
   args: Readonly<Record<string, unknown>>,
   signal?: Readonly<AbortSignal>,
 ): Promise<unknown> {
-  const urlInput = args.url;
+  const urlInput = typeof args.url === "string" ? serializedBatch(args.url) : args.url;
   const urls = Array.isArray(urlInput) ? stringListArg("url", urlInput) : undefined;
   const url = typeof urlInput === "string" ? urlInput : "";
   const format = stringArg("format", args.format);
@@ -707,7 +707,7 @@ function searchInputArg(value: unknown): string | readonly string[] {
   if (typeof value !== "string" || !value.trim()) {
     throw new EmptyQueryError();
   }
-  return value;
+  return serializedBatch(value);
 }
 
 function searchProviderArg(value: unknown): string | undefined {

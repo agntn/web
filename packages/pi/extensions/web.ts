@@ -390,8 +390,9 @@ export default async function webExtension(pi: ExtensionAPI) {
             deadline: web.deadlineAfterSeconds(params.timeoutSeconds),
           };
 
-          if (Array.isArray(params.query)) {
-            const outcomes = await web.searchBatch(params.query, {
+          const queryInput = web.serializedBatch(params.query);
+          if (typeof queryInput !== "string") {
+            const outcomes = await web.searchBatch(queryInput, {
               provider: providerName,
               ...executionOptions,
             });
@@ -404,7 +405,7 @@ export default async function webExtension(pi: ExtensionAPI) {
               ],
               details: {
                 mode: "batch",
-                queries: params.query,
+                queries: queryInput,
                 provider: providerName,
                 options: searchOptions,
                 outcomes,
@@ -412,7 +413,7 @@ export default async function webExtension(pi: ExtensionAPI) {
             };
           }
 
-          const query = params.query.trim();
+          const query = queryInput.trim();
           if (!query) {
             throw new Error("Query cannot be empty");
           }
@@ -608,12 +609,13 @@ export default async function webExtension(pi: ExtensionAPI) {
         noCache: params.noCache,
       });
 
-      if (Array.isArray(params.url) && continuation !== undefined) {
+      const urlInput = web.serializedBatch(params.url);
+      if (typeof urlInput !== "string" && continuation !== undefined) {
         throw new TypeError("continuation is only supported for a single URL");
       }
       const deadline = web.deadlineAfterSeconds(params.timeoutSeconds);
-      if (Array.isArray(params.url)) {
-        const outcomes = await web.readBatchDetailed(params.url, {
+      if (typeof urlInput !== "string") {
+        const outcomes = await web.readBatchDetailed(urlInput, {
           provider: readProvider,
           ...readOptions,
           signal,
@@ -623,7 +625,7 @@ export default async function webExtension(pi: ExtensionAPI) {
           content: [{ type: "text", text: formatReadBatch(outcomes) }],
           details: {
             mode: "batch",
-            urls: params.url,
+            urls: urlInput,
             provider: readProviderLabel,
             options: readOptions,
             outcomes,
@@ -631,7 +633,7 @@ export default async function webExtension(pi: ExtensionAPI) {
         };
       }
 
-      const url = params.url.trim();
+      const url = urlInput.trim();
       if (!url) {
         throw new Error("URL cannot be empty");
       }

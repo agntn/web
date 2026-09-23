@@ -257,11 +257,12 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
             deadline: web.deadlineAfterSeconds(params.timeoutSeconds),
           };
 
-          if (Array.isArray(params.query)) {
+          const queryInput = web.serializedBatch(params.query);
+          if (typeof queryInput !== "string") {
             if (continuation !== undefined) {
               throw new TypeError("continuation is only supported for a single query");
             }
-            const outcomes = await web.searchBatch(params.query, {
+            const outcomes = await web.searchBatch(queryInput, {
               provider,
               ...executionOptions,
             });
@@ -270,7 +271,7 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
               { mode: "batch", provider, outcomes: web.batchWithoutRepeatedEvidence(outcomes) },
             );
           }
-          const query = params.query.trim();
+          const query = queryInput.trim();
           if (!query) throw new web.EmptyQueryError();
           if (provider === "all") {
             const response = await web.searchAllDetailed(query, executionOptions);
@@ -358,15 +359,16 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
         timeout: params.timeout,
         noCache: params.noCache,
       };
-      if (Array.isArray(params.url) && continuation !== undefined) {
+      const urlInput = web.serializedBatch(params.url);
+      if (typeof urlInput !== "string" && continuation !== undefined) {
         throw new TypeError("continuation is only supported for a single URL");
       }
       const deadline = web.deadlineAfterSeconds(params.timeoutSeconds);
-      if (Array.isArray(params.url)) {
-        const outcomes = await web.readBatchDetailed(params.url, { ...options, signal, deadline });
+      if (typeof urlInput !== "string") {
+        const outcomes = await web.readBatchDetailed(urlInput, { ...options, signal, deadline });
         return toolResult({ mode: "batch" as const, provider: providerLabel, options, outcomes });
       }
-      const url = params.url.trim();
+      const url = urlInput.trim();
       if (!url) throw new TypeError("URL cannot be empty");
       const response = await web.readUrlDetailed(url, { ...options, signal, deadline });
       return toolResult({

@@ -150,7 +150,13 @@ export {
   MAX_CONCURRENCY,
   deadlineAfterSeconds,
 } from "./core/execution.ts";
-export { MAX_BATCH_ITEMS, searchBatch, readBatch, readBatchDetailed } from "./core/batch.ts";
+export {
+  MAX_BATCH_ITEMS,
+  searchBatch,
+  readBatch,
+  readBatchDetailed,
+  serializedBatch,
+} from "./core/batch.ts";
 export { batchWithoutRepeatedEvidence, withoutRepeatedEvidence } from "./core/evidence.ts";
 export type {
   SearchAgentResults,

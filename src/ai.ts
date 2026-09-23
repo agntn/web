@@ -10,7 +10,7 @@ import {
   readProviderNames,
   readUrlDetailed,
 } from "./core/read.ts";
-import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch } from "./core/batch.ts";
+import { MAX_BATCH_ITEMS, readBatchDetailed, searchBatch, serializedBatch } from "./core/batch.ts";
 import { deadlineAfterSeconds, MAX_AGENT_TIMEOUT_SECONDS } from "./core/execution.ts";
 import { EmptyQueryError, EmptyUrlError } from "./core/errors.ts";
 import { optionalText } from "./core/options.ts";
@@ -91,7 +91,7 @@ export const searchTool = tool({
   }),
   execute: async (
     {
-      query,
+      query: queryInput,
       provider: providerName,
       maxResults,
       continuation,
@@ -110,6 +110,7 @@ export const searchTool = tool({
     },
     { abortSignal },
   ) => {
+    const query = serializedBatch(queryInput);
     const requestedProvider = optionalText(providerName);
     const normalizedProvider = requestedProvider === "auto" ? undefined : requestedProvider;
     const searchContinuation = optionalText(continuation);
@@ -131,7 +132,7 @@ export const searchTool = tool({
       signal: abortSignal,
     };
 
-    if (Array.isArray(query)) {
+    if (typeof query !== "string") {
       if (searchContinuation !== undefined) {
         throw new TypeError("continuation is only supported for a single query");
       }
@@ -250,7 +251,7 @@ export const readTool = tool({
   }),
   execute: async (
     {
-      url,
+      url: urlInput,
       provider,
       format,
       maxTokens,
@@ -266,8 +267,9 @@ export const readTool = tool({
     },
     { abortSignal },
   ) => {
+    const url = serializedBatch(urlInput);
     const readContinuation = optionalText(continuation);
-    if (Array.isArray(url) && readContinuation !== undefined) {
+    if (typeof url !== "string" && readContinuation !== undefined) {
       throw new TypeError("continuation is only supported for a single URL");
     }
     const requestedProvider = optionalText(provider);
@@ -287,7 +289,7 @@ export const readTool = tool({
       deadline: deadlineAfterSeconds(timeoutSeconds),
       signal: abortSignal,
     };
-    if (Array.isArray(url)) {
+    if (typeof url !== "string") {
       return readBatchDetailed(url, readOptions);
     }
     if (!url.trim()) {

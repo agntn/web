@@ -1060,6 +1060,57 @@ describe("web MCP executors", () => {
     await pending;
   });
 
+  it("takes a JSON list a host sent as a string for a batch", async () => {
+    vi.stubEnv("EXA_API_KEY", "test-exa");
+    mockGetJSON.mockImplementation(async (url: string) => ({
+      code: 200,
+      status: 20_000,
+      data: { url, content: "page" },
+    }));
+    mockPostJSON.mockResolvedValue({ requestId: "request", results: [] });
+
+    const read = await executeRead({
+      url: '["https://example.com/a","https://example.com/b"]',
+      provider: "jina",
+    });
+    await executeSearch({ query: "[draft notes", provider: "exa" });
+
+    expect(read).toEqual([
+      expect.objectContaining({ url: "https://example.com/a" }),
+      expect.objectContaining({ url: "https://example.com/b" }),
+    ]);
+    expect(mockGetJSON).toHaveBeenCalledTimes(2);
+    expect(mockPostJSON.mock.calls[0]?.[1]).toMatchObject({ query: "[draft notes" });
+    const search = await executeSearch({
+      query: JSON.stringify(["first query", "second query"]),
+      provider: "exa",
+    });
+    expect(search).toEqual([
+      expect.objectContaining({ query: "first query", provider: "exa" }),
+      expect.objectContaining({ query: "second query", provider: "exa" }),
+    ]);
+    expect(mockPostJSON.mock.calls.slice(1).map(([, body]): unknown => body)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ query: "first query" }),
+        expect.objectContaining({ query: "second query" }),
+      ]),
+    );
+    await expect(executeSearch({ query: "[]", provider: "exa" })).rejects.toThrow(
+      "Batch must contain at least one query",
+    );
+    await expect(executeRead({ url: " [] ", provider: "jina" })).rejects.toThrow(
+      "Batch must contain at least one URL",
+    );
+    await expect(
+      executeSearch({
+        query: JSON.stringify(Array.from({ length: 11 }, (_, index) => `query ${index}`)),
+        provider: "exa",
+      }),
+    ).rejects.toBeInstanceOf(RangeError);
+    expect(mockPostJSON).toHaveBeenCalledTimes(3);
+    expect(mockGetJSON).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects a time budget outside the schema when a host skips validation", async () => {
     await expect(
       executeSearch({ query: "test", provider: "exa", timeoutSeconds: 0 }),
