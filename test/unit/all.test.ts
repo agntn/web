@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { setFlagsFromString } from "node:v8";
+import { runInNewContext } from "node:vm";
 
 const mockPostJSON =
   vi.fn<
@@ -55,6 +57,17 @@ import {
   MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH,
   MAX_SEARCH_CONTINUATION_LENGTH,
 } from "../../src/core/search-continuation.ts";
+
+setFlagsFromString("--expose-gc");
+const gc = runInNewContext("gc") as () => void;
+
+/** Runs a few full collections with a turn of the event loop between them. */
+async function collectGarbage(): Promise<void> {
+  for (let round = 0; round < 5; round += 1) {
+    await new Promise((resolve) => setImmediate(resolve));
+    gc();
+  }
+}
 
 const exaResponse = {
   requestId: "test-req",
@@ -764,6 +777,82 @@ describe("searchAllDetailed", () => {
       expect(response.errors).toMatchObject([
         { provider: providerName, error: { name: "TimeoutError" } },
       ]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("fires the deadline when nothing but the pending provider holds its signal", async () => {
+    const providerName = `fanout-unreferenced-${Math.random().toString(36).slice(2)}`;
+    class HangingProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://hanging.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, HangingProvider);
+      }
+
+      search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        return new Promise((_resolve, reject) => {
+          options?.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
+            once: true,
+          });
+        });
+      }
+    }
+    const cleanup = register(HangingProvider);
+
+    try {
+      const pending = searchAllDetailed("test", {
+        providers: [providerName],
+        deadline: Date.now() + 50,
+      });
+      await collectGarbage();
+      const response = await Promise.race([
+        pending,
+        new Promise<never>((_resolve, reject) =>
+          setTimeout(() => reject(new Error("the deadline never fired")), 1_000),
+        ),
+      ]);
+
+      expect(response.errors).toMatchObject([
+        { provider: providerName, error: { name: "TimeoutError" } },
+      ]);
+    } finally {
+      cleanup();
+    }
+  });
+
+  it("lets a finished operation drop its deadline signal before the deadline", async () => {
+    const providerName = `fanout-released-${Math.random().toString(36).slice(2)}`;
+    let received: WeakRef<Readonly<AbortSignal>> | undefined;
+    class InstantProvider extends Provider {
+      static readonly providerName = providerName;
+      static readonly defaultBaseURL = "https://instant.example.com";
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, InstantProvider);
+      }
+
+      async search(
+        _query: string,
+        options?: Readonly<{ signal?: Readonly<AbortSignal> }>,
+      ): Promise<SearchResult[]> {
+        if (options?.signal) received = new WeakRef(options.signal);
+        return [];
+      }
+    }
+    const cleanup = register(InstantProvider);
+
+    try {
+      await searchAllDetailed("test", { providers: [providerName], deadline: Date.now() + 60_000 });
+      await collectGarbage();
+
+      expect(received).toBeDefined();
+      expect(received?.deref()).toBeUndefined();
     } finally {
       cleanup();
     }

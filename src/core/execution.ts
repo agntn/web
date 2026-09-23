@@ -13,7 +13,7 @@ type BudgetedExecutionOptions = ExecutionOptions & {
   readonly [executionBudget]: ExecutionBudget;
 };
 
-/** Ties each deadline controller to the signal an operation holds, composed or not. */
+/** Ties each deadline controller to the composite signal an operation holds. */
 const deadlineControllers = new WeakMap<AbortSignal, AbortController>();
 
 /**
@@ -46,6 +46,9 @@ export function withExecutionBudget<TOptions extends ExecutionOptions>(
 
 /**
  * Creates a signal that observes the caller and one absolute operation deadline.
+ * The deadline always sits behind `AbortSignal.any`, even alone: Node keeps a composite
+ * signal alive while it has abort listeners, and the map keeps the controller with it,
+ * so work that nothing else references still times out.
  * @param options - Caller cancellation, deadline, and concurrency controls.
  * @returns {Readonly<AbortSignal> | undefined} Caller or composed deadline signal.
  */
@@ -58,9 +61,9 @@ export function operationSignal(
 
   const controller = deadlineController(options?.deadline);
   if (!controller) return options?.signal;
-  const signal = options?.signal
-    ? AbortSignal.any([options.signal, controller.signal])
-    : controller.signal;
+  const signal = AbortSignal.any(
+    options?.signal ? [options.signal, controller.signal] : [controller.signal],
+  );
   deadlineControllers.set(signal, controller);
   return signal;
 }
