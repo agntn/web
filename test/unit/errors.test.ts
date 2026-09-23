@@ -145,6 +145,11 @@ describe("normalizeError", () => {
     expect(error).toBeInstanceOf(WebError);
   });
 
+  it("should name the provider when a fetch-like 401 has one", () => {
+    const error = normalizeError({ status: 401, message: "Unauthorized" }, "tavily");
+    expect(error.message).toBe("Authentication failed for tavily: Unauthorized");
+  });
+
   it("should convert HTTPError 401 to AuthError when provider is known", () => {
     const error = normalizeError(
       new HTTPError(401, "https://example.com", "Invalid API key"),
@@ -153,7 +158,7 @@ describe("normalizeError", () => {
     expect(error).toBeInstanceOf(AuthError);
     if (error instanceof AuthError) {
       expect(error.provider).toBe("exa");
-      expect(error.message).toContain("Invalid API key");
+      expect(error.message).toBe("Authentication failed for exa: Invalid API key");
     }
   });
 
@@ -162,7 +167,7 @@ describe("normalizeError", () => {
     const error = normalizeError(new HTTPError(401, "https://example.com", body), "exa");
 
     expect(error).toBeInstanceOf(AuthError);
-    expect(error.message).toBe(`Authentication failed: ${body.slice(0, 999)}…`);
+    expect(error.message).toBe(`Authentication failed for exa: ${body.slice(0, 999)}…`);
   });
 
   it("should convert HTTPError 401 to AuthError with unknown provider by default", () => {

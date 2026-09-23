@@ -209,7 +209,11 @@ describe("mojeek provider", () => {
     });
     const provider = await createSearchProvider("mojeek", { apiKey: "invalid-key" });
 
-    await expect(provider.search("test")).rejects.toThrow(AuthError);
+    const error = provider.search("test");
+    await expect(error).rejects.toThrow(AuthError);
+    await expect(error).rejects.toThrow(
+      "Authentication failed for mojeek: Access Denied: invalid key/password",
+    );
   });
 
   it("maps a daily-limit payload to RateLimitError", async () => {

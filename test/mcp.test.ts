@@ -943,6 +943,22 @@ describe("web MCP executors", () => {
     });
   });
 
+  it("names the provider whose key an automatic search rejected", async () => {
+    vi.stubEnv("EXA_API_KEY", "revoked-exa");
+    vi.stubEnv("BRAVE_API_KEY", "test-brave");
+    mockPostJSON.mockRejectedValue(
+      new HTTPError(401, "https://api.exa.ai/search", '{"error":"Invalid API key"}'),
+    );
+    const client = await connectTestClient();
+
+    const response = await client.callTool({ name: "web_search", arguments: { query: "test" } });
+
+    expect(response.isError).toBe(true);
+    expect((response.content as Array<{ type: string; text: string }>)[0]?.text).toBe(
+      'web_search failed: Authentication failed for exa: {"error":"Invalid API key"}',
+    );
+  });
+
   it('serializes provider errors from an "all" search', async () => {
     vi.stubEnv("EXA_API_KEY", "test-exa");
     vi.stubEnv("BRAVE_API_KEY", "test-brave");

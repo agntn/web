@@ -194,7 +194,9 @@ describe("serpbase provider", () => {
 
       const provider = await createSearchProvider("serpbase", { apiKey: "bad-key" });
 
-      await expect(provider.search("test query")).rejects.toThrow(AuthError);
+      const error = provider.search("test query");
+      await expect(error).rejects.toThrow(AuthError);
+      await expect(error).rejects.toThrow("Authentication failed for serpbase: unauthorized");
     });
 
     it("throws RateLimitError for SerpBase rate limit business status", async () => {

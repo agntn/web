@@ -87,6 +87,18 @@ export class AuthError extends WebError {
   }
 }
 
+/**
+ * Build the error for a rejected credential, naming the provider in the message.
+ * Agent surfaces show only the message, so with automatic selection it is the one place that says which key failed.
+ * @param detail - What the provider said about the credential.
+ * @param provider - Provider that rejected it, when known.
+ * @returns {AuthError} Error whose message starts with `Authentication failed for <provider>`.
+ */
+export function authenticationFailed(detail: string, provider?: string): AuthError {
+  const subject = provider ? `Authentication failed for ${provider}` : "Authentication failed";
+  return new AuthError(`${subject}: ${detail}`, provider || "unknown");
+}
+
 /** Thrown on HTTP 429. Check {@link retryAfter} for seconds until retry. */
 export class RateLimitError extends WebError {
   readonly retryAfter: number;
@@ -307,10 +319,7 @@ function validateDateOrder(start?: string, end?: string): void {
 export function normalizeError(error: unknown, provider?: string): WebError {
   if (error instanceof PaymentError) return error;
   if (error instanceof HTTPError && error.statusCode === 401) {
-    return new AuthError(
-      `Authentication failed: ${bodyExcerpt(error.body) || "Invalid or missing API key"}`,
-      provider || "unknown",
-    );
+    return authenticationFailed(bodyExcerpt(error.body) || "Invalid or missing API key", provider);
   }
 
   if (error instanceof WebError) {
@@ -347,7 +356,7 @@ function normalizeFetchLikeError(error: FetchLikeError, provider?: string): WebE
   const message = error.message || `HTTP ${error.status}`;
   switch (error.status) {
     case 401:
-      return new AuthError(`Authentication failed: ${message}`, provider || "unknown");
+      return authenticationFailed(message, provider);
     case 404:
       return new HTTPError(404, "", message);
     case 429:

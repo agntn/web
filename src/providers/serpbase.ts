@@ -4,6 +4,7 @@ import { SERPBASE_MAX_RESULTS, SERPBASE_SEARCH_CATEGORIES } from "../core/provid
 import {
   WebError,
   AuthError,
+  authenticationFailed,
   InvalidSearchContinuationError,
   PaymentError,
   RateLimitError,
@@ -158,7 +159,7 @@ function assertSerpBaseSuccess(response: SerpBaseSearchResponse, url: string): v
   const message = response.error ?? `SerpBase API error: status=${response.status}`;
   switch (response.status) {
     case 1001:
-      throw new AuthError(`Authentication failed: ${message}`, "serpbase");
+      throw authenticationFailed(message, "serpbase");
     case 1029:
       throw new RateLimitError(60);
     case 1020:
