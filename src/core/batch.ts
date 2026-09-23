@@ -45,9 +45,7 @@ export function serializedBatch(input: string | readonly string[]): string | rea
   } catch {
     return input;
   }
-  return Array.isArray(parsed) &&
-    parsed.length > 0 &&
-    parsed.every((item): item is string => typeof item === "string")
+  return Array.isArray(parsed) && parsed.every((item): item is string => typeof item === "string")
     ? parsed
     : input;
 }

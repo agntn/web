@@ -1081,13 +1081,34 @@ describe("web MCP executors", () => {
     ]);
     expect(mockGetJSON).toHaveBeenCalledTimes(2);
     expect(mockPostJSON.mock.calls[0]?.[1]).toMatchObject({ query: "[draft notes" });
+    const search = await executeSearch({
+      query: JSON.stringify(["first query", "second query"]),
+      provider: "exa",
+    });
+    expect(search).toEqual([
+      expect.objectContaining({ query: "first query", provider: "exa" }),
+      expect.objectContaining({ query: "second query", provider: "exa" }),
+    ]);
+    expect(mockPostJSON.mock.calls.slice(1).map(([, body]): unknown => body)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ query: "first query" }),
+        expect.objectContaining({ query: "second query" }),
+      ]),
+    );
+    await expect(executeSearch({ query: "[]", provider: "exa" })).rejects.toThrow(
+      "Batch must contain at least one query",
+    );
+    await expect(executeRead({ url: " [] ", provider: "jina" })).rejects.toThrow(
+      "Batch must contain at least one URL",
+    );
     await expect(
       executeSearch({
         query: JSON.stringify(Array.from({ length: 11 }, (_, index) => `query ${index}`)),
         provider: "exa",
       }),
     ).rejects.toBeInstanceOf(RangeError);
-    expect(mockPostJSON).toHaveBeenCalledTimes(1);
+    expect(mockPostJSON).toHaveBeenCalledTimes(3);
+    expect(mockGetJSON).toHaveBeenCalledTimes(2);
   });
 
   it("rejects a time budget outside the schema when a host skips validation", async () => {
