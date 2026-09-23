@@ -22,6 +22,7 @@ import {
   ReadNotSupportedError,
   SearchNotSupportedError,
   UnknownProviderError,
+  WebError,
 } from "./errors.ts";
 import { builtins } from "../providers/index.ts";
 
@@ -94,8 +95,8 @@ export function register(provider: ProviderConstructor): () => void {
 
 /**
  * Create a provider instance by name.
- * Imports a built-in provider's module on the first call for its name; the module map shares one
- * import between parallel callers. Resolves apiKey from config or the provider's env var.
+ * Imports a built-in provider's module on the first call for its name; parallel callers share that
+ * one import. Resolves apiKey from config or the provider's env var.
  * @param {string} name - Registered provider name.
  * @param {ProviderConfig} config - Provider configuration.
  * @returns {Promise<Provider>} Configured provider instance.
@@ -281,7 +282,7 @@ async function instantiate(
   config?: Readonly<ProviderConfig>,
 ): Promise<Provider> {
   const envVar = apiKeyEnvVarOf(entry);
-  const ProviderClass = await entry.load();
+  const ProviderClass = await loadClass(entry);
   const apiKey = config?.apiKey || (envVar === null ? undefined : process.env[envVar]);
 
   return new ProviderClass({
@@ -289,6 +290,33 @@ async function instantiate(
     apiKey,
     baseURL: config?.baseURL || ProviderClass.defaultBaseURL,
   });
+}
+
+const loadedClasses = new WeakMap<ProviderEntry, Promise<ProviderConstructor>>();
+
+/**
+ * Resolve an entry's class through one `load()` shared by every caller.
+ *
+ * Sharing the import is on purpose. The jiti loader Pi runs extensions under has its module cache
+ * off, so two overlapping `import()` calls of one adapter evaluate it twice, and the second caller
+ * gets a namespace without the class yet: a `web_read` batch whose URLs all land on one reader
+ * failed every URL after the first. A failed load is forgotten, so the next `create()` tries again.
+ * @param entry - Registry entry the caller resolved.
+ * @returns {Promise<ProviderConstructor>} The provider class.
+ */
+function loadClass(entry: Readonly<ProviderEntry>): Promise<ProviderConstructor> {
+  let pending = loadedClasses.get(entry);
+  if (pending === undefined) {
+    pending = entry.load().then((ProviderClass: ProviderConstructor | undefined) => {
+      if (typeof ProviderClass !== "function") {
+        throw new WebError(`Provider "${entry.name}" did not load a provider class`);
+      }
+      return ProviderClass;
+    });
+    loadedClasses.set(entry, pending);
+    pending.catch(() => loadedClasses.delete(entry));
+  }
+  return pending;
 }
 
 /**
