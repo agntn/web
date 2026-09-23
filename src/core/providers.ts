@@ -4,6 +4,7 @@ export const builtinProviders = [
   "exa",
   "firecrawl",
   "jina",
+  "marginalia",
   "mojeek",
   "openai-codex",
   "searxng",
@@ -21,6 +22,7 @@ const providerApiKeyEnvVars = {
   exa: "EXA_API_KEY",
   firecrawl: "FIRECRAWL_API_KEY",
   jina: "JINA_API_KEY",
+  marginalia: "MARGINALIA_API_KEY",
   mojeek: "MOJEEK_API_KEY",
   "openai-codex": "OPENAI_CODEX_ACCESS_TOKEN",
   searxng: null,
@@ -41,6 +43,7 @@ export const providerDetectionOrder = [
   "serpapi",
   "serpbase",
   "mojeek",
+  "marginalia",
   "openai-codex",
 ] as const satisfies readonly WebSearchProviderName[];
 
@@ -60,6 +63,7 @@ function isBuiltinProviderName(name: string): name is WebSearchProviderName {
 export const FIRECRAWL_MAX_RESULTS = 100;
 export const JINA_MAX_RESULTS = 20;
 export const JINA_SEARCH_CATEGORIES = ["web", "images", "news"] as const;
+export const MARGINALIA_MAX_RESULTS = 100;
 export const OPENAI_CODEX_MAX_RESULTS = 100;
 export const SERPBASE_MAX_RESULTS = 20;
 export const SERPBASE_SEARCH_CATEGORIES = ["images", "image", "news", "videos", "video"] as const;

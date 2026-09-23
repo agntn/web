@@ -34,6 +34,7 @@ describe("@agntn/web", () => {
       "exa",
       "firecrawl",
       "jina",
+      "marginalia",
       "mojeek",
       "openai-codex",
       "searxng",

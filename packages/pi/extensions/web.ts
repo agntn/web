@@ -127,6 +127,7 @@ const PROVIDERS = [
   "exa",
   "firecrawl",
   "jina",
+  "marginalia",
   "mojeek",
   "openai-codex",
   "searxng",
@@ -343,7 +344,7 @@ export default async function webExtension(pi: ExtensionAPI) {
     name: "web_search",
     label: "Web Search",
     description:
-      "Read-only/open-world network search: query one configured provider (Brave, Context.dev, Exa, Firecrawl, Jina, Mojeek, OpenAI Codex, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Responses report filters the selected provider ignored. Each result includes {url, title, snippet}; optional fields vary by provider. Use web_providers for the current machine-readable field, filter, and limit matrix.",
+      "Read-only/open-world network search: query one configured provider (Brave, Context.dev, Exa, Firecrawl, Jina, Marginalia, Mojeek, OpenAI Codex, Tavily, TinyFish, SerpAPI, SerpBase, SearXNG) or fan out to every available provider with provider=all. Accepts one query or a batch; each batch item has its own results or error. Responses report filters the selected provider ignored. Each result includes {url, title, snippet}; optional fields vary by provider. Use web_providers for the current machine-readable field, filter, and limit matrix.",
     promptSnippet:
       "Search the web with web_search. Pass a query array for independent batch results, or use provider=all to query every configured provider in parallel.",
     promptGuidelines: [

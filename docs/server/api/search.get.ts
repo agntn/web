@@ -1,4 +1,4 @@
-import { searchProviderDetailed, searchWithFallback, type SearchPagination } from "@agntn/web";
+import { has, isProviderConfigured, searchProviderDetailed, searchWithFallback, type SearchPagination } from "@agntn/web";
 
 /** One provider's answer for one query, with the diagnostics the library attaches. */
 export interface SearchAnswer {
@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
   const maxResults = readInt(query, "maxResults", 1, LIMITS.maxResults) ?? 5;
   const params = { q, provider: provider ?? "auto", maxResults };
   try {
+    requireWorkerKey(provider);
     return await cachedAnswer<SearchAnswer>(
       event,
       "search",
@@ -67,3 +68,14 @@ export default defineEventHandler(async (event) => {
     return toHttpError(error);
   }
 });
+
+/**
+ * A provider that can run without a key, like Marginalia on its shared `public` key, would
+ * otherwise answer here while `/api/providers` reports it unconfigured.
+ * @param provider - Provider named in the request, if any.
+ */
+function requireWorkerKey(provider: string | undefined): void {
+  if (provider && has(provider) && !isProviderConfigured(provider)) {
+    throw createError({ statusCode: 503, statusMessage: `${provider} has no key on the docs worker` });
+  }
+}

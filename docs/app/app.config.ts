@@ -5,7 +5,7 @@ export default defineAppConfig({
   seo: {
     title: "@agntn/web",
     description:
-      "One TypeScript interface over Brave, Exa, Tavily, Firecrawl, Jina, SearXNG and five more: query in, normalized results out.",
+      "One TypeScript interface over Brave, Exa, Tavily, Firecrawl, Jina, SearXNG and seven more: query in, normalized results out.",
   },
   header: {
     title: "@agntn/web",

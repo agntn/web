@@ -52,6 +52,7 @@ vi.mock("../../src/providers/context.ts", loaded.provider("context", "ContextPro
 vi.mock("../../src/providers/exa.ts", loaded.provider("exa", "ExaProvider"));
 vi.mock("../../src/providers/firecrawl.ts", loaded.provider("firecrawl", "FirecrawlProvider"));
 vi.mock("../../src/providers/jina.ts", loaded.provider("jina", "JinaProvider"));
+vi.mock("../../src/providers/marginalia.ts", loaded.provider("marginalia", "MarginaliaProvider"));
 vi.mock("../../src/providers/mojeek.ts", loaded.provider("mojeek", "MojeekProvider"));
 vi.mock(
   "../../src/providers/openai-codex.ts",

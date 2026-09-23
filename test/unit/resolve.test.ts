@@ -11,6 +11,7 @@ const envKeys = [
   "CONTEXT_DEV_API_KEY",
   "FIRECRAWL_API_KEY",
   "JINA_API_KEY",
+  "MARGINALIA_API_KEY",
   "MOJEEK_API_KEY",
   "OPENAI_CODEX_ACCESS_TOKEN",
   "OPENAI_CODEX_ACCOUNT_ID",
@@ -169,6 +170,7 @@ describe("resolve", () => {
           filters: ["includeDomains", "category"],
           categories: ["web", "images", "news"],
         },
+        marginalia: { filters: [] },
         mojeek: {
           filters: ["includeDomains", "excludeDomains", "startPublishedDate", "endPublishedDate"],
         },
@@ -300,6 +302,18 @@ describe("resolve", () => {
           ],
           formats: ["markdown", "text", "html"],
         },
+      });
+      expect(matrix.marginalia).toMatchObject({
+        search: {
+          supported: true,
+          filters: [],
+          contentOptions: [],
+          pagination: true,
+          resultLimit: { default: 10, maximum: 100 },
+          resultFields: [],
+        },
+        searchImage: { supported: false },
+        read: { supported: false },
       });
       expect(matrix.mojeek).toMatchObject({
         search: {

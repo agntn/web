@@ -4,6 +4,7 @@ import {
   FIRECRAWL_MAX_RESULTS,
   JINA_MAX_RESULTS,
   JINA_SEARCH_CATEGORIES,
+  MARGINALIA_MAX_RESULTS,
   OPENAI_CODEX_MAX_RESULTS,
   SERPBASE_MAX_RESULTS,
   SERPBASE_SEARCH_CATEGORIES,
@@ -112,6 +113,17 @@ export const builtins: readonly ProviderEntry[] = [
       formats: ["markdown", "text", "html"],
     },
     load: () => import("./jina.ts").then((m) => m.JinaProvider),
+  },
+  {
+    name: "marginalia",
+    search: {
+      filters: [],
+      contentOptions: [],
+      resultLimit: { default: 10, maximum: MARGINALIA_MAX_RESULTS },
+      resultFields: [],
+      pagination: true,
+    },
+    load: () => import("./marginalia.ts").then((m) => m.MarginaliaProvider),
   },
   {
     name: "mojeek",

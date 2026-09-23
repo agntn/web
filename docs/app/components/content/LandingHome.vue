@@ -35,7 +35,7 @@ const activeProvider = computed(() => current.value.provider);
         One query. <span class="text-primary">Every engine.</span>
       </h1>
       <p class="web-enter web-enter-2 mx-auto mt-6 max-w-xl text-base leading-7 text-muted">
-        One interface over Brave, Exa, Tavily, Firecrawl, Jina, SearXNG and five more. Search,
+        One interface over Brave, Exa, Tavily, Firecrawl, Jina, SearXNG and seven more. Search,
         reverse image search and page reading, all in the same shape. Works as a library, a CLI,
         an AI SDK tool or an MCP server, your pick.
       </p>
@@ -87,7 +87,7 @@ const activeProvider = computed(() => current.value.provider);
       :checks="[
         'Every provider answers { url, title, snippet }. Score, dates, highlights and full text come along when the engine has them',
         'A filter the provider cannot do lands in ignoredFilters. Nothing gets dropped quietly',
-        'Brave, Mojeek, SearXNG, SerpAPI, SerpBase and TinyFish page through an opaque continuation token',
+        'Brave, Marginalia, Mojeek, SearXNG, SerpAPI, SerpBase and TinyFish page through an opaque continuation token',
       ]"
     >
       <code class="font-mono text-[13px] text-highlighted">create("brave")</code> reads the key from env
@@ -140,7 +140,7 @@ const activeProvider = computed(() => current.value.provider);
 
     <LandingFeature
       eyebrow="Providers"
-      title="Eleven adapters, one shape"
+      title="Thirteen adapters, one shape"
       to="/providers"
       link="All providers"
       :checks="[

@@ -3,11 +3,11 @@
 /** The props are what Docus passes; the tagline is fixed because Docus strips commas from the description. */
 defineProps<{ title?: string; description?: string }>();
 
-const TAGLINE = "Search, reverse image search and page reading from eleven providers, in one shape.";
+const TAGLINE = "Search, reverse image search and page reading from thirteen providers, in one shape.";
 
 const { name: siteName } = useSiteConfig();
 
-const PROVIDERS = ["Brave", "Exa", "Tavily", "Firecrawl", "Jina", "SearXNG", "+5"];
+const PROVIDERS = ["Brave", "Exa", "Tavily", "Firecrawl", "Jina", "SearXNG", "+7"];
 </script>
 
 <template>

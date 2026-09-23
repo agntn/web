@@ -31,6 +31,7 @@ const searchProviders = [
   "exa",
   "firecrawl",
   "jina",
+  "marginalia",
   "mojeek",
   "searxng",
   "serpapi",
@@ -72,6 +73,8 @@ describe("provider cancellation", () => {
   });
 });
 
+const EMPTY_RESULTS_HOSTS = ["api2.marginalia-search.com", "localhost:8080", "search.tinyfish.ai"];
+
 function getResponse(url: string): unknown {
   if (url.includes("api.search.brave.com")) return { web: { results: [] } };
   if (url.includes("api.context.dev")) {
@@ -90,11 +93,10 @@ function getResponse(url: string): unknown {
   if (url.includes("api.mojeek.com")) {
     return { response: { status: "OK", results: [] } };
   }
-  if (url.includes("localhost:8080")) return { results: [] };
+  if (EMPTY_RESULTS_HOSTS.some((host) => url.includes(host))) return { results: [] };
   if (url.includes("serpapi.com")) {
     return url.includes("google_lens") ? { visual_matches: [] } : { organic_results: [] };
   }
-  if (url.includes("search.tinyfish.ai")) return { results: [] };
   throw new Error(`Unexpected GET request: ${url}`);
 }
 
