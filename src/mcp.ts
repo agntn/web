@@ -173,6 +173,7 @@ const readDetailedResultSchema = strictObject({
   provider: Type.String(),
   attempts: Type.Array(Type.String()),
   failures: Type.Array(providerFailureSchema),
+  ignoredOptions: Type.Optional(Type.Array(Type.String())),
 });
 const readBatchItemSchema = Type.Union([
   strictObject({
@@ -182,6 +183,7 @@ const readBatchItemSchema = Type.Union([
     provider: Type.String(),
     attempts: Type.Array(Type.String()),
     failures: Type.Array(providerFailureSchema),
+    ignoredOptions: Type.Optional(Type.Array(Type.String())),
   }),
   strictObject({
     url: Type.String(),
@@ -463,7 +465,8 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
         ),
         maxTokens: Type.Optional(
           Type.Integer({
-            description: "Maximum tokens to return when supported by the provider.",
+            description:
+              "Jina token budget: fail instead of returning a page over this many tokens. Automatic reads leave it out on other readers. Use maxChars to cut a page.",
             minimum: 1,
           }),
         ),

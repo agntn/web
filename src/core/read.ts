@@ -14,7 +14,8 @@ import {
   type ProviderFailure,
 } from "./fallback.ts";
 import { normalizeReadOptions } from "./options.ts";
-import { createReadProvider, has, readProviders } from "./registry.ts";
+import type { ReadOptionName } from "./provider.ts";
+import { createReadProvider, getProviderCapabilities, has, readProviders } from "./registry.ts";
 import { isProviderConfigured } from "./resolve.ts";
 import {
   DEFAULT_CONCURRENCY,
@@ -101,6 +102,8 @@ export interface ReadUrlDetailedResult {
   readonly provider: string;
   readonly attempts: readonly string[];
   readonly failures: readonly ProviderFailure[];
+  /** Options an automatic read left out because the reader doesn't declare them. */
+  readonly ignoredOptions?: readonly ReadOptionName[];
 }
 
 interface ReadContinuationPayload {
@@ -234,7 +237,15 @@ async function continueRead(
   }
 
   const provider = resolveReadProviderName(payload.provider);
-  const result = await readFromProvider(url, readOptions, provider, maxChars, pageFields);
+  const ignoredOptions =
+    payload.requestedProvider === "auto" ? ignoredReadOptions(provider, readOptions) : [];
+  const result = await readFromProvider(
+    url,
+    withoutReadOptions(readOptions, ignoredOptions),
+    provider,
+    maxChars,
+    pageFields,
+  );
   if (fingerprint(result.content) !== payload.contentFingerprint) {
     throw new StaleReadContinuationError();
   }
@@ -253,6 +264,7 @@ async function continueRead(
     provider,
     attempts: [provider],
     failures: [],
+    ...ignoredOptionsField(ignoredOptions),
   };
 }
 
@@ -278,13 +290,21 @@ async function readAutomatically(
 
   for (const providerName of providerNames) {
     attempts.push(providerName);
+    const ignoredOptions = ignoredReadOptions(providerName, options);
     try {
       return {
-        result: await readFromProvider(url, options, providerName, maxChars, pageFields),
+        result: await readFromProvider(
+          url,
+          withoutReadOptions(options, ignoredOptions),
+          providerName,
+          maxChars,
+          pageFields,
+        ),
         requestedProvider: "auto",
         provider: providerName,
         attempts,
         failures,
+        ...ignoredOptionsField(ignoredOptions),
       };
     } catch (error) {
       const failure = providerFailure(providerName, error);
@@ -322,6 +342,36 @@ async function readFromProvider(
   }
   throwIfAborted(options.signal);
   return result;
+}
+
+/**
+ * Jina's `maxTokens` budget stays off a reader whose declared options lack it.
+ * @param providerName - Reader about to be tried.
+ * @param options - Native read options for this call.
+ * @returns {ReadOptionName[]} Options to leave out of this reader's request.
+ */
+function ignoredReadOptions(
+  providerName: string,
+  options: Readonly<ReadOptions>,
+): ReadOptionName[] {
+  if (options.maxTokens === undefined) return [];
+  const declared = getProviderCapabilities(providerName)?.read.options;
+  return declared === undefined || declared.includes("maxTokens") ? [] : ["maxTokens"];
+}
+
+function withoutReadOptions(
+  options: Readonly<ReadOptions>,
+  ignored: readonly ReadOptionName[],
+): Readonly<ReadOptions> {
+  if (!ignored.includes("maxTokens")) return options;
+  const { maxTokens: _maxTokens, ...rest } = options;
+  return rest;
+}
+
+function ignoredOptionsField(
+  ignored: readonly ReadOptionName[],
+): Pick<ReadUrlDetailedResult, "ignoredOptions"> {
+  return ignored.length === 0 ? {} : { ignoredOptions: ignored };
 }
 
 function configuredReadProviders(initialProvider: string): string[] {

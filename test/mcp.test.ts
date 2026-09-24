@@ -670,6 +670,29 @@ describe("web MCP server", () => {
     });
   });
 
+  it("reports a Jina-only maxTokens left out of the fallback read", async () => {
+    vi.stubEnv("FIRECRAWL_API_KEY", "test-key");
+    mockGetJSON.mockReset();
+    mockGetJSON.mockRejectedValue(new HTTPError(402, "https://r.jina.ai/", "Payment required"));
+    mockPostJSON.mockResolvedValue({ success: true, data: { markdown: "page" } });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_read",
+      arguments: { url: "https://example.com", maxTokens: 500 },
+    });
+
+    expect(response.isError).toBeUndefined();
+    expect(response.structuredContent).toMatchObject({
+      result: {
+        result: { content: "page" },
+        provider: "firecrawl",
+        attempts: ["jina", "firecrawl"],
+        ignoredOptions: ["maxTokens"],
+      },
+    });
+  });
+
   it("keeps favicons out of a search unless asked", async () => {
     vi.stubEnv("BRAVE_API_KEY", "test-brave");
     mockGetJSON.mockResolvedValue({

@@ -181,7 +181,11 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
       Type.String({ description: 'Preferred content format: "markdown", "text", or "html".' }),
     ),
     maxTokens: Type.Optional(
-      Type.Integer({ description: "Maximum tokens to return when supported.", minimum: 1 }),
+      Type.Integer({
+        description:
+          "Jina token budget: fail instead of returning a page over this many tokens. Automatic reads leave it out on other readers. Use maxChars to cut a page.",
+        minimum: 1,
+      }),
     ),
     maxChars: Type.Optional(
       Type.Integer({
@@ -378,6 +382,7 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
         effectiveProvider: response.provider,
         attempts: response.attempts,
         failures: response.failures,
+        ...(response.ignoredOptions ? { ignoredOptions: response.ignoredOptions } : {}),
         options,
         result: response.result,
       });
