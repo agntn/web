@@ -226,7 +226,9 @@ describe("mojeek provider", () => {
     });
     const provider = await createSearchProvider("mojeek", { apiKey: "test-key" });
 
-    await expect(provider.search("test")).rejects.toThrow(RateLimitError);
+    const search = provider.search("test");
+    await expect(search).rejects.toThrow(RateLimitError);
+    await expect(search).rejects.toMatchObject({ provider: "mojeek" });
   });
 
   it("rejects other unsuccessful payloads", async () => {

@@ -161,7 +161,7 @@ function assertSerpBaseSuccess(response: SerpBaseSearchResponse, url: string): v
     case 1001:
       throw authenticationFailed(message, "serpbase");
     case 1029:
-      throw new RateLimitError(60);
+      throw new RateLimitError(60, "serpbase");
     case 1020:
       throw new PaymentError(200, url, JSON.stringify(response));
     default:

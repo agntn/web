@@ -166,7 +166,7 @@ function successfulResponse(envelope: Readonly<MojeekSearchEnvelope>): MojeekSea
     throw authenticationFailed(response.status, "mojeek");
   }
   if (/daily limit reached/i.test(response.status)) {
-    throw new RateLimitError(DEFAULT_RETRY_AFTER);
+    throw new RateLimitError(DEFAULT_RETRY_AFTER, "mojeek");
   }
   throw new WebError(`Mojeek search failed: ${response.status}`);
 }

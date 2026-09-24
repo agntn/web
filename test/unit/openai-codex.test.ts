@@ -247,7 +247,9 @@ describe("OpenAI Codex search", () => {
       const error = { code: "rate_limit_exceeded", message: "test-access-token" };
       mockSearch([{ type, ...(type === "error" ? { error } : { response: { error } }) }]);
       const provider = await createSearchProvider("openai-codex", { codex: { credentials } });
-      await expect(provider.search("query")).rejects.toBeInstanceOf(RateLimitError);
+      const search = provider.search("query");
+      await expect(search).rejects.toBeInstanceOf(RateLimitError);
+      await expect(search).rejects.toMatchObject({ provider: "openai-codex" });
     },
   );
 

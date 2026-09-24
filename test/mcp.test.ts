@@ -38,6 +38,7 @@ import {
   EmptyUrlError,
   HTTPError,
   NoProviderAvailableError,
+  RateLimitError,
 } from "../src/core/errors.ts";
 import { Provider } from "../src/core/provider.ts";
 import { register } from "../src/core/registry.ts";
@@ -957,6 +958,22 @@ describe("web MCP executors", () => {
     expect(response.isError).toBe(true);
     expect((response.content as Array<{ type: string; text: string }>)[0]?.text).toBe(
       'web_search failed: Authentication failed for exa: {"error":"Invalid API key"}',
+    );
+  });
+
+  it("names the provider that rate limited an explicit search", async () => {
+    vi.stubEnv("BRAVE_API_KEY", "test-brave");
+    mockGetJSON.mockRejectedValue(new RateLimitError(30));
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_search",
+      arguments: { query: "test", provider: "brave" },
+    });
+
+    expect(response.isError).toBe(true);
+    expect((response.content as Array<{ type: string; text: string }>)[0]?.text).toBe(
+      "web_search failed: Rate limited by brave. Retry after 30s",
     );
   });
 

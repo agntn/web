@@ -109,6 +109,15 @@ describe("RateLimitError", () => {
     expect(error.retryAfter).toBe(60);
     expect(error.name).toBe("RateLimitError");
     expect(error).toBeInstanceOf(WebError);
+    expect(error.provider).toBeUndefined();
+    expect(error.message).toBe("Rate limited. Retry after 60s");
+  });
+
+  it("should name the provider in the message when known", () => {
+    const error = new RateLimitError(30, "brave");
+    expect(error.provider).toBe("brave");
+    expect(error.retryAfter).toBe(30);
+    expect(error.message).toBe("Rate limited by brave. Retry after 30s");
   });
 });
 
@@ -182,6 +191,27 @@ describe("normalizeError", () => {
     const error = normalizeError({ status: 429, message: "Too many requests" });
     expect(error).toBeInstanceOf(RateLimitError);
     expect(error).toBeInstanceOf(WebError);
+  });
+
+  it("should name the provider when a fetch-like 429 has one", () => {
+    const error = normalizeError({ status: 429, message: "Too many requests" }, "tavily");
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect(error.message).toBe("Rate limited by tavily. Retry after 60s");
+  });
+
+  it("should name the provider on a RateLimitError raised without one", () => {
+    const error = normalizeError(new RateLimitError(12), "serpapi");
+    expect(error).toBeInstanceOf(RateLimitError);
+    if (error instanceof RateLimitError) {
+      expect(error.provider).toBe("serpapi");
+      expect(error.retryAfter).toBe(12);
+    }
+    expect(error.message).toBe("Rate limited by serpapi. Retry after 12s");
+  });
+
+  it("should keep the provider a RateLimitError already names", () => {
+    const original = new RateLimitError(12, "mojeek");
+    expect(normalizeError(original, "serpapi")).toBe(original);
   });
 
   it("should use numeric Retry-After header for 429 when available", () => {

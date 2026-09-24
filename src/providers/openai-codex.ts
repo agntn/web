@@ -408,7 +408,7 @@ function eventError(event: Readonly<CodexEvent>): Error {
   });
   const detail = parts.join(" ");
   if (/rate[-_ ]?limit|quota|too many requests|\b429\b/iu.test(detail))
-    return new RateLimitError(60);
+    return new RateLimitError(60, "openai-codex");
   if (
     /unauthori[sz]ed|authentication[_ ]error|invalid[_ ](?:access[_ ])?(?:token|api[_ ]key)|(?:token[_ ]expired|expired[_ ]token)|\b401\b/iu.test(
       detail,
