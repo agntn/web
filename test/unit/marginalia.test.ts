@@ -188,4 +188,19 @@ describe("marginalia provider", () => {
 
     await expect(provider.search("rust async")).rejects.toThrow(RateLimitError);
   });
+
+  it("names itself and keeps Retry-After on a 429", async () => {
+    reply = () =>
+      new Response("QPM Limit Exceeded", {
+        status: 429,
+        headers: { "Content-Type": "text/plain;charset=utf-8", "Retry-After": "17" },
+      });
+    const provider = await createSearchProvider("marginalia");
+
+    const error = await provider.search("rust async").catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(RateLimitError);
+    expect(error).toMatchObject({ provider: "marginalia", retryAfter: 17 });
+    expect((error as Error).message).toBe("Rate limited by marginalia. Retry after 17s");
+  });
 });

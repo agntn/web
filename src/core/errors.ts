@@ -99,14 +99,20 @@ export function authenticationFailed(detail: string, provider?: string): AuthErr
   return new AuthError(`${subject}: ${detail}`, provider || "unknown");
 }
 
-/** Thrown on HTTP 429. Check {@link retryAfter} for seconds until retry. */
+/**
+ * Thrown on HTTP 429. Check {@link retryAfter} for seconds until retry.
+ * The message names {@link provider} when it is known, since agent surfaces show only the message.
+ */
 export class RateLimitError extends WebError {
   readonly retryAfter: number;
+  readonly provider?: string;
 
-  constructor(retryAfter: number) {
-    super(`Rate limited. Retry after ${retryAfter}s`);
+  constructor(retryAfter: number, provider?: string) {
+    const subject = provider ? `Rate limited by ${provider}` : "Rate limited";
+    super(`${subject}. Retry after ${retryAfter}s`);
     this.name = "RateLimitError";
     this.retryAfter = retryAfter;
+    if (provider) this.provider = provider;
   }
 }
 
@@ -311,7 +317,7 @@ function validateDateOrder(start?: string, end?: string): void {
 
 /**
  * Convert any caught error into a typed {@link WebError} subclass.
- * Preserves payment errors; otherwise maps 401 to AuthError and 429 to RateLimitError.
+ * Preserves payment errors; otherwise maps 401 to AuthError and 429 to RateLimitError, naming the provider on both.
  * @param {*} error - Caught value.
  * @param {string} provider - Provider that raised the error.
  * @returns {WebError} Normalized web error.
@@ -323,7 +329,7 @@ export function normalizeError(error: unknown, provider?: string): WebError {
   }
 
   if (error instanceof WebError) {
-    return error;
+    return rateLimitedBy(error, provider);
   }
 
   if (isFetchLikeError(error)) return normalizeFetchLikeError(error, provider);
@@ -333,6 +339,17 @@ export function normalizeError(error: unknown, provider?: string): WebError {
   }
 
   return new WebError(String(error));
+}
+
+/**
+ * Name the provider on a rate limit the HTTP client raised before any adapter was known.
+ * @param error - Typed error from the client or the adapter.
+ * @param provider - Provider that raised it, when known.
+ * @returns {WebError} The same error, or a {@link RateLimitError} naming `provider`.
+ */
+function rateLimitedBy(error: Readonly<WebError>, provider?: string): WebError {
+  if (!(error instanceof RateLimitError) || error.provider !== undefined || !provider) return error;
+  return new RateLimitError(error.retryAfter, provider);
 }
 
 type FetchLikeError = {
@@ -360,7 +377,10 @@ function normalizeFetchLikeError(error: FetchLikeError, provider?: string): WebE
     case 404:
       return new HTTPError(404, "", message);
     case 429:
-      return new RateLimitError(parseRetryAfter(error.response?.headers?.get("Retry-After")));
+      return new RateLimitError(
+        parseRetryAfter(error.response?.headers?.get("Retry-After")),
+        provider,
+      );
     default:
       return error.status >= 500 ? new HTTPError(error.status, "", message) : new WebError(message);
   }

@@ -1585,7 +1585,7 @@ describe("searchWithFallback", () => {
       attempts: ["exa", "brave", "firecrawl"],
       failures: [
         { provider: "exa", error: networkFailure.message },
-        { provider: "brave", error: rateLimitFailure.message },
+        { provider: "brave", error: "Rate limited by brave. Retry after 30s" },
       ],
     });
   });
@@ -1605,10 +1605,10 @@ describe("searchWithFallback", () => {
       attempts: ["exa", "brave"],
       failures: [
         { provider: "exa", error: serverFailure.message },
-        { provider: "brave", error: rateLimitFailure.message },
+        { provider: "brave", error: "Rate limited by brave. Retry after 30s" },
       ],
-      cause: rateLimitFailure,
     });
+    expect((failure as Error).cause).toMatchObject({ provider: "brave", retryAfter: 30 });
     await expect(searchBatch(["test"])).resolves.toEqual([
       {
         query: "test",
@@ -1616,7 +1616,7 @@ describe("searchWithFallback", () => {
         attempts: ["exa", "brave"],
         failures: [
           { provider: "exa", error: serverFailure.message },
-          { provider: "brave", error: rateLimitFailure.message },
+          { provider: "brave", error: "Rate limited by brave. Retry after 30s" },
         ],
       },
     ]);

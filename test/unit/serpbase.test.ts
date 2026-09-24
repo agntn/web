@@ -211,7 +211,9 @@ describe("serpbase provider", () => {
 
       const provider = await createSearchProvider("serpbase", { apiKey: "test-key" });
 
-      await expect(provider.search("test query")).rejects.toThrow(RateLimitError);
+      const search = provider.search("test query");
+      await expect(search).rejects.toThrow(RateLimitError);
+      await expect(search).rejects.toMatchObject({ provider: "serpbase" });
     });
 
     it("classifies insufficient credits as PaymentError", async () => {
