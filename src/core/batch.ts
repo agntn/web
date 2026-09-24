@@ -11,6 +11,7 @@ import {
 } from "./all.ts";
 import { normalizeReadOptions, normalizeSearchOptions } from "./options.ts";
 import { readUrlDetailed, type ReadUrlOptions } from "./read.ts";
+import type { ReadOptionName } from "./provider.ts";
 import { ProviderFallbackError, type ProviderFailure } from "./fallback.ts";
 import { settleWithConcurrency, throwIfAborted, withExecutionBudget } from "./execution.ts";
 import { hasSearchFilterWarning, type SearchFilterReport } from "./search-filters.ts";
@@ -90,6 +91,7 @@ export type ReadBatchDetailedItem =
       readonly provider: string;
       readonly attempts: readonly string[];
       readonly failures: readonly ProviderFailure[];
+      readonly ignoredOptions?: readonly ReadOptionName[];
     }
   | {
       readonly url: string;

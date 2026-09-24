@@ -70,6 +70,36 @@ describe("Context credit exhaustion", () => {
     expect(attempts).toEqual(["r.jina.ai", "api.context.dev", "api.firecrawl.dev"]);
   });
 
+  it("leaves a Jina-only maxTokens out of the Firecrawl fallback and reports it", async () => {
+    const response = await readUrlDetailed(target, { maxTokens: 500, maxChars: 7 });
+
+    expect(response).toMatchObject({
+      result: { content: "Article", truncated: true },
+      provider: "firecrawl",
+      attempts: ["jina", "context", "firecrawl"],
+      ignoredOptions: ["maxTokens"],
+    });
+    expect(attempts).toEqual(["r.jina.ai", "api.context.dev", "api.firecrawl.dev"]);
+
+    const next = await readUrlDetailed(target, {
+      maxTokens: 500,
+      maxChars: 8,
+      continuation: response.result.continuation,
+    });
+    expect(next).toMatchObject({
+      result: { content: " content", truncated: false },
+      provider: "firecrawl",
+      ignoredOptions: ["maxTokens"],
+    });
+  });
+
+  it("keeps rejecting maxTokens on an explicit Firecrawl read", async () => {
+    await expect(
+      readUrlDetailed(target, { provider: "firecrawl", maxTokens: 500 }),
+    ).rejects.toThrow("Firecrawl does not support the maxTokens read option");
+    expect(attempts).toEqual([]);
+  });
+
   it.each(["read", "search"] as const)(
     "classifies explicit %s without switching providers",
     async (operation) => {

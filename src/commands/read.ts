@@ -33,7 +33,7 @@ export default defineCommand({
     },
     "max-tokens": {
       type: "string",
-      description: "Maximum tokens to return when the provider supports it",
+      description: "Jina token budget: fail on a page over this many tokens",
     },
     "max-chars": {
       type: "string",
@@ -161,6 +161,7 @@ type ReadDetailedResultView = {
   readonly requestedProvider: string;
   readonly provider: string;
   readonly attempts: readonly string[];
+  readonly ignoredOptions?: readonly string[];
 };
 
 function writeReadDetailedResult(response: ReadDetailedResultView, json: boolean): void {
@@ -169,9 +170,13 @@ function writeReadDetailedResult(response: ReadDetailedResultView, json: boolean
     return;
   }
   consola.log(
-    `[provider=${sanitizeHeaderText(response.provider)} requested=${sanitizeHeaderText(response.requestedProvider)}] read ${sanitizeHeaderText(response.result.url)}`,
+    `[provider=${sanitizeHeaderText(response.provider)} requested=${sanitizeHeaderText(response.requestedProvider)}${ignoredLabel(response.ignoredOptions)}] read ${sanitizeHeaderText(response.result.url)}`,
   );
   writeReadResult(response.result, false);
+}
+
+function ignoredLabel(options: readonly string[] | undefined): string {
+  return options?.length ? ` ignored=${sanitizeHeaderText(options.join(","))}` : "";
 }
 
 function writeReadResult(result: ReadResultView, json: boolean): void {
@@ -209,6 +214,7 @@ type ReadBatchItemView =
       readonly requestedProvider: string;
       readonly provider: string;
       readonly attempts: readonly string[];
+      readonly ignoredOptions?: readonly string[];
       readonly result: ReadResultView;
     };
 
@@ -224,7 +230,7 @@ function writeReadBatch(outcomes: readonly ReadBatchItemView[], json: boolean): 
       consola.error(`  ${sanitizeTerminalText(outcome.error)}`);
     } else {
       consola.log(
-        `[${index + 1}] [provider=${sanitizeHeaderText(outcome.provider)} requested=${sanitizeHeaderText(outcome.requestedProvider)}] ${sanitizeHeaderText(outcome.url)}`,
+        `[${index + 1}] [provider=${sanitizeHeaderText(outcome.provider)} requested=${sanitizeHeaderText(outcome.requestedProvider)}${ignoredLabel(outcome.ignoredOptions)}] ${sanitizeHeaderText(outcome.url)}`,
       );
       writeReadResult(outcome.result, false);
     }

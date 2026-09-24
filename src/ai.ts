@@ -201,7 +201,9 @@ export const readTool = tool({
       .int()
       .min(1)
       .optional()
-      .describe("Maximum tokens to return when supported by the provider."),
+      .describe(
+        "Jina token budget: fail instead of returning a page over this many tokens. Automatic reads leave it out on other readers. Use maxChars to cut a page.",
+      ),
     maxChars: z
       .number()
       .int()

@@ -301,7 +301,11 @@ export default async function webExtension(pi: ExtensionAPI) {
       Type.String({ description: 'Preferred content format: "markdown", "text", or "html".' }),
     ),
     maxTokens: Type.Optional(
-      Type.Integer({ description: "Maximum tokens to return when supported.", minimum: 1 }),
+      Type.Integer({
+        description:
+          "Jina token budget: fail instead of returning a page over this many tokens. Automatic reads leave it out on other readers. Use maxChars to cut a page.",
+        minimum: 1,
+      }),
     ),
     maxChars: Type.Optional(
       Type.Integer({
@@ -644,7 +648,7 @@ export default async function webExtension(pi: ExtensionAPI) {
         signal,
         deadline,
       });
-      const header = `[provider=${response.provider} requested=${response.requestedProvider}] read ${truncateSingleLine(response.result.url, 200)}`;
+      const header = `[provider=${response.provider} requested=${response.requestedProvider}${ignoredLabel(response.ignoredOptions)}] read ${truncateSingleLine(response.result.url, 200)}`;
       return {
         content: [{ type: "text", text: withHeader(header, formatReadResult(response.result)) }],
         details: {
@@ -654,6 +658,7 @@ export default async function webExtension(pi: ExtensionAPI) {
           effectiveProvider: response.provider,
           attempts: response.attempts,
           failures: response.failures,
+          ...(response.ignoredOptions ? { ignoredOptions: response.ignoredOptions } : {}),
           options: readOptions,
           result: response.result,
         },
@@ -1016,6 +1021,7 @@ type ReadBatchItemView =
       readonly requestedProvider: string;
       readonly provider: string;
       readonly attempts: readonly string[];
+      readonly ignoredOptions?: readonly string[];
       readonly result: ReadResultView;
     };
 
@@ -1289,11 +1295,15 @@ function formatReadBatch(outcomes: readonly ReadBatchItemView[]): string {
       return "error" in outcome
         ? `${header}\nError: ${outcome.error}`
         : withHeader(
-            `${header} [provider=${truncateSingleLine(outcome.provider, 80)} requested=${truncateSingleLine(outcome.requestedProvider, 80)}]`,
+            `${header} [provider=${truncateSingleLine(outcome.provider, 80)} requested=${truncateSingleLine(outcome.requestedProvider, 80)}${ignoredLabel(outcome.ignoredOptions)}]`,
             formatReadResult(outcome.result),
           );
     })
     .join("\n\n");
+}
+
+function ignoredLabel(options: readonly string[] | undefined): string {
+  return options?.length ? ` ignored=${options.join(",")}` : "";
 }
 
 function formatReadResult(result: ReadResultView): readonly string[] {
