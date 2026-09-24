@@ -201,6 +201,21 @@ describe("tavily provider", () => {
       expect(results[0]).not.toHaveProperty("text");
     });
 
+    it("cuts a long content to the start of a snippet and keeps the full text", async () => {
+      const content = `${"Passage one. ".repeat(40)}[...] ${"Passage two. ".repeat(80)}`;
+      mockPostJSON.mockResolvedValueOnce({
+        ...tavilyResponse,
+        results: [{ ...tavilyResponse.results[0], content, raw_content: "Whole page" }],
+      });
+      const provider = await createSearchProvider("tavily", { apiKey: "test-key" });
+      const [result] = await provider.search("test query", { fullText: true });
+
+      expect(result.snippet).toBe(`${content.slice(0, 499)}…`);
+      expect(result.url).toBe("https://example.com");
+      expect(result.title).toBe("Test Result");
+      expect(result.text).toBe("Whole page");
+    });
+
     it("keeps the generated answer in response metadata", async () => {
       mockPostJSON.mockResolvedValueOnce(richTavilyResponse);
       const provider = await createSearchProvider("tavily", { apiKey: "test-key" });

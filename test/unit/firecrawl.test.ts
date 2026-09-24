@@ -267,6 +267,25 @@ describe("firecrawl provider", () => {
       ]);
     });
 
+    it("cuts a whole page sent as the passage to a snippet", async () => {
+      const page = `# Node.js 24.20.0 (LTS)\n${"- commit line\n".repeat(5000)}`;
+      mockPostJSON.mockResolvedValueOnce({
+        success: true,
+        data: {
+          web: [{ title: "Web Result", description: page, url: "https://example.com/web" }],
+          news: [{ title: "News Result", snippet: page, url: "https://example.com/news" }],
+        },
+      });
+
+      const provider = await createFirecrawlProvider({ apiKey: "test-key" });
+      const results = await provider.search("test query", { sources: ["web", "news"] });
+
+      expect(results.map(({ snippet }) => snippet)).toEqual([
+        `${page.slice(0, 499)}…`,
+        `${page.slice(0, 499)}…`,
+      ]);
+    });
+
     it("slices combined results to maxResults", async () => {
       mockPostJSON.mockResolvedValueOnce({
         success: true,

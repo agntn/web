@@ -9,6 +9,7 @@ import type {
 import { Provider } from "../core/provider.ts";
 import { FIRECRAWL_MAX_RESULTS } from "../core/providers.ts";
 import { AuthError, WebError, normalizeError } from "../core/errors.ts";
+import { snippet } from "../core/text.ts";
 
 interface FirecrawlSearchResult {
   readonly title: string;
@@ -264,11 +265,16 @@ function normalizeFormat(format?: string): "markdown" | "html" {
   return "markdown";
 }
 
+/**
+ * The query passage in `description` can be the whole page Markdown, so the snippet keeps only its start.
+ * @param result - One Firecrawl web hit.
+ * @returns {SearchResult} Normalized search result.
+ */
 function mapWebResult(result: FirecrawlWebResult): SearchResult {
   return {
     url: result.url,
     title: result.title,
-    snippet: result.description,
+    snippet: snippet(result.description),
     text: result.markdown,
   };
 }
@@ -277,7 +283,7 @@ function mapNewsResult(result: FirecrawlNewsResult): SearchResult {
   return {
     url: result.url,
     title: result.title,
-    snippet: result.snippet,
+    snippet: snippet(result.snippet),
     publishedDate: result.date,
     image: result.imageUrl,
     text: result.markdown,

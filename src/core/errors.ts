@@ -1,4 +1,5 @@
 import { stripVTControlCharacters } from "node:util";
+import { clip } from "./text.ts";
 
 const ERROR_MESSAGE_UNSAFE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
 const MESSAGE_BODY_MAX_CHARACTERS = 1000;
@@ -69,11 +70,7 @@ function bodyExcerpt(body: string): string {
     .replaceAll(ERROR_MESSAGE_UNSAFE, " ")
     .replaceAll(/\s+/g, " ")
     .trim();
-  if (safe.length <= MESSAGE_BODY_MAX_CHARACTERS) return safe;
-
-  const end = MESSAGE_BODY_MAX_CHARACTERS - 1;
-  const splitsPair = (safe.codePointAt(end - 1) ?? 0) > 0xffff;
-  return `${safe.slice(0, splitsPair ? end - 1 : end)}…`;
+  return clip(safe, MESSAGE_BODY_MAX_CHARACTERS);
 }
 
 /** Thrown when a provider rejects the API key (HTTP 401). */

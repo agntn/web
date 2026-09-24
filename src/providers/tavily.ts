@@ -11,6 +11,7 @@ import { Provider } from "../core/provider.ts";
 import { TAVILY_SEARCH_TOPICS } from "../core/providers.ts";
 import { AuthError, HTTPError, PaymentError, WebError, normalizeError } from "../core/errors.ts";
 import { utcDay } from "../core/dates.ts";
+import { snippet } from "../core/text.ts";
 
 type TavilyTopic = (typeof TAVILY_SEARCH_TOPICS)[number];
 
@@ -181,6 +182,7 @@ function isTavilyTopic(category: string | undefined): category is TavilyTopic {
 
 /**
  * `published_date` and `raw_content` are `null` when Tavily has none, so both are left out.
+ * `content` joins several passages of the page, often past 1,000 characters, so the snippet keeps its start.
  * @param result - One Tavily search hit.
  * @returns {SearchResult} Normalized search result.
  */
@@ -189,7 +191,7 @@ function mapResult(result: TavilyResult): SearchResult {
   return {
     url: result.url,
     title: result.title,
-    snippet: result.content,
+    snippet: snippet(result.content),
     score: result.score,
     ...(publishedDate === undefined ? {} : { publishedDate }),
     ...(typeof result.raw_content === "string" ? { text: result.raw_content } : {}),
