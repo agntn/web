@@ -20,7 +20,7 @@ src/
 ├── index.ts              # Public API barrel
 ├── ai.ts                 # Vercel AI SDK tools
 ├── mcp.ts                # MCP server surface (createMcpServer, executors)
-└── cli.ts                # CLI entry point
+└── cli.ts                # CLI entry point; serves `mcp` from src/ in a checkout
 packages/
 ├── omp/extensions/web.ts # OMP tool surface
 └── pi/extensions/web.ts  # Pi tool/command surface
@@ -65,6 +65,7 @@ test/unit/                # Public behavior and provider contract tests
 - Built in capability lists are the source for static descriptions; `searchProviders()`, `searchImageProviders()`, and `readProviders()` are the live execution contract
 - Providers load on the first `create()` for their name, so `create()` and its capability variants return a `Promise<Provider>`: `src/providers/index.ts` is a manifest of metadata plus a literal `import()` per provider, the registry seeds its table from it on first use, and every listing or capability lookup answers from the manifest without loading a module. `package.json` says `sideEffects: false`, and `test/bundle.test.ts` proves a consumer bundle keeps the registry and drops the adapters it never asks for
 - Command modules keep the registry, the providers and the MCP server behind `import()` inside `run()`; citty resolves every subcommand to print `web --help`, so a static import there loads on the usage path
+- The local MCP server runs `src/`: inside a checkout, the built `dist/cli.mjs` loads the `mcp` command from `src/commands/mcp.ts`, like the Pi and OMP extensions, so a change needs a server restart, not `vp pack`. The npm package ships no `src/commands` and runs the bundle, and so does a copy under `node_modules`, where Node strips no types. `WEB_DIST=1` forces the bundle. A change to `src/cli.ts` itself still needs a build; `test/bin.test.ts` runs `mcp` in each of these layouts
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
 ## ADDING A NEW PROVIDER
