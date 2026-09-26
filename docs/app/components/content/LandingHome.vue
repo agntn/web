@@ -1,14 +1,20 @@
 <script setup lang="ts">
-import { PROVIDERS } from "../../utils/providers";
+import { countWord } from "../../utils/format";
+import { HEADLINE_PROVIDERS, PROVIDERS, READ_PROVIDERS, UNNAMED_PROVIDER_COUNT } from "../../utils/providers";
 
 const { samples, tick, index, paused, current, step } = useLandingSearch();
 
 const stats = [
   { value: String(PROVIDERS.length), label: "providers" },
   { value: "3", label: "capabilities" },
-  { value: "4", label: "readers" },
+  { value: String(READ_PROVIDERS.length), label: "readers" },
   { value: "4", label: "agent tools" },
 ] as const;
+
+/** "Brave, Exa, … and seven more": the named providers stay fixed, the count follows the catalog. */
+const headline = `${HEADLINE_PROVIDERS.join(", ")} and ${countWord(UNNAMED_PROVIDER_COUNT)} more`;
+const total = countWord(PROVIDERS.length);
+const adaptersTitle = `${total[0]!.toUpperCase()}${total.slice(1)} adapters, one shape`;
 
 const copied = ref(false);
 
@@ -35,7 +41,7 @@ const activeProvider = computed(() => current.value.provider);
         One query. <span class="text-primary">Every engine.</span>
       </h1>
       <p class="web-enter web-enter-2 mx-auto mt-6 max-w-xl text-base leading-7 text-muted">
-        One interface over Brave, Exa, Tavily, Firecrawl, Jina, SearXNG and seven more. Search,
+        One interface over {{ headline }}. Search,
         reverse image search and page reading, all in the same shape. Works as a library, a CLI,
         an AI SDK tool or an MCP server, your pick.
       </p>
@@ -140,7 +146,7 @@ const activeProvider = computed(() => current.value.provider);
 
     <LandingFeature
       eyebrow="Providers"
-      title="Thirteen adapters, one shape"
+      :title="adaptersTitle"
       to="/providers"
       link="All providers"
       :checks="[
