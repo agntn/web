@@ -8,9 +8,12 @@ import {
   StaleReadContinuationError,
 } from "./errors.ts";
 import {
+  automaticOrder,
   isFallbackEligible,
   providerFailure,
   ProviderFallbackError,
+  recordProviderOutcome,
+  skippedField,
   type ProviderFailure,
 } from "./fallback.ts";
 import { normalizeReadOptions } from "./options.ts";
@@ -102,6 +105,8 @@ export interface ReadUrlDetailedResult {
   readonly provider: string;
   readonly attempts: readonly string[];
   readonly failures: readonly ProviderFailure[];
+  /** Readers with spent credits that were passed over, though the usual order asks them before the one that answered. */
+  readonly skipped?: readonly string[];
   /** Options an automatic read left out because the reader doesn't declare them. */
   readonly ignoredOptions?: readonly ReadOptionName[];
 }
@@ -283,30 +288,37 @@ async function readAutomatically(
   maxChars: number | undefined,
   pageFields: Readonly<PageFields>,
 ): Promise<ReadUrlDetailedResult> {
-  const providerNames = [DEFAULT_READ_PROVIDER, ...configuredReadProviders(DEFAULT_READ_PROVIDER)];
+  const order = automaticOrder([
+    DEFAULT_READ_PROVIDER,
+    ...configuredReadProviders(DEFAULT_READ_PROVIDER),
+  ]);
   const attempts: string[] = [];
   const failures: ProviderFailure[] = [];
   let lastError: unknown;
 
-  for (const providerName of providerNames) {
+  for (const providerName of order.providerNames) {
     attempts.push(providerName);
     const ignoredOptions = ignoredReadOptions(providerName, options);
     try {
+      const result = await readFromProvider(
+        url,
+        withoutReadOptions(options, ignoredOptions),
+        providerName,
+        maxChars,
+        pageFields,
+      );
+      recordProviderOutcome(providerName);
       return {
-        result: await readFromProvider(
-          url,
-          withoutReadOptions(options, ignoredOptions),
-          providerName,
-          maxChars,
-          pageFields,
-        ),
+        result,
         requestedProvider: "auto",
         provider: providerName,
         attempts,
         failures,
+        ...skippedField(order, attempts),
         ...ignoredOptionsField(ignoredOptions),
       };
     } catch (error) {
+      recordProviderOutcome(providerName, error);
       const failure = providerFailure(providerName, error);
       if (!isFallbackEligible(error, providerName, "read")) {
         if (failures.length === 0) throw error;

@@ -11,7 +11,7 @@ import {
   ReadNotSupportedError,
   StaleReadContinuationError,
 } from "../../src/core/errors.ts";
-import { ProviderFallbackError } from "../../src/core/fallback.ts";
+import { ProviderFallbackError, resetOutOfCredits } from "../../src/core/fallback.ts";
 import { Provider } from "../../src/core/provider.ts";
 import type { ProviderConfig, ReadOptions, ReadResult } from "../../src/core/types.ts";
 
@@ -277,6 +277,47 @@ describe("readUrl", () => {
     expect(readFromContext).not.toHaveBeenCalled();
   });
 
+  it("asks a spent Jina last on the next automatic read", async () => {
+    const readFromJina = vi.fn(paymentRequired);
+    const readFromContext = vi
+      .fn()
+      .mockResolvedValue({ url: "https://example.com", content: "ok" });
+    registerReader("jina", readFromJina);
+    registerReader("context", readFromContext);
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    await readUrlDetailed("https://example.com");
+    const response = await readUrlDetailed("https://example.com");
+
+    expect(response).toMatchObject({
+      provider: "context",
+      attempts: ["context"],
+      failures: [],
+      skipped: ["jina"],
+    });
+    expect(readFromJina).toHaveBeenCalledTimes(1);
+  });
+
+  it("still asks a spent Jina when every other reader fails", async () => {
+    const readFromJina = vi
+      .fn(paymentRequired)
+      .mockImplementationOnce(paymentRequired)
+      .mockResolvedValueOnce({ url: "https://example.com", content: "topped up" });
+    registerReader("jina", readFromJina);
+    registerReader("context", async () => {
+      throw new HTTPError(503, "https://context.example.com", "Unavailable");
+    });
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    await expect(readUrlDetailed("https://example.com")).rejects.toBeInstanceOf(
+      ProviderFallbackError,
+    );
+    const response = await readUrlDetailed("https://example.com");
+
+    expect(response).toMatchObject({ provider: "jina", attempts: ["context", "jina"] });
+    expect(response).not.toHaveProperty("skipped");
+  });
+
   it("keeps a later invalid request strict and retains earlier diagnostics", async () => {
     const readFromFirecrawl = vi
       .fn()
@@ -304,6 +345,8 @@ describe("readUrl", () => {
       cause: strictFailure,
     });
     expect(readFromFirecrawl).not.toHaveBeenCalled();
+    // Forget Jina's spent credits so the batch walks the same order.
+    resetOutOfCredits();
     await expect(readBatchDetailed(["https://example.com"])).resolves.toEqual([
       {
         url: "https://example.com",

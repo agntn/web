@@ -22,9 +22,12 @@ import {
   validateMaxResults,
 } from "./errors.ts";
 import {
+  automaticOrder,
   isFallbackEligible,
   providerFailure,
   ProviderFallbackError,
+  recordProviderOutcome,
+  skippedField,
   type ProviderFailure,
 } from "./fallback.ts";
 import { normalizeSearchOptions } from "./options.ts";
@@ -101,6 +104,8 @@ export interface SearchWithFallbackResult extends SearchProviderResult {
   readonly provider: string;
   readonly attempts: readonly string[];
   readonly failures: readonly ProviderFailure[];
+  /** Providers with spent credits that were passed over, though the usual order asks them before the one that answered. */
+  readonly skipped?: readonly string[];
 }
 
 /** Automatic search prepared with one snapshot of configured providers. */
@@ -228,17 +233,20 @@ async function searchProviderNamesWithFallback(
   query: string,
   options?: Readonly<SearchPageOptions>,
 ): Promise<SearchWithFallbackResult> {
+  const order = automaticOrder(providerNames);
   const attempts: string[] = [];
   const failures: ProviderFailure[] = [];
   let lastError: unknown;
 
-  for (const providerName of providerNames) {
+  for (const providerName of order.providerNames) {
     throwIfAborted(options?.signal);
     attempts.push(providerName);
     try {
       const response = await searchProvider(providerName, query, options);
-      return { ...response, attempts, failures };
+      recordProviderOutcome(providerName);
+      return { ...response, attempts, failures, ...skippedField(order, attempts) };
     } catch (error) {
+      recordProviderOutcome(providerName, error);
       const failure = providerFailure(providerName, error);
       if (!isFallbackEligible(error, providerName, "search")) {
         if (failures.length === 0) throw error;

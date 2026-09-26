@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { OUT_OF_CREDITS_COOLDOWN_MS } from "../../src/core/fallback.ts";
 import {
   PaymentError,
   builtinProviders,
@@ -55,6 +56,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
@@ -72,6 +74,62 @@ describe("search usage limits", () => {
     expect(response.failures[0].error).toContain("HTTP 432");
     expect(response.failures[1].error).toContain("1020");
     expect(attempts).toEqual([hosts.tavily, hosts.serpbase, "api.mojeek.com"]);
+  });
+
+  it("goes straight to Mojeek while the spent credits stay spent", async () => {
+    await searchWithFallback("independent search");
+    attempts = [];
+
+    const response = await searchWithFallback("independent search");
+
+    expect(response).toMatchObject({
+      provider: "mojeek",
+      attempts: ["mojeek"],
+      failures: [],
+      skipped: ["tavily", "serpbase"],
+    });
+    expect(attempts).toEqual(["api.mojeek.com"]);
+  });
+
+  it("leaves out spent providers the order would not have reached", async () => {
+    await searchWithFallback("independent search");
+    vi.stubEnv("BRAVE_API_KEY", "test-key");
+    vi.stubGlobal("fetch", async (input: unknown) => {
+      if (typeof input !== "string") throw new Error("Expected a URL string from the HTTP client");
+      const url = new URL(input);
+      if (url.hostname === "localhost") throw new Error("SearXNG is not running");
+      if (url.hostname === "api.search.brave.com") {
+        return Response.json({ web: { results: [] } });
+      }
+      throw new Error(`Unexpected request: ${url.hostname}`);
+    });
+
+    const response = await searchWithFallback("independent search");
+
+    expect(response.attempts).toEqual(["brave"]);
+    expect(response).not.toHaveProperty("skipped");
+  });
+
+  it("asks the spent providers first again after the cooldown", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await searchWithFallback("independent search");
+    vi.setSystemTime(Date.now() + OUT_OF_CREDITS_COOLDOWN_MS);
+    attempts = [];
+
+    const response = await searchWithFallback("independent search");
+
+    expect(response.attempts).toEqual(["tavily", "serpbase", "mojeek"]);
+    expect(response).not.toHaveProperty("skipped");
+    expect(attempts).toEqual([hosts.tavily, hosts.serpbase, "api.mojeek.com"]);
+  });
+
+  it("keeps an explicit provider on its own after its credits ran out", async () => {
+    await searchWithFallback("independent search");
+    attempts = [];
+
+    const search = await createSearchProvider("tavily");
+    await expect(search.search("independent search")).rejects.toBeInstanceOf(PaymentError);
+    expect(attempts).toEqual([hosts.tavily]);
   });
 
   it.each(["tavily", "serpbase"] as const)(

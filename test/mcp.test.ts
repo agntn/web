@@ -693,6 +693,25 @@ describe("web MCP server", () => {
     });
   });
 
+  it("reports a spent Jina skipped on the next automatic read", async () => {
+    vi.stubEnv("FIRECRAWL_API_KEY", "test-key");
+    mockGetJSON.mockReset();
+    mockGetJSON.mockRejectedValue(new HTTPError(402, "https://r.jina.ai/", "Payment required"));
+    mockPostJSON.mockResolvedValue({ success: true, data: { markdown: "page" } });
+    const client = await connectTestClient();
+    const read = () =>
+      client.callTool({ name: "web_read", arguments: { url: "https://example.com" } });
+
+    await read();
+    const response = await read();
+
+    expect(response.isError).toBeUndefined();
+    expect(response.structuredContent).toMatchObject({
+      result: { provider: "firecrawl", attempts: ["firecrawl"], failures: [], skipped: ["jina"] },
+    });
+    expect(mockGetJSON).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps favicons out of a search unless asked", async () => {
     vi.stubEnv("BRAVE_API_KEY", "test-brave");
     mockGetJSON.mockResolvedValue({
