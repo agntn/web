@@ -22,8 +22,8 @@ importers:
   .:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: 1.30.0
-        version: 1.30.0(zod@4.3.6)
+        specifier: 1.30.1
+        version: 1.30.1(zod@4.3.6)
       citty:
         specifier: 0.2.2
         version: 0.2.2
@@ -48,7 +48,7 @@ importers:
         version: 0.1.0(oxfmt@0.68.0(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)))(oxlint-tsgolint@7.0.2002)(oxlint@1.83.0(oxlint-tsgolint@7.0.2002)(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)))
       '@earendil-works/pi-coding-agent':
         specifier: 0.86.1
-        version: 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
+        version: 0.86.1(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
       '@earendil-works/pi-tui':
         specifier: 0.86.1
         version: 0.86.1
@@ -605,8 +605,8 @@ packages:
   '@kurkle/color@0.3.4':
     resolution: {integrity: sha512-M5UknZPHRu3DEDWoipU6sE8PdkZ6Z/S+v4dD+Ke8IaNlpdSQah50lz1KtcFBa2vsdOnwbbnxJwVM4wty6udA5w==}
 
-  '@modelcontextprotocol/sdk@1.30.0':
-    resolution: {integrity: sha512-xKd8OIzlqNzcqcNumGAa6g+PW2kjD5vrpcKOnfldAUPP3j7lnqMPwlTXQm8gF+UwH72z0lqaRbjr9hqGz0eITA==}
+  '@modelcontextprotocol/sdk@1.30.1':
+    resolution: {integrity: sha512-H2HxLvC3HDNybePJaLdSrU1hhUK5iQw+WvV1b01myFyI7sdVGe1u/IPTE5D9fGCiJDVtgMV/lmFkQXLmQyIFYA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -1983,10 +1983,6 @@ packages:
     resolution: {integrity: sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==}
     engines: {node: '>= 0.6'}
 
-  eventsource-parser@3.0.6:
-    resolution: {integrity: sha512-Vo1ab+QXPzZ4tCa8SwIHJFaSzy4R6SHf7BY79rFBDf0idraZWAkYrDjDj8uWaSm3S2TK+hJ7/t1CEmZ7jXw+pg==}
-    engines: {node: '>=18.0.0'}
-
   eventsource-parser@3.1.1:
     resolution: {integrity: sha512-EKN1vKAMcZ8MlYMpaNuxN6R9yakzH6uajHcHVTqWJzvu5pWw9DyhbP35HH8MVBQ+dZjAfDxk+A8NiR9KWaXiyQ==}
     engines: {node: '>=18.0.0'}
@@ -3315,10 +3311,10 @@ snapshots:
     dependencies:
       esbuild: 0.28.2
 
-  '@earendil-works/pi-agent-core@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
+  '@earendil-works/pi-agent-core@0.86.1(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
     dependencies:
       '@earendil-works/chord': 0.86.1
-      '@earendil-works/pi-ai': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
+      '@earendil-works/pi-ai': 0.86.1(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
       '@earendil-works/pi-telemetry': 0.86.1
       diff: 8.0.4
       ignore: 7.0.8
@@ -3333,12 +3329,12 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
+  '@earendil-works/pi-ai@0.86.1(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.124.0(zod@4.3.6)
       '@aws-sdk/client-bedrock-runtime': 3.1127.0
       '@earendil-works/pi-telemetry': 0.86.1
-      '@google/genai': 2.21.0(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))
+      '@google/genai': 2.21.0(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))
       '@smithy/node-http-handler': 4.12.1
       http-proxy-agent: 9.1.0
       https-proxy-agent: 9.1.0
@@ -3354,11 +3350,11 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-coding-agent@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
+  '@earendil-works/pi-coding-agent@0.86.1(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
     dependencies:
       '@earendil-works/chord': 0.86.1
-      '@earendil-works/pi-agent-core': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
-      '@earendil-works/pi-ai': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
+      '@earendil-works/pi-agent-core': 0.86.1(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
+      '@earendil-works/pi-ai': 0.86.1(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
       '@earendil-works/pi-tui': 0.86.1
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 6.0.0
@@ -3474,14 +3470,14 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@google/genai@2.21.0(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))':
+  '@google/genai@2.21.0(@modelcontextprotocol/sdk@1.30.1(zod@4.3.6))':
     dependencies:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
       protobufjs: 7.5.8
       ws: 8.21.3
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.30.1(zod@4.3.6)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -3624,7 +3620,7 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@modelcontextprotocol/sdk@1.30.0(zod@4.3.6)':
+  '@modelcontextprotocol/sdk@1.30.1(zod@4.3.6)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.4)
       ajv: 8.20.0
@@ -3633,7 +3629,7 @@ snapshots:
       cors: 2.8.6
       cross-spawn: 7.0.6
       eventsource: 3.0.7
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.1.1
       express: 5.2.1
       express-rate-limit: 8.6.2(express@5.2.1)
       hono: 4.13.4
@@ -4749,13 +4745,11 @@ snapshots:
 
   etag@1.8.1: {}
 
-  eventsource-parser@3.0.6: {}
-
   eventsource-parser@3.1.1: {}
 
   eventsource@3.0.7:
     dependencies:
-      eventsource-parser: 3.0.6
+      eventsource-parser: 3.1.1
 
   expect-type@1.4.0: {}
 
