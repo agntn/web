@@ -226,7 +226,7 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     envVar: "SERPAPI_API_KEY",
     auth: "query parameter",
     host: "serpapi.com",
-    freeTier: "100 queries a month",
+    freeTier: "250 searches a month",
     search: true,
     searchImage: true,
     read: false,
