@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { styleText } from "node:util";
 import { consola } from "consola";
 import { sanitizeTerminalText } from "../tui.ts";
 import { providerApiKeyEnvVar } from "../core/providers.ts";
@@ -314,7 +315,7 @@ function isSearchBatchOutput(
 function writeHumanSearchBatch(outcomes: readonly ReadonlySearchBatchItem[]): void {
   for (const outcome of outcomes) {
     const query = sanitizeTerminalText(outcome.query, 2048);
-    consola.log(`\x1B[1m${query}\x1B[0m`);
+    consola.log(styleText("bold", query));
     if ("error" in outcome) {
       consola.error(sanitizeTerminalText(outcome.error, 2048));
       continue;
@@ -343,13 +344,13 @@ function writeHumanSearchResults(
   for (const result of results) {
     const title = sanitizeTerminalText(result.title, 2048);
     const url = sanitizeTerminalText(result.url, 2048);
-    consola.log(`\x1B[1m\x1B[36m${title}\x1B[0m`);
+    consola.log(styleText(["bold", "cyan"], title));
     consola.log(`  ${url}`);
     if (result.snippet) {
       const sanitizedSnippet = sanitizeTerminalText(result.snippet, 2048);
       const snippet =
         sanitizedSnippet.length > 120 ? `${sanitizedSnippet.slice(0, 120)}...` : sanitizedSnippet;
-      consola.log(`  \x1B[90m${snippet}\x1B[0m`);
+      consola.log(`  ${styleText("gray", snippet)}`);
     }
     consola.log("");
   }

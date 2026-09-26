@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { styleText } from "node:util";
 import { consola } from "consola";
 import { sanitizeTerminalContent, sanitizeTerminalText } from "../tui.ts";
 import { optionalText } from "../core/options.ts";
@@ -185,10 +186,10 @@ function writeReadResult(result: ReadResultView, json: boolean): void {
     return;
   }
   if (result.title)
-    consola.log(`\x1B[1m\x1B[36m${sanitizeTerminalText(result.title, 2048)}\x1B[0m`);
+    consola.log(styleText(["bold", "cyan"], sanitizeTerminalText(result.title, 2048)));
   consola.log(`  ${sanitizeTerminalText(result.url, 2048)}`);
   if (result.description) {
-    consola.log(`  \x1B[90m${sanitizeTerminalText(result.description, 160)}\x1B[0m`);
+    consola.log(`  ${styleText("gray", sanitizeTerminalText(result.description, 160))}`);
   }
   consola.log("");
   consola.log(sanitizeTerminalContent(result.content));

@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { styleText } from "node:util";
 import { consola } from "consola";
 import { version } from "../version.ts";
 import { formatProviderCapabilities } from "../tui.ts";
@@ -26,12 +27,12 @@ export default defineCommand({
 
     consola.log(`web ${version}`);
     for (const provider of status) {
-      const capabilityLabel = `  \x1B[90m${formatProviderCapabilities(provider)}\x1B[0m`;
+      const capabilityLabel = `  ${styleText("gray", formatProviderCapabilities(provider))}`;
       if (provider.configured) {
-        consola.log(`  \x1B[32m\u2713\x1B[0m ${provider.name}${capabilityLabel}`);
+        consola.log(`  ${styleText("green", "\u2713")} ${provider.name}${capabilityLabel}`);
       } else {
         consola.log(
-          `  \x1B[31m\u2717\x1B[0m ${provider.name}  \x1B[90m${provider.envVar} not set\x1B[0m${capabilityLabel}`,
+          `  ${styleText("red", "\u2717")} ${provider.name}  ${styleText("gray", `${provider.envVar} not set`)}${capabilityLabel}`,
         );
       }
     }
