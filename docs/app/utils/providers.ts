@@ -319,6 +319,12 @@ export function providerIcon(key: string): string {
   return providerInfo(key)?.icon ?? "i-lucide-globe";
 }
 
+/** Named in the landing hero, the SEO description and the OG image, in this order; the rest is counted. */
+export const HEADLINE_PROVIDERS = ["brave", "exa", "tavily", "firecrawl", "jina", "searxng"].map(providerLabel);
+
+/** How many providers the headline leaves out, the "seven more" after the names. */
+export const UNNAMED_PROVIDER_COUNT = PROVIDERS.length - HEADLINE_PROVIDERS.length;
+
 export const SEARCH_PROVIDERS = PROVIDERS.filter((provider) => provider.search);
 export const READ_PROVIDERS = PROVIDERS.filter((provider) => provider.read);
 export const IMAGE_PROVIDERS = PROVIDERS.filter((provider) => provider.searchImage);

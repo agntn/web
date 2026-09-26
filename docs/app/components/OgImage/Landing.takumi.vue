@@ -1,13 +1,16 @@
 <script lang="ts" setup>
+import { countWord } from "../../utils/format";
+import { HEADLINE_PROVIDERS, PROVIDERS, UNNAMED_PROVIDER_COUNT } from "../../utils/providers";
+
 /** Overrides the Docus landing template; Takumi has no CSS variables, so theme tokens are literals. */
-/** The props are what Docus passes; the tagline is fixed because Docus strips commas from the description. */
+/** The props are what Docus passes; the tagline is built here because Docus strips commas from the description. */
 defineProps<{ title?: string; description?: string }>();
 
-const TAGLINE = "Search, reverse image search and page reading from thirteen providers, in one shape.";
+const TAGLINE = `Search, reverse image search and page reading from ${countWord(PROVIDERS.length)} providers, in one shape.`;
 
 const { name: siteName } = useSiteConfig();
 
-const PROVIDERS = ["Brave", "Exa", "Tavily", "Firecrawl", "Jina", "SearXNG", "+7"];
+const CHIPS = [...HEADLINE_PROVIDERS, `+${UNNAMED_PROVIDER_COUNT}`];
 </script>
 
 <template>
@@ -43,7 +46,7 @@ const PROVIDERS = ["Brave", "Exa", "Tavily", "Firecrawl", "Jina", "SearXNG", "+7
     <div class="flex items-center justify-between w-full">
       <div class="flex items-center">
         <div
-          v-for="(provider, index) in PROVIDERS"
+          v-for="(provider, index) in CHIPS"
           :key="provider"
           class="flex items-center mr-[10px] px-[12px] h-[36px] rounded-[8px] text-[16px] leading-none"
           :style="{

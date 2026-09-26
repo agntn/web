@@ -49,6 +49,25 @@ const ENTITIES: Record<string, string> = {
   "&nbsp;": " ",
 };
 
+const ONES = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+  "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+];
+const TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"];
+
+/** A count the way the copy spells it: `13` → `thirteen`, `42` → `forty-two`. Covers 0 to 99. */
+export function countWord(count: number): string {
+  if (!Number.isInteger(count) || count < 0 || count > 99) {
+    throw new RangeError(`countWord takes a whole number from 0 to 99, got ${count}`);
+  }
+  if (count < 20) {
+    return ONES[count]!;
+  }
+  const ones = count % 10;
+  const tens = TENS[(count - ones) / 10]!;
+  return ones === 0 ? tens : `${tens}-${ONES[ones]}`;
+}
+
 /** Strips the markup and entities some providers leave in snippets; the page shows text, never markup. */
 export function plainText(value: string): string {
   return value

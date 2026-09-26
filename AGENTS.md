@@ -78,7 +78,7 @@ Seven files must be updated. Missing any causes a bug (test failure, missing fro
 4. `src/core/read.ts` - add to `readProviderNames` if provider supports read/scrape; `src/core/image.ts` - `imageSearchProviderNames` for reverse image search
 5. `vite.config.ts` - nothing: the `pack.entry` glob makes every file in `src/providers/` a bundle input, so `dist/providers/<name>.mjs` and the `./providers/*` export exist as soon as the file does
 6. `packages/pi/extensions/web.ts` and `packages/omp/extensions/web.ts` - update provider descriptions and tool schemas; execution validates against live registries
-7. `test/unit/<name>.ts` + `test/index.test.ts` - add provider tests + update hardcoded expected list; `test/unit/providers-manifest.test.ts` fails when the entry and the class disagree, and `test/unit/lazy-loading.test.ts` mocks every provider module, so add the new one there
+7. `test/unit/<name>.ts` + `test/index.test.ts` - add provider tests + update hardcoded expected list; `test/unit/providers-manifest.test.ts` fails when the entry and the class disagree, and `test/unit/lazy-loading.test.ts` mocks every provider module, so add the new one there; `test/unit/docs-counts.test.ts` fails until the provider counts in `README.md` and the docs prose it lists match the new total
 
 After: `vp check && vp test && vp pack`
 
