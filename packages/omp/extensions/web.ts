@@ -382,6 +382,7 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
         effectiveProvider: response.provider,
         attempts: response.attempts,
         failures: response.failures,
+        skipped: response.skipped,
         ...(response.ignoredOptions ? { ignoredOptions: response.ignoredOptions } : {}),
         options,
         result: response.result,

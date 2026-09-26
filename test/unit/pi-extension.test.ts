@@ -1237,10 +1237,12 @@ describe("Pi extension", () => {
         "content.0.text",
         expect.stringContaining("[1] https://example.com [provider=context requested=auto]"),
       );
+      await expect(batchExecution).resolves.toMatchObject({
+        details: { outcomes: [{ attempts: ["context"], failures: [], skipped: ["jina"] }] },
+      });
       expect(requestedUrls).toEqual([
         "https://r.jina.ai/https%3A%2F%2Fexample.com",
         "https://api.context.dev/v1/web/scrape/markdown?url=https%3A%2F%2Fexample.com",
-        "https://r.jina.ai/https%3A%2F%2Fexample.com",
         "https://api.context.dev/v1/web/scrape/markdown?url=https%3A%2F%2Fexample.com",
       ]);
     } finally {

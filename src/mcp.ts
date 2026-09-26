@@ -94,6 +94,7 @@ const searchProviderResultSchema = strictObject({
   metadata: Type.Optional(unknownRecordSchema),
   attempts: Type.Optional(Type.Array(Type.String())),
   failures: Type.Optional(Type.Array(providerFailureSchema)),
+  skipped: Type.Optional(Type.Array(Type.String())),
 });
 const searchAllResponseSchema = strictObject({
   results: Type.Array(searchAllResultSchema),
@@ -113,6 +114,7 @@ const searchBatchItemSchema = Type.Union([
     providerMetadata: Type.Optional(Type.Array(searchProviderMetadataSchema)),
     attempts: Type.Optional(Type.Array(Type.String())),
     failures: Type.Optional(Type.Array(providerFailureSchema)),
+    skipped: Type.Optional(Type.Array(Type.String())),
   }),
   strictObject({
     query: Type.String(),
@@ -173,6 +175,7 @@ const readDetailedResultSchema = strictObject({
   provider: Type.String(),
   attempts: Type.Array(Type.String()),
   failures: Type.Array(providerFailureSchema),
+  skipped: Type.Optional(Type.Array(Type.String())),
   ignoredOptions: Type.Optional(Type.Array(Type.String())),
 });
 const readBatchItemSchema = Type.Union([
@@ -183,6 +186,7 @@ const readBatchItemSchema = Type.Union([
     provider: Type.String(),
     attempts: Type.Array(Type.String()),
     failures: Type.Array(providerFailureSchema),
+    skipped: Type.Optional(Type.Array(Type.String())),
     ignoredOptions: Type.Optional(Type.Array(Type.String())),
   }),
   strictObject({

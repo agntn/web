@@ -69,6 +69,7 @@ export type SearchBatchItem =
       readonly errors?: readonly { readonly provider: string; readonly error: string }[];
       readonly attempts?: readonly string[];
       readonly failures?: readonly ProviderFailure[];
+      readonly skipped?: readonly string[];
     }
   | {
       readonly query: string;
@@ -91,6 +92,7 @@ export type ReadBatchDetailedItem =
       readonly provider: string;
       readonly attempts: readonly string[];
       readonly failures: readonly ProviderFailure[];
+      readonly skipped?: readonly string[];
       readonly ignoredOptions?: readonly ReadOptionName[];
     }
   | {
@@ -235,12 +237,14 @@ interface BatchSearchResult {
   readonly errors?: readonly { readonly provider: string; readonly error: string }[];
   readonly attempts?: readonly string[];
   readonly failures?: readonly ProviderFailure[];
+  readonly skipped?: readonly string[];
 }
 
 type ReadonlySearchProviderResult = Readonly<Omit<SearchProviderResult, "results">> & {
   readonly results: readonly ReadonlySearchResult[];
   readonly attempts?: readonly string[];
   readonly failures?: readonly ProviderFailure[];
+  readonly skipped?: readonly string[];
 };
 
 async function searchAllForBatch(
@@ -282,6 +286,7 @@ function singleBatchResult(response: ReadonlySearchProviderResult): BatchSearchR
       : { providerMetadata: [{ provider, metadata: response.metadata }] }),
     ...(response.attempts === undefined ? {} : { attempts: response.attempts }),
     ...(response.failures === undefined ? {} : { failures: response.failures }),
+    ...(response.skipped === undefined ? {} : { skipped: response.skipped }),
   };
 }
 
@@ -363,6 +368,7 @@ function batchSearchDiagnostics(
     ...(value.errors === undefined ? {} : { errors: value.errors }),
     ...(value.attempts === undefined ? {} : { attempts: value.attempts }),
     ...(value.failures === undefined ? {} : { failures: value.failures }),
+    ...(value.skipped === undefined ? {} : { skipped: value.skipped }),
   };
 }
 

@@ -49,6 +49,7 @@ type SearchSingleDetails = {
   readonly metadata?: Readonly<Record<string, unknown>>;
   readonly attempts?: readonly string[];
   readonly failures?: readonly ProviderFailure[];
+  readonly skipped?: readonly string[];
 };
 
 type SearchAllDetails = {
@@ -89,6 +90,7 @@ type ReadDetails =
       readonly effectiveProvider: string;
       readonly attempts: readonly string[];
       readonly failures: readonly ProviderFailure[];
+      readonly skipped?: readonly string[];
       readonly options: ReadUrlOptions;
       readonly result: ReadResult;
     }
@@ -541,6 +543,7 @@ export default async function webExtension(pi: ExtensionAPI) {
               pagination: response.pagination,
               attempts: response.attempts,
               failures: response.failures,
+              skipped: response.skipped,
               ...(response.metadata === undefined ? {} : { metadata: response.metadata }),
             },
           };
@@ -658,6 +661,7 @@ export default async function webExtension(pi: ExtensionAPI) {
           effectiveProvider: response.provider,
           attempts: response.attempts,
           failures: response.failures,
+          skipped: response.skipped,
           ...(response.ignoredOptions ? { ignoredOptions: response.ignoredOptions } : {}),
           options: readOptions,
           result: response.result,
