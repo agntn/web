@@ -23,7 +23,7 @@ importers:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
-        version: 1.30.0(zod@4.3.6)
+        version: 1.30.0(zod@4.6.5)
       citty:
         specifier: 0.2.2
         version: 0.2.2
@@ -37,18 +37,18 @@ importers:
         specifier: 8.2.2
         version: 8.2.2
       typebox:
-        specifier: 1.1.39
-        version: 1.1.39
+        specifier: 1.3.34
+        version: 1.3.34
       zod:
-        specifier: 4.3.6
-        version: 4.3.6
+        specifier: 4.6.5
+        version: 4.6.5
     devDependencies:
       '@agntn/ox':
         specifier: 0.1.0
         version: 0.1.0(oxfmt@0.68.0(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)))(oxlint-tsgolint@7.0.2002)(oxlint@1.83.0(oxlint-tsgolint@7.0.2002)(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)))
       '@earendil-works/pi-coding-agent':
         specifier: 0.86.1
-        version: 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
+        version: 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-tui':
         specifier: 0.86.1
         version: 0.86.1
@@ -63,7 +63,7 @@ importers:
         version: 26.6.2
       ai:
         specifier: 6.0.289
-        version: 6.0.289(zod@4.3.6)
+        version: 6.0.289(zod@4.6.5)
       changelogen:
         specifier: 0.6.2
         version: 0.6.2
@@ -2905,11 +2905,11 @@ packages:
     resolution: {integrity: sha512-faYHw0anBbc/kWF3zFTEnxSFOAGUX9GFbOBthvDdLsIlEoWOFOtS0zgCiQYwIskL9iGXZL3kAXD8OoZ4GmMATA==}
     engines: {node: '>= 18'}
 
-  typebox@1.1.39:
-    resolution: {integrity: sha512-vj0afVtOfLQvv0GR0VxVagYxsXN64btL7Z9XoaG0ZggH3mruMMkOO6hXdgMsjCY3shZgEvooAWVeznQVs5c43w==}
-
   typebox@1.3.27:
     resolution: {integrity: sha512-zu+jc1pcy4UiNThxikUr36f0Rybk9PEeCg/NE6adeWr/SKsdNO4EzZHYRDlv2YCVAfj3Odq3dESSo/jNyoBXzA==}
+
+  typebox@1.3.34:
+    resolution: {integrity: sha512-wbnzrXXDW8xEFHDZZs2jo1MkhaYlKAY4FRhpBc1+2LF1fZVBGCXGdLEhA/Z/NBbgzJMFfeM8m7elKPa/+KxaUQ==}
 
   typed-query-selector@2.12.2:
     resolution: {integrity: sha512-EOPFbyIub4ngnEdqi2yOcNeDLaX/0jcE1JoAXQDDMIthap7FoN795lc/SHfIq2d416VufXpM8z/lD+WRm2gfOQ==}
@@ -3069,8 +3069,8 @@ packages:
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
-  zod@4.3.6:
-    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+  zod@4.6.5:
+    resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
 snapshots:
 
@@ -3080,31 +3080,31 @@ snapshots:
       oxlint: 1.83.0(oxlint-tsgolint@7.0.2002)(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))
       oxlint-tsgolint: 7.0.2002
 
-  '@ai-sdk/gateway@3.0.199(zod@4.3.6)':
+  '@ai-sdk/gateway@3.0.199(zod@4.6.5)':
     dependencies:
       '@ai-sdk/provider': 3.0.17
-      '@ai-sdk/provider-utils': 4.0.53(zod@4.3.6)
+      '@ai-sdk/provider-utils': 4.0.53(zod@4.6.5)
       '@vercel/oidc': 3.2.0
-      zod: 4.3.6
+      zod: 4.6.5
 
-  '@ai-sdk/provider-utils@4.0.53(zod@4.3.6)':
+  '@ai-sdk/provider-utils@4.0.53(zod@4.6.5)':
     dependencies:
       '@ai-sdk/provider': 3.0.17
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
       undici: 6.28.1
-      zod: 4.3.6
+      zod: 4.6.5
 
   '@ai-sdk/provider@3.0.17':
     dependencies:
       json-schema: 0.4.0
 
-  '@anthropic-ai/sdk@0.124.0(zod@4.3.6)':
+  '@anthropic-ai/sdk@0.124.0(zod@4.6.5)':
     dependencies:
       json-schema-to-ts: 3.1.1
       standardwebhooks: 1.1.1
     optionalDependencies:
-      zod: 4.3.6
+      zod: 4.6.5
 
   '@aws-sdk/client-bedrock-runtime@3.1127.0':
     dependencies:
@@ -3315,10 +3315,10 @@ snapshots:
     dependencies:
       esbuild: 0.28.2
 
-  '@earendil-works/pi-agent-core@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
+  '@earendil-works/pi-agent-core@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(ws@8.21.3)(zod@4.6.5)':
     dependencies:
       '@earendil-works/chord': 0.86.1
-      '@earendil-works/pi-ai': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
+      '@earendil-works/pi-ai': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-telemetry': 0.86.1
       diff: 8.0.4
       ignore: 7.0.8
@@ -3333,16 +3333,16 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-ai@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
+  '@earendil-works/pi-ai@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(ws@8.21.3)(zod@4.6.5)':
     dependencies:
-      '@anthropic-ai/sdk': 0.124.0(zod@4.3.6)
+      '@anthropic-ai/sdk': 0.124.0(zod@4.6.5)
       '@aws-sdk/client-bedrock-runtime': 3.1127.0
       '@earendil-works/pi-telemetry': 0.86.1
-      '@google/genai': 2.21.0(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))
+      '@google/genai': 2.21.0(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))
       '@smithy/node-http-handler': 4.12.1
       http-proxy-agent: 9.1.0
       https-proxy-agent: 9.1.0
-      openai: 6.40.0(ws@8.21.3)(zod@4.3.6)
+      openai: 6.40.0(ws@8.21.3)(zod@4.6.5)
       partial-json: 0.1.7
       typebox: 1.3.27
     transitivePeerDependencies:
@@ -3354,11 +3354,11 @@ snapshots:
       - ws
       - zod
 
-  '@earendil-works/pi-coding-agent@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)':
+  '@earendil-works/pi-coding-agent@0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(ws@8.21.3)(zod@4.6.5)':
     dependencies:
       '@earendil-works/chord': 0.86.1
-      '@earendil-works/pi-agent-core': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
-      '@earendil-works/pi-ai': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))(ws@8.21.3)(zod@4.3.6)
+      '@earendil-works/pi-agent-core': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(ws@8.21.3)(zod@4.6.5)
+      '@earendil-works/pi-ai': 0.86.1(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))(ws@8.21.3)(zod@4.6.5)
       '@earendil-works/pi-tui': 0.86.1
       '@silvia-odwyer/photon-node': 0.3.4
       chalk: 6.0.0
@@ -3474,14 +3474,14 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@google/genai@2.21.0(@modelcontextprotocol/sdk@1.30.0(zod@4.3.6))':
+  '@google/genai@2.21.0(@modelcontextprotocol/sdk@1.30.0(zod@4.6.5))':
     dependencies:
       google-auth-library: 10.6.2
       p-retry: 4.6.2
       protobufjs: 7.5.8
       ws: 8.21.3
     optionalDependencies:
-      '@modelcontextprotocol/sdk': 1.30.0(zod@4.3.6)
+      '@modelcontextprotocol/sdk': 1.30.0(zod@4.6.5)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -3624,7 +3624,7 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@modelcontextprotocol/sdk@1.30.0(zod@4.3.6)':
+  '@modelcontextprotocol/sdk@1.30.0(zod@4.6.5)':
     dependencies:
       '@hono/node-server': 2.1.1(hono@4.13.4)
       ajv: 8.20.0
@@ -3641,8 +3641,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 4.3.6
-      zod-to-json-schema: 3.25.2(zod@4.3.6)
+      zod: 4.6.5
+      zod-to-json-schema: 3.25.2(zod@4.6.5)
     transitivePeerDependencies:
       - supports-color
 
@@ -4447,13 +4447,13 @@ snapshots:
 
   agent-base@9.0.0: {}
 
-  ai@6.0.289(zod@4.3.6):
+  ai@6.0.289(zod@4.6.5):
     dependencies:
-      '@ai-sdk/gateway': 3.0.199(zod@4.3.6)
+      '@ai-sdk/gateway': 3.0.199(zod@4.6.5)
       '@ai-sdk/provider': 3.0.17
-      '@ai-sdk/provider-utils': 4.0.53(zod@4.3.6)
+      '@ai-sdk/provider-utils': 4.0.53(zod@4.6.5)
       '@opentelemetry/api': 1.9.1
-      zod: 4.3.6
+      zod: 4.6.5
 
   ajv-formats@3.0.1(ajv@8.20.0):
     optionalDependencies:
@@ -5266,10 +5266,10 @@ snapshots:
       is-inside-container: 1.0.0
       wsl-utils: 0.1.0
 
-  openai@6.40.0(ws@8.21.3)(zod@4.3.6):
+  openai@6.40.0(ws@8.21.3)(zod@4.6.5):
     optionalDependencies:
       ws: 8.21.3
-      zod: 4.3.6
+      zod: 4.6.5
 
   oxfmt@0.68.0(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.2)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)):
     dependencies:
@@ -5733,9 +5733,9 @@ snapshots:
       media-typer: 1.1.1
       mime-types: 3.0.2
 
-  typebox@1.1.39: {}
-
   typebox@1.3.27: {}
+
+  typebox@1.3.34: {}
 
   typed-query-selector@2.12.2: {}
 
@@ -5941,10 +5941,10 @@ snapshots:
       '@yuku-parser/binding-win32-arm64': 0.9.5
       '@yuku-parser/binding-win32-x64': 0.9.5
 
-  zod-to-json-schema@3.25.2(zod@4.3.6):
+  zod-to-json-schema@3.25.2(zod@4.6.5):
     dependencies:
-      zod: 4.3.6
+      zod: 4.6.5
 
   zod@3.25.76: {}
 
-  zod@4.3.6: {}
+  zod@4.6.5: {}

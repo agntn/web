@@ -14,7 +14,7 @@
     "docus": "5.13.0",
     "nuxt": "4.5.2",
     "ofetch": "1.5.1",
-    "zod": "4.5.4"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@iconify-json/lucide": "1.2.136",
@@ -22,7 +22,7 @@
     "@iconify-json/vscode-icons": "1.2.80",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "wrangler": "4.128.0"
+    "wrangler": "4.137.0"
   },
   "packageManager": "pnpm@11.3.0"
 }
