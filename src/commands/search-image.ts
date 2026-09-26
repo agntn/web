@@ -1,4 +1,5 @@
 import { defineCommand } from "citty";
+import { styleText } from "node:util";
 import { consola } from "consola";
 import { sanitizeTerminalText } from "../tui.ts";
 import { providerApiKeyEnvVar } from "../core/providers.ts";
@@ -74,10 +75,10 @@ function writeImageSearchResults(
   }
   for (const result of results) {
     consola.log(
-      `\x1B[1m\x1B[36m${sanitizeTerminalText(result.title || "(no title)", 2048)}\x1B[0m`,
+      styleText(["bold", "cyan"], sanitizeTerminalText(result.title || "(no title)", 2048)),
     );
     consola.log(`  ${sanitizeTerminalText(result.pageUrl, 2048)}`);
-    consola.log(`  \x1B[90m${sanitizeTerminalText(result.imageUrl, 2048)}\x1B[0m`);
+    consola.log(`  ${styleText("gray", sanitizeTerminalText(result.imageUrl, 2048))}`);
     consola.log("");
   }
 }

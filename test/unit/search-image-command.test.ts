@@ -70,6 +70,7 @@ describe("search-image command", () => {
   });
 
   it("removes terminal controls from human-readable matches", async () => {
+    vi.stubEnv("FORCE_COLOR", "1");
     const escape = String.fromCodePoint(0x1b);
     const bell = String.fromCodePoint(0x07);
     const controlSequence = String.fromCodePoint(0x9b);
@@ -91,9 +92,9 @@ describe("search-image command", () => {
     });
 
     expect(mockLog.mock.calls.map(([message]) => String(message))).toEqual([
-      `${escape}[1m${escape}[36mMatch link${escape}[0m`,
+      `${escape}[1m${escape}[36mMatch link${escape}[39m${escape}[22m`,
       "  https://example.com/page forged",
-      `  ${escape}[90mhttps://example.com/image.jpg forged${escape}[0m`,
+      `  ${escape}[90mhttps://example.com/image.jpg forged${escape}[39m`,
       "",
     ]);
   });

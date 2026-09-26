@@ -286,6 +286,7 @@ describe("read command", () => {
   });
 
   it("removes terminal controls from human output without flattening page content", async () => {
+    vi.stubEnv("FORCE_COLOR", "1");
     const escape = String.fromCodePoint(0x1b);
     const bell = String.fromCodePoint(0x07);
     const controlSequence = String.fromCodePoint(0x9b);
@@ -312,9 +313,9 @@ describe("read command", () => {
 
     expect(mockLog.mock.calls.map(([message]) => String(message))).toEqual([
       "[provider=jina requested=auto] read https://example.com/ page",
-      "\x1B[1m\x1B[36mExample Title\x1B[0m",
+      "\x1B[1m\x1B[36mExample Title\x1B[39m\x1B[22m",
       "  https://example.com/ page",
-      "  \x1B[90mDescription safe\x1B[0m",
+      "  \x1B[90mDescription safe\x1B[39m",
       "",
       `Zażółć red world\n    ${joinedEmoji} ${persian}\tlink gap\nnext line safe`,
     ]);

@@ -74,6 +74,27 @@ describe("providers command", () => {
       );
     });
 
+    it("prints plain text when colors are off", async () => {
+      vi.stubEnv("FORCE_COLOR", undefined);
+      vi.stubEnv("NO_COLOR", "1");
+
+      await providersCommand.run!({ args: { json: false } } as never);
+
+      const output = mockLog.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(output).toContain("\u2717 exa  EXA_API_KEY not set  operations=search");
+      expect(output).not.toContain("\x1B");
+    });
+
+    it("colors the status marks when colors are forced", async () => {
+      vi.stubEnv("FORCE_COLOR", "1");
+
+      await providersCommand.run!({ args: { json: false } } as never);
+
+      const lines = mockLog.mock.calls.map((c) => String(c[0]));
+      const searxngLine = lines.find((l) => l.includes("searxng"));
+      expect(searxngLine?.startsWith("  \x1B[32m\u2713\x1B[39m searxng  \x1B[90m")).toBe(true);
+    });
+
     it("shows configured provider with checkmark when env var is set", async () => {
       process.env.EXA_API_KEY = "test-key";
 

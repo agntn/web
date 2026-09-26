@@ -163,6 +163,7 @@ describe("search command", () => {
   });
 
   it("removes terminal controls from human-readable results", async () => {
+    vi.stubEnv("FORCE_COLOR", "1");
     const escape = String.fromCodePoint(0x1b);
     const bell = String.fromCodePoint(0x07);
     const controlSequence = String.fromCodePoint(0x9b);
@@ -179,9 +180,9 @@ describe("search command", () => {
     await runSearch({ provider: "exa" });
 
     expect(mockLog.mock.calls.map(([message]) => message)).toEqual([
-      `${escape}[1m${escape}[36mResult link${escape}[0m`,
+      `${escape}[1m${escape}[36mResult link${escape}[39m${escape}[22m`,
       "  https://example.com/ spoofed",
-      `  ${escape}[90msafe text${escape}[0m`,
+      `  ${escape}[90msafe text${escape}[39m`,
       "",
     ]);
   });
