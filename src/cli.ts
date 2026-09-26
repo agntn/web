@@ -44,6 +44,20 @@ async function reportError(message: string): Promise<void> {
   consola.error(sanitizeTerminalText(message, 2048));
 }
 
+/**
+ * Ends the process once the reader of stdout or stderr is gone, as after `| head -1` or a pager that
+ * quits early. Node ignores SIGPIPE, so without a listener the next write throws `EPIPE` with a stack
+ * trace. The exit code stays whatever the command set.
+ * @param error - The error the stream emitted.
+ */
+function exitOnClosedPipe(error: Readonly<NodeJS.ErrnoException>): void {
+  if (error.code !== "EPIPE") throw error;
+  process.exit();
+}
+
+process.stdout.on("error", exitOnClosedPipe);
+process.stderr.on("error", exitOnClosedPipe);
+
 const main = defineCommand({
   meta: {
     name: "web",

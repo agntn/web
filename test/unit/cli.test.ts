@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { describe, it } from "vite-plus/test";
@@ -185,5 +186,52 @@ describe.concurrent("web data paths", () => {
     const { code, loaded } = await run("search", "query", "--provider", "brave");
     expect(code).toBe(1);
     expect(providerModules(loaded)).toEqual(["brave"]);
+  });
+});
+
+interface Closed {
+  readonly code: number | null;
+  readonly output: string;
+}
+
+/**
+ * Runs the CLI with one of its output streams closed before the first write, as after `| head -1`
+ * or a pager that quits early, and collects what reached the other one.
+ * @param closed - The stream whose reader goes away.
+ * @param args - Arguments for `web`.
+ * @returns {Promise<Closed>} The exit code and the text on the stream left open.
+ */
+async function closedPipe(
+  closed: "stdout" | "stderr",
+  ...args: readonly string[]
+): Promise<Closed> {
+  const child = spawn(process.execPath, ["src/cli.ts", ...args], {
+    cwd: process.cwd(),
+    // consola keeps info lines quiet under NODE_ENV=test, and the listing has to reach the pipe.
+    env: { ...process.env, BRAVE_API_KEY: "", CONSOLA_LEVEL: "3", NODE_ENV: "test" },
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 10_000,
+  });
+  child[closed].destroy();
+  let output = "";
+  child[closed === "stdout" ? "stderr" : "stdout"]
+    .setEncoding("utf8")
+    .on("data", (chunk: string) => (output += chunk));
+  await once(child, "close");
+  return { code: child.exitCode, output };
+}
+
+describe.concurrent("web with a closed pipe", () => {
+  it.for([{ args: ["providers"] }, { args: ["providers", "--json"] }])(
+    "web $args ends quietly when stdout closes",
+    async ({ args }, { expect }) => {
+      await expect(closedPipe("stdout", ...args)).resolves.toEqual({ code: 0, output: "" });
+    },
+  );
+
+  it("keeps exit code 1 when stderr closes under a failure", async ({ expect }) => {
+    await expect(
+      closedPipe("stderr", "search", "query", "--provider", "brave", "--continuation", "garbage"),
+    ).resolves.toEqual({ code: 1, output: "" });
   });
 });
