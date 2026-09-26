@@ -1,7 +1,11 @@
 #!/usr/bin/env node
 
+import { existsSync } from "node:fs";
+import { sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { type ArgsDef, type CommandDef, defineCommand, runMain } from "citty";
 import { normalizeMainArgs } from "./cli-args.ts";
+import type McpCommand from "./commands/mcp.ts";
 import { WebError } from "./core/errors.ts";
 import { version } from "./version.ts";
 
@@ -45,6 +49,39 @@ async function reportError(message: string): Promise<void> {
 }
 
 /**
+ * Narrows the module a runtime URL import returned, which TypeScript types as `any`.
+ * @param value - The imported module namespace.
+ * @returns {boolean} Whether it exports a default command.
+ */
+function isMcpModule(value: unknown): value is { readonly default: typeof McpCommand } {
+  return typeof value === "object" && value !== null && "default" in value;
+}
+
+/**
+ * Loads the MCP command. A built bin inside a checkout runs the live source, as the Pi and OMP
+ * extensions do, so a local server needs a restart after a change instead of `vp pack`. The npm
+ * package ships no `src/commands` and keeps the bundle, and so does a copy under `node_modules`,
+ * where Node refuses to strip types. `WEB_DIST=1` keeps it everywhere, for tests of the build. The
+ * URL is built at runtime, because a literal import would pull the source into the bundle.
+ * @returns {Promise<{ readonly default: typeof McpCommand }>} The module whose default command
+ * starts the stdio server.
+ */
+async function loadMcpCommand(): Promise<{ readonly default: typeof McpCommand }> {
+  // The same file from `src/cli.ts` and `dist/cli.mjs`.
+  const source = new URL("../src/commands/mcp.ts", import.meta.url);
+  const sourcePath = fileURLToPath(source);
+  const fromSource =
+    !import.meta.url.endsWith(".ts") &&
+    process.env.WEB_DIST !== "1" &&
+    !sourcePath.includes(`${sep}node_modules${sep}`) &&
+    existsSync(sourcePath);
+  if (!fromSource) return import("./commands/mcp.ts");
+  const module: unknown = await import(source.href);
+  if (!isMcpModule(module)) throw new TypeError(`${sourcePath} has no default command`);
+  return module;
+}
+
+/**
  * Ends the process once the reader of stdout or stderr is gone, as after `| head -1` or a pager that
  * quits early. Node ignores SIGPIPE, so without a listener the next write throws `EPIPE` with a stack
  * trace. The exit code stays whatever the command set.
@@ -69,7 +106,7 @@ const main = defineCommand({
     "search-image": () => command(() => import("./commands/search-image.ts")),
     read: () => command(() => import("./commands/read.ts")),
     providers: () => command(() => import("./commands/providers.ts")),
-    mcp: () => command(() => import("./commands/mcp.ts")),
+    mcp: () => command(loadMcpCommand),
   },
 });
 
