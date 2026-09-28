@@ -47,7 +47,7 @@ interface TinyfishFetchResult {
   readonly language?: string | null;
   readonly author?: string | null;
   readonly published_date?: string | null;
-  readonly text: string | Readonly<Record<string, unknown>>;
+  readonly text: string | Readonly<Record<string, unknown>> | null;
   readonly links?: readonly string[];
   readonly image_links?: readonly string[];
   readonly unmatched_selectors?: readonly string[];
@@ -123,18 +123,51 @@ export class TinyfishProvider extends Provider {
 
   async read(url: string, options?: Readonly<ReadOptions>): Promise<ReadResult> {
     try {
-      const response = await this.readClient.postJSON<TinyfishFetchResponse>(
-        this.readBaseURL,
-        fetchBody(url, options),
-        this.authHeaders(),
-        options?.signal,
-      );
-      const result = response.results?.[0];
-      if (result) return mapReadResult(result);
-      throw fetchFailure(response.errors?.[0]);
+      const body = fetchBody(url, options);
+      const result = await this.fetchResult(body, options);
+      if (!mayBePlainText(result)) return mapReadResult(result);
+
+      const tree = await this.documentTree(body, options);
+      return mapReadResult({ ...result, text: codeDocumentText(tree?.text) ?? result.text });
     } catch (error) {
       throw normalizeError(error, "tinyfish");
     }
+  }
+
+  /**
+   * The Markdown already answered, so a failed tree keeps it instead of failing the read.
+   * @param body - Request body of the Markdown fetch.
+   * @param options - Read options carrying the caller's signal.
+   * @returns {Promise<TinyfishFetchResult | undefined>} The JSON result, or undefined when it failed.
+   */
+  private async documentTree(
+    body: Readonly<Record<string, unknown>>,
+    options?: Readonly<ReadOptions>,
+  ): Promise<TinyfishFetchResult | undefined> {
+    try {
+      return await this.fetchResult(
+        { ...body, format: "json", links: false, image_links: false },
+        options,
+      );
+    } catch (error) {
+      if (options?.signal?.aborted) throw error;
+      return undefined;
+    }
+  }
+
+  private async fetchResult(
+    body: Readonly<Record<string, unknown>>,
+    options?: Readonly<ReadOptions>,
+  ): Promise<TinyfishFetchResult> {
+    const response = await this.readClient.postJSON<TinyfishFetchResponse>(
+      this.readBaseURL,
+      body,
+      this.authHeaders(),
+      options?.signal,
+    );
+    const result = response.results?.[0];
+    if (result) return result;
+    throw fetchFailure(response.errors?.[0]);
   }
 
   private authHeaders(): Record<string, string> {
@@ -279,6 +312,38 @@ function selectorParams(options?: Readonly<ReadOptions>): Record<string, readonl
 
 function normalizeReadFormat(format?: ReadOptions["format"]): "markdown" | "html" {
   return format === "html" ? "html" : "markdown";
+}
+
+/**
+ * TinyFish parses a plain-text file as HTML when it writes Markdown, so `<script/x.h>`
+ * swallows the rest of the file. Such a file comes back without page metadata.
+ * @param result - Markdown fetch result.
+ * @returns {boolean} Whether the JSON tree may hold the file whole.
+ */
+function mayBePlainText(result: Readonly<TinyfishFetchResult>): boolean {
+  return result.format === "markdown" && !result.title && !result.description && !result.language;
+}
+
+/**
+ * The JSON tree keeps a plain-text file whole, as its only `code` node.
+ * @param text - `text` of a JSON fetch result.
+ * @returns {string | undefined} The file, or undefined for any other tree.
+ */
+function codeDocumentText(text: TinyfishFetchResult["text"] | undefined): string | undefined {
+  const children = typeof text === "object" && text !== null ? text.children : undefined;
+  if (!Array.isArray(children) || children.length !== 1) return undefined;
+  const nodes: readonly unknown[] = children;
+  return codeNodeText(nodes[0]);
+}
+
+/**
+ * @param node - Only node of a JSON document tree.
+ * @returns {string | undefined} Text of a `code` node.
+ */
+function codeNodeText(node: unknown): string | undefined {
+  if (typeof node !== "object" || node === null || !("type" in node)) return undefined;
+  if (node.type !== "code" || !("text" in node)) return undefined;
+  return typeof node.text === "string" ? node.text : undefined;
 }
 
 function mapReadResult(result: Readonly<TinyfishFetchResult>): ReadResult {
