@@ -52,6 +52,7 @@ import {
   AuthError,
   HTTPError,
   PaymentError,
+  PageFetchError,
   WebError,
   normalizeError,
 } from "../../src/core/errors.ts";
@@ -421,6 +422,37 @@ describe("tavily provider", () => {
       expect(failure).toBeInstanceOf(WebError);
       expect(failure).not.toBeInstanceOf(HTTPError);
       expect(failure).toMatchObject({ message: "Tavily extract failed: 404 page not found" });
+      expect(isFallbackEligible(failure, "tavily", "read")).toBe(false);
+    });
+
+    it("lets an automatic read move on when Extract could not fetch the page", async () => {
+      mockReadPostJSON.mockResolvedValueOnce({
+        results: [],
+        failed_results: [{ url: "https://example.com/blocked", error: "Failed to fetch url" }],
+        response_time: 0.33,
+        request_id: "98024ac2-b144-4917-aeb0-1b8c243f4226",
+      });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
+      const failure = await provider
+        .read("https://example.com/blocked")
+        .catch((caught: unknown) => caught);
+
+      expect(failure).toBeInstanceOf(PageFetchError);
+      expect(failure).toMatchObject({ message: "Tavily extract failed: Failed to fetch url" });
+      expect(isFallbackEligible(failure, "tavily", "read")).toBe(true);
+    });
+
+    it("keeps an unknown Extract reason strict", async () => {
+      mockReadPostJSON.mockResolvedValueOnce({
+        results: [],
+        failed_results: [{ url: "https://example.com/odd", error: "Something else broke" }],
+      });
+      const provider = await createReadProvider("tavily", { apiKey: "test-key" });
+      const failure = await provider
+        .read("https://example.com/odd")
+        .catch((caught: unknown) => caught);
+
+      expect(failure).not.toBeInstanceOf(PageFetchError);
       expect(isFallbackEligible(failure, "tavily", "read")).toBe(false);
     });
 
