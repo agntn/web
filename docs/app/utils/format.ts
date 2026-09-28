@@ -90,3 +90,14 @@ export function hostPath(url: string): string {
     return url;
   }
 }
+
+/** `2024-01-20T14:25:10.000Z` → `2024-01-20 14:25`. */
+export function shortStamp(iso: string): string {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/u.exec(iso);
+  return match ? `${match[1]} ${match[2]}` : iso;
+}
+
+/** A provider's URL as a link target only when it is http(s); anything else a page author wrote stays text. */
+export function webHref(url: string | null | undefined): string | undefined {
+  return url && /^https?:\/\//iu.test(url) ? url : undefined;
+}
