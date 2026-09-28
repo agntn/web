@@ -380,6 +380,34 @@ describe("tinyfish provider", () => {
     expect(result.content).toBe(source);
   });
 
+  it("reads a plain-text file whole as escaped HTML", async () => {
+    const source = '#include <script/sign.h>\n\nint f() { return a < b && c > "d"; }\n';
+    mockPostJSON
+      .mockResolvedValueOnce({
+        results: [{ url: "https://example.com/sign.cpp", text: "#include", format: "html" }],
+        errors: [],
+      })
+      .mockResolvedValueOnce({
+        results: [
+          {
+            url: "https://example.com/sign.cpp",
+            text: { type: "document", children: [{ type: "code", text: source }] },
+            format: "json",
+          },
+        ],
+        errors: [],
+      });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+
+    const result = await provider.read("https://example.com/sign.cpp", { format: "html" });
+
+    expect(mockPostJSON.mock.calls[1]?.[1]).toMatchObject({ format: "json" });
+    const html =
+      '<pre>#include &lt;script/sign.h&gt;\n\nint f() { return a &lt; b &amp;&amp; c &gt; "d"; }\n</pre>';
+    expect(result.html).toBe(html);
+    expect(result.content).toBe(html);
+  });
+
   it("keeps the Markdown of an untitled page that is not one code block", async () => {
     mockPostJSON
       .mockResolvedValueOnce({

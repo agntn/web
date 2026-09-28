@@ -128,7 +128,12 @@ export class TinyfishProvider extends Provider {
       if (!mayBePlainText(result)) return mapReadResult(result);
 
       const tree = await this.documentTree(body, options);
-      return mapReadResult({ ...result, text: codeDocumentText(tree?.text) ?? result.text });
+      const file = codeDocumentText(tree?.text);
+      if (file === undefined) return mapReadResult(result);
+      return mapReadResult({
+        ...result,
+        text: result.format === "html" ? preformatted(file) : file,
+      });
     } catch (error) {
       throw normalizeError(error, "tinyfish");
     }
@@ -315,13 +320,27 @@ function normalizeReadFormat(format?: ReadOptions["format"]): "markdown" | "html
 }
 
 /**
- * TinyFish parses a plain-text file as HTML when it writes Markdown, so `<script/x.h>`
- * swallows the rest of the file. Such a file comes back without page metadata.
- * @param result - Markdown fetch result.
+ * TinyFish parses a plain-text file as HTML, so `<script/x.h>` swallows the rest of the file
+ * in Markdown and in HTML alike. Such a file comes back without page metadata.
+ * @param result - Markdown or HTML fetch result.
  * @returns {boolean} Whether the JSON tree may hold the file whole.
  */
 function mayBePlainText(result: Readonly<TinyfishFetchResult>): boolean {
-  return result.format === "markdown" && !result.title && !result.description && !result.language;
+  return (
+    (result.format === "markdown" || result.format === "html") &&
+    !result.title &&
+    !result.description &&
+    !result.language
+  );
+}
+
+/**
+ * A browser wraps a plain-text file the same way, so an `html` read still holds HTML.
+ * @param file - Plain-text file.
+ * @returns {string} The file escaped inside `<pre>`.
+ */
+function preformatted(file: string): string {
+  return `<pre>${file.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</pre>`;
 }
 
 /**
