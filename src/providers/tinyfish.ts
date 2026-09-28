@@ -127,13 +127,31 @@ export class TinyfishProvider extends Provider {
       const result = await this.fetchResult(body, options);
       if (!mayBePlainText(result)) return mapReadResult(result);
 
-      const tree = await this.fetchResult(
+      const tree = await this.documentTree(body, options);
+      return mapReadResult({ ...result, text: codeDocumentText(tree?.text) ?? result.text });
+    } catch (error) {
+      throw normalizeError(error, "tinyfish");
+    }
+  }
+
+  /**
+   * The Markdown already answered, so a failed tree keeps it instead of failing the read.
+   * @param body - Request body of the Markdown fetch.
+   * @param options - Read options carrying the caller's signal.
+   * @returns {Promise<TinyfishFetchResult | undefined>} The JSON result, or undefined when it failed.
+   */
+  private async documentTree(
+    body: Readonly<Record<string, unknown>>,
+    options?: Readonly<ReadOptions>,
+  ): Promise<TinyfishFetchResult | undefined> {
+    try {
+      return await this.fetchResult(
         { ...body, format: "json", links: false, image_links: false },
         options,
       );
-      return mapReadResult({ ...result, text: codeDocumentText(tree.text) ?? result.text });
     } catch (error) {
-      throw normalizeError(error, "tinyfish");
+      if (options?.signal?.aborted) throw error;
+      return undefined;
     }
   }
 
@@ -311,7 +329,7 @@ function mayBePlainText(result: Readonly<TinyfishFetchResult>): boolean {
  * @param text - `text` of a JSON fetch result.
  * @returns {string | undefined} The file, or undefined for any other tree.
  */
-function codeDocumentText(text: TinyfishFetchResult["text"]): string | undefined {
+function codeDocumentText(text: TinyfishFetchResult["text"] | undefined): string | undefined {
   const children = typeof text === "object" && text !== null ? text.children : undefined;
   if (!Array.isArray(children) || children.length !== 1) return undefined;
   const nodes: readonly unknown[] = children;

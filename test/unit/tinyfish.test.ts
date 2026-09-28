@@ -403,6 +403,38 @@ describe("tinyfish provider", () => {
     expect(result.content).toBe("Hello **world**");
   });
 
+  it("keeps the Markdown when the document tree request fails", async () => {
+    mockPostJSON
+      .mockResolvedValueOnce({
+        results: [{ url: "https://example.com", text: "Hello **world**", format: "markdown" }],
+        errors: [],
+      })
+      .mockRejectedValueOnce(new HTTPError(503, "https://api.fetch.tinyfish.ai", "unavailable"));
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+
+    const result = await provider.read("https://example.com");
+
+    expect(result.content).toBe("Hello **world**");
+  });
+
+  it("stops at the document tree once the caller aborts", async () => {
+    const controller = new AbortController();
+    mockPostJSON
+      .mockResolvedValueOnce({
+        results: [{ url: "https://example.com", text: "Hello **world**", format: "markdown" }],
+        errors: [],
+      })
+      .mockImplementationOnce(async () => {
+        controller.abort();
+        throw new DOMException("This operation was aborted", "AbortError");
+      });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+
+    await expect(
+      provider.read("https://example.com", { signal: controller.signal }),
+    ).rejects.toThrow();
+  });
+
   it("surfaces a per-URL fetch failure", async () => {
     mockPostJSON.mockResolvedValueOnce({
       results: [],
