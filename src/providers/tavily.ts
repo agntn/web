@@ -9,7 +9,14 @@ import type {
 import { Client } from "../core/client.ts";
 import { Provider } from "../core/provider.ts";
 import { TAVILY_SEARCH_TOPICS } from "../core/providers.ts";
-import { AuthError, HTTPError, PaymentError, WebError, normalizeError } from "../core/errors.ts";
+import {
+  AuthError,
+  HTTPError,
+  PageFetchError,
+  PaymentError,
+  WebError,
+  normalizeError,
+} from "../core/errors.ts";
 import { utcDay } from "../core/dates.ts";
 import { snippet } from "../core/text.ts";
 
@@ -255,11 +262,19 @@ function mapExtractResult(
   };
 }
 
+/** Extract's reason when its own fetcher could not get the page, which another reader may still fetch. */
+const FETCH_FAILED_REASON = "Failed to fetch url";
+
 /**
  * A page Extract could not fetch comes back inside HTTP 200 as a `failed_results` row with the reason.
+ * The reasons are free text: only the known fetcher failure becomes a {@link PageFetchError}, so an
+ * automatic read tries the next reader, while `404 page not found` and unknown reasons stay strict.
  * @param failure - Failed row for the requested URL, when Tavily sent one.
  * @returns {WebError} Provider error carrying Tavily's reason.
  */
 function extractFailure(failure?: Readonly<TavilyExtractFailure>): WebError {
-  return new WebError(`Tavily extract failed: ${failure?.error ?? "no result returned"}`);
+  const message = `Tavily extract failed: ${failure?.error ?? "no result returned"}`;
+  return failure?.error?.trim() === FETCH_FAILED_REASON
+    ? new PageFetchError(message)
+    : new WebError(message);
 }
