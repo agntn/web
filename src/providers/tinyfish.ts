@@ -12,6 +12,7 @@ import {
   AuthError,
   HTTPError,
   InvalidSearchContinuationError,
+  PageFetchError,
   WebError,
   normalizeError,
 } from "../core/errors.ts";
@@ -416,15 +417,30 @@ function readResultMetadata(result: Readonly<TinyfishFetchResult>): Record<strin
   };
 }
 
+/**
+ * Per-URL failures that come from TinyFish's own fetcher, not from the page or the request.
+ * The status of `target_http_error` is what TinyFish got back, and a 401 on a public raw file
+ * that curl read fine showed it can't be read as the page refusing everyone.
+ */
+const FETCHER_FAILURES = new Set([
+  "target_http_error",
+  "target_unreachable",
+  "timeout",
+  "bot_blocked",
+  "empty_content",
+  "login_required",
+  "content_too_large",
+  "proxy_error",
+]);
+
 function fetchFailure(error?: Readonly<TinyfishFetchError>): WebError {
   const reason = error?.error ?? "no result returned";
   if (error?.error === "page_not_found" && error.status !== undefined) {
     return new HTTPError(error.status, "", reason);
   }
 
-  return new WebError(
-    `TinyFish fetch failed: ${reason}${statusSuffix(error)}${selectorHint(error)}`,
-  );
+  const message = `TinyFish fetch failed: ${reason}${statusSuffix(error)}${selectorHint(error)}`;
+  return FETCHER_FAILURES.has(reason) ? new PageFetchError(message) : new WebError(message);
 }
 
 function statusSuffix(error?: Readonly<TinyfishFetchError>): string {

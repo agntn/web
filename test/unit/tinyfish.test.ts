@@ -45,7 +45,14 @@ vi.mock("../../src/core/client.ts", () => ({
 }));
 
 import { Client } from "../../src/core/client.ts";
-import { AuthError, HTTPError, InvalidProviderUrlError, WebError } from "../../src/core/errors.ts";
+import {
+  AuthError,
+  HTTPError,
+  InvalidProviderUrlError,
+  PageFetchError,
+  WebError,
+} from "../../src/core/errors.ts";
+import { isFallbackEligible } from "../../src/core/fallback.ts";
 import { isPaginatedSearchProvider, isReadProvider } from "../../src/core/provider.ts";
 import { createSearchProvider, has } from "../../src/core/registry.ts";
 import type { ProviderConfig } from "../../src/core/types.ts";
@@ -481,6 +488,50 @@ describe("tinyfish provider", () => {
       message:
         'TinyFish fetch failed: selector_not_matched; candidate selectors: ["main","#content"]',
     } satisfies Partial<WebError>);
+  });
+
+  it.each([
+    ["timeout", undefined],
+    ["bot_blocked", undefined],
+    ["login_required", undefined],
+    ["target_http_error", 401],
+    ["target_unreachable", undefined],
+    ["empty_content", undefined],
+    ["content_too_large", undefined],
+    ["proxy_error", undefined],
+  ])("lets an automatic read try the next reader after %s", async (code, status) => {
+    mockPostJSON.mockResolvedValueOnce({
+      results: [],
+      errors: [{ url: "https://example.com", error: code, ...(status ? { status } : {}) }],
+    });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+    const failure = await provider.read("https://example.com").catch((caught: unknown) => caught);
+
+    expect(failure).toBeInstanceOf(PageFetchError);
+    expect(failure).toMatchObject({
+      message: `TinyFish fetch failed: ${code}${status ? ` (HTTP ${status})` : ""}`,
+    });
+    expect(isFallbackEligible(failure, "tinyfish", "read")).toBe(true);
+  });
+
+  it.each([
+    "invalid_url",
+    "invalid_redirect_url",
+    "selector_not_matched",
+    "selector_unsupported",
+    "conditional_unsupported",
+    "an_unknown_code",
+  ])("stops an automatic read on %s", async (code) => {
+    mockPostJSON.mockResolvedValueOnce({
+      results: [],
+      errors: [{ url: "https://example.com", error: code }],
+    });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+    const failure = await provider.read("https://example.com").catch((caught: unknown) => caught);
+
+    expect(failure).toBeInstanceOf(WebError);
+    expect(failure).not.toBeInstanceOf(PageFetchError);
+    expect(isFallbackEligible(failure, "tinyfish", "read")).toBe(false);
   });
 
   it("preserves page-not-found status", async () => {
