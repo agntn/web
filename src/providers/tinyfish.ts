@@ -336,11 +336,12 @@ function mayBePlainText(result: Readonly<TinyfishFetchResult>): boolean {
 
 /**
  * A browser wraps a plain-text file the same way, so an `html` read still holds HTML.
+ * The parser drops one line feed right after `<pre>`, so the file starts after one of its own.
  * @param file - Plain-text file.
  * @returns {string} The file escaped inside `<pre>`.
  */
 function preformatted(file: string): string {
-  return `<pre>${file.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</pre>`;
+  return `<pre>\n${file.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</pre>`;
 }
 
 /**
