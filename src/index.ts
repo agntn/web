@@ -64,6 +64,7 @@ export {
   WebError,
   HTTPError,
   PaymentError,
+  PageFetchError,
   AuthError,
   RateLimitError,
   UnknownProviderError,

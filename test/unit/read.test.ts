@@ -7,6 +7,7 @@ import {
   EmptyUrlError,
   HTTPError,
   InvalidReadContinuationError,
+  PageFetchError,
   RateLimitError,
   ReadNotSupportedError,
   StaleReadContinuationError,
@@ -258,6 +259,29 @@ describe("readUrl", () => {
       failures: [
         { provider: "jina", error: timeoutFailure.message },
         { provider: "context", error: rateLimitFailure.message },
+      ],
+    });
+  });
+
+  it("moves past a reader whose fetcher could not get the page", async () => {
+    const spent = new HTTPError(402, "https://r.jina.ai", "Payment required");
+    const blocked = new PageFetchError("TinyFish fetch failed: bot_blocked");
+    registerReader("jina", async () => {
+      throw spent;
+    });
+    registerReader("tinyfish", async () => {
+      throw blocked;
+    });
+    registerReader("tavily", async () => ({ url: "https://example.com", content: "ok" }));
+    process.env.TINYFISH_API_KEY = "test-key";
+    process.env.TAVILY_API_KEY = "test-key";
+
+    await expect(readUrlDetailed("https://example.com")).resolves.toMatchObject({
+      provider: "tavily",
+      attempts: ["jina", "tinyfish", "tavily"],
+      failures: [
+        { provider: "jina", error: spent.message },
+        { provider: "tinyfish", error: blocked.message },
       ],
     });
   });

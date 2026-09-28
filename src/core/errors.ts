@@ -53,6 +53,17 @@ export class PaymentError extends HTTPError {
   }
 }
 
+/**
+ * A reader's own fetcher could not get the page: a bot check, a login wall, a timeout or a network failure on its side.
+ * Another reader fetches the page its own way, so automatic reads move on to the next one.
+ */
+export class PageFetchError extends WebError {
+  constructor(message: string) {
+    super(message);
+    this.name = "PageFetchError";
+  }
+}
+
 function formatHTTPErrorMessage(statusCode: number, url: string, body: string): string {
   const header = `HTTP ${statusCode}: ${url}`;
   const excerpt = bodyExcerpt(body);
