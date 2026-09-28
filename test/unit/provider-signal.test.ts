@@ -123,7 +123,7 @@ function postResponse(url: string): unknown {
   if (url.includes("api.tavily.com")) return { results: [] };
   if (url.includes("api.fetch.tinyfish.ai")) {
     return {
-      results: [{ url: "https://example.com", text: "page", format: "markdown" }],
+      results: [{ url: "https://example.com", title: "Page", text: "page", format: "markdown" }],
     };
   }
   throw new Error(`Unexpected POST request: ${url}`);

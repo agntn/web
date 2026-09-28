@@ -16,6 +16,7 @@ const mockPostJSON =
       url: string,
       body: Readonly<Record<string, unknown>>,
       headers?: Readonly<Record<string, string>>,
+      signal?: Readonly<AbortSignal>,
     ) => Promise<unknown>
   >();
 
@@ -335,6 +336,71 @@ describe("tinyfish provider", () => {
     await provider.read("https://example.com", { timeout: 0 });
 
     expect(mockPostJSON.mock.calls[0]?.[1]).toMatchObject({ per_url_timeout_ms: 1 });
+  });
+
+  it("reads a plain-text file from the document tree", async () => {
+    const source = "#include <pubkey.h>\n#include <script/script.h>\n\nint main() {}\n";
+    mockPostJSON
+      .mockResolvedValueOnce({
+        results: [
+          {
+            url: "https://example.com/main.cpp",
+            title: null,
+            description: null,
+            language: null,
+            text: "#include \n#include",
+            format: "markdown",
+          },
+        ],
+        errors: [],
+      })
+      .mockResolvedValueOnce({
+        results: [
+          {
+            url: "https://example.com/main.cpp",
+            text: { type: "document", children: [{ type: "code", text: source }] },
+            format: "json",
+          },
+        ],
+        errors: [],
+      });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+    const signal = new AbortController().signal;
+
+    const result = await provider.read("https://example.com/main.cpp", { noCache: true, signal });
+
+    expect(mockPostJSON.mock.calls[1]?.[3]).toBe(signal);
+    expect(mockPostJSON.mock.calls[1]?.[1]).toEqual({
+      urls: ["https://example.com/main.cpp"],
+      format: "json",
+      links: false,
+      image_links: false,
+      ttl: 0,
+    });
+    expect(result.content).toBe(source);
+  });
+
+  it("keeps the Markdown of an untitled page that is not one code block", async () => {
+    mockPostJSON
+      .mockResolvedValueOnce({
+        results: [{ url: "https://example.com", text: "Hello **world**", format: "markdown" }],
+        errors: [],
+      })
+      .mockResolvedValueOnce({
+        results: [
+          {
+            url: "https://example.com",
+            text: { type: "document", children: [{ type: "paragraph", text: "Hello world" }] },
+            format: "json",
+          },
+        ],
+        errors: [],
+      });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+
+    const result = await provider.read("https://example.com");
+
+    expect(result.content).toBe("Hello **world**");
   });
 
   it("surfaces a per-URL fetch failure", async () => {
