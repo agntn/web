@@ -1,57 +1,195 @@
 <script setup lang="ts">
 import type { SearchSample } from "../../utils/landing-fixtures";
-import { clip, dateOnly, hostOf, plainText } from "../../utils/format";
-import { providerIcon, providerLabel } from "../../utils/providers";
+import { hostOf, plainText } from "../../utils/format";
+import { providerIcon, providerInfo, providerLabel } from "../../utils/providers";
 
-const props = defineProps<{ sample: SearchSample; tick: number }>();
+const props = defineProps<{ sample: SearchSample }>();
 
-defineEmits<{ step: [delta: number]; pause: [paused: boolean] }>();
+const emit = defineEmits<{ step: [delta: number]; pause: [paused: boolean] }>();
 
-const rows = computed(() => props.sample.results.slice(0, 4));
+/** Always four rows: a provider that answers with fewer must not shrink the panel. */
+const slots = computed(() => {
+  const rows = props.sample.results.slice(0, 4);
+  return [...rows, ...Array.from({ length: 4 - rows.length }, () => null)];
+});
+
+const PAGINATION: Record<string, string> = {
+  next: "next page through a continuation token",
+  end: "the provider has nothing further",
+  unknown: "a continuation, whether more exists is unknown",
+  unsupported: "one page, the provider has no paging",
+};
 </script>
 
 <template>
-  <div class="web-frame overflow-hidden rounded-xl" @mouseenter="$emit('pause', true)" @mouseleave="$emit('pause', false)">
-    <div class="flex items-center justify-between gap-3 border-b border-muted px-4 py-3">
-      <p class="min-w-0 truncate font-mono text-xs text-muted">
-        <span class="text-dimmed">await</span>
-        <span class="ms-2 text-highlighted">search(<span class="tok-str">"<Transition name="web-roll" mode="out-in"><span :key="sample.query" class="web-roll-slot">{{ sample.query }}</span></Transition>"</span>)</span>
-      </p>
-      <div class="flex shrink-0 items-center gap-1">
-        <span class="web-state" :class="sample.live ? 'web-state-ok' : ''">{{ sample.live ? "live" : "sample" }}</span>
-        <button type="button" class="web-copy" aria-label="Previous query" @click="$emit('step', -1)">
-          <UIcon name="i-lucide-chevron-left" class="size-3.5" />
-        </button>
-        <button type="button" class="web-copy" aria-label="Next query" @click="$emit('step', 1)">
-          <UIcon name="i-lucide-chevron-right" class="size-3.5" />
-        </button>
+  <section
+    class="tool-console landing-results"
+    aria-label="One search"
+    @mouseenter="emit('pause', true)"
+    @mouseleave="emit('pause', false)"
+    @focusin="emit('pause', true)"
+    @focusout="emit('pause', false)"
+  >
+    <span class="console-cross console-cross-tl" aria-hidden="true">+</span>
+    <span class="console-cross console-cross-br" aria-hidden="true">+</span>
+
+    <header class="console-bar">
+      <UTooltip :text="`search(&quot;${sample.query}&quot;, { maxResults: 5 })`">
+        <span class="console-title" tabindex="0"
+          ><span class="console-tag">Call</span>search(<span class="tok-str">"{{ sample.query }}"</span>)</span
+        >
+      </UTooltip>
+      <span class="console-meta">{{ sample.live ? "live" : "recorded" }}</span>
+      <span class="console-mark" aria-hidden="true" />
+    </header>
+    <div class="console-ruler" aria-hidden="true">
+      <span :key="sample.query" class="console-cursor" />
+    </div>
+
+    <div class="results-subject">
+      <div :key="sample.query" class="console-scan" aria-hidden="true" />
+      <ConsoleReticle :key="sample.query" :icon="providerIcon(sample.provider)" />
+      <div class="results-name">
+        <span class="console-label"
+          >Provider / <span class="console-label-key">create("{{ sample.provider }}")</span></span
+        >
+        <h3>{{ providerLabel(sample.provider) }}</h3>
+        <p class="results-about">
+          {{ sample.results.length }} results,
+          {{ PAGINATION[sample.pagination] ?? sample.pagination }}.
+        </p>
       </div>
     </div>
-    <div class="flex items-center gap-2 border-b border-muted px-4 py-2.5">
-      <UIcon :name="providerIcon(sample.provider)" class="size-4 text-primary" />
-      <span class="text-sm font-medium text-highlighted">{{ providerLabel(sample.provider) }}</span>
-      <span class="font-mono text-[11px] text-dimmed">create("{{ sample.provider }}")</span>
-      <span class="ms-auto font-mono text-[11px] text-dimmed">pagination · {{ sample.pagination }}</span>
-    </div>
-    <ol :key="sample.query" class="web-derive divide-y divide-muted">
-      <li v-for="(result, i) in rows" :key="result.url" class="flex gap-3 px-4 py-3">
-        <span class="mt-0.5 w-4 shrink-0 font-mono text-[11px] text-dimmed">{{ i + 1 }}</span>
-        <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-highlighted">{{ plainText(result.title) }}</p>
-          <p class="mt-0.5 truncate font-mono text-[11px] text-primary">{{ hostOf(result.url) }}</p>
-          <p class="mt-1 text-[13px] leading-5 text-muted">{{ clip(plainText(result.snippet), 150) }}</p>
-          <p v-if="result.publishedDate || typeof result.score === 'number'" class="mt-1 font-mono text-[11px] text-dimmed">
-            <span v-if="result.publishedDate">published {{ dateOnly(result.publishedDate) }}</span>
-            <span v-if="result.publishedDate && typeof result.score === 'number'" class="mx-1">·</span>
-            <span v-if="typeof result.score === 'number'">score {{ result.score.toFixed(3) }}</span>
-          </p>
-        </div>
+
+    <!-- Four rows whatever the sample, so the panel keeps one height. -->
+    <ol :key="sample.query" class="web-rows results-rows console-animate">
+      <li
+        v-for="(result, index) in slots"
+        :key="result?.url ?? `empty-${index}`"
+        :style="{ animationDelay: `${index * 45}ms` }"
+      >
+        <template v-if="result">
+          <span class="web-dim">{{ String(index + 1).padStart(2, "0") }}</span>
+          <UTooltip :text="plainText(result.title) || result.url">
+            <span class="results-title" tabindex="0">{{ plainText(result.title) || result.url }}</span>
+          </UTooltip>
+          <span class="results-host">{{ hostOf(result.url) }}</span>
+        </template>
+        <span v-else class="results-empty" aria-hidden="true">&#160;</span>
       </li>
     </ol>
-    <div class="border-t border-muted px-4 py-3">
-      <p class="font-mono text-[11px] text-dimmed">
-        <span class="text-highlighted">{{ sample.results.length }}</span> results, same <span class="text-highlighted">{ url, title, snippet }</span> from every provider
-      </p>
-    </div>
-  </div>
+
+    <footer class="console-footer console-footer-plain">
+      <span class="results-foot"
+        >{ url, title, snippet } from {{ providerInfo(sample.provider)?.host ?? sample.provider }}</span
+      >
+      <div class="console-controls" aria-label="Sample queries">
+        <UButton
+          color="neutral"
+          variant="subtle"
+          square
+          icon="i-lucide-chevron-left"
+          aria-label="Previous query"
+          @click="emit('step', -1)"
+        />
+        <span>Query</span>
+        <UButton
+          color="neutral"
+          variant="subtle"
+          square
+          icon="i-lucide-chevron-right"
+          aria-label="Next query"
+          @click="emit('step', 1)"
+        />
+      </div>
+    </footer>
+  </section>
 </template>
+
+<style scoped>
+.results-subject {
+  position: relative;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 18px 20px 20px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='36' height='36'%3E%3Cpath d='M16 18h4m-2-2v4' fill='none' stroke='%23818a94' stroke-opacity='.1'/%3E%3C/svg%3E");
+  background-size: 36px 36px;
+  background-position: 24px 20px;
+}
+.results-subject > :not(.console-scan) {
+  position: relative;
+}
+.results-name {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.results-name h3 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--ui-text-highlighted);
+}
+.results-about {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ui-text-muted);
+}
+.results-rows {
+  border-top: 1px solid var(--console-line);
+}
+.results-rows > li {
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+}
+.results-title {
+  display: block;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ui-text-highlighted);
+}
+.results-host {
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ui-text-dimmed);
+}
+.results-empty {
+  grid-column: 1 / -1;
+  font-size: 14px;
+}
+.landing-results > .console-footer {
+  flex-wrap: nowrap;
+}
+.results-foot {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (width < 400px) {
+  .results-subject {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 12px;
+    padding-inline: 14px;
+  }
+  .results-host {
+    display: none;
+  }
+  .results-rows > li {
+    grid-template-columns: 1.5rem minmax(0, 1fr);
+  }
+}
+</style>

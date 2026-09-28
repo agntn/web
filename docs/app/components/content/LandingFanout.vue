@@ -1,55 +1,60 @@
 <script setup lang="ts">
 import type { SearchSample } from "../../utils/landing-fixtures";
-import { clip, hostPath, plainText } from "../../utils/format";
-import { providerLabel } from "../../utils/providers";
 
 const props = defineProps<{ sample: SearchSample }>();
 
-const asked = computed(() => [
-  ...props.sample.fanout.successfulProviders.map((provider) => ({ provider, ok: true, message: "" })),
-  ...props.sample.fanout.errors.map((entry) => ({ provider: entry.provider, ok: false, message: entry.message })),
-]);
-
-const rows = computed(() => props.sample.fanout.results.slice(0, 5));
-const shared = computed(() => props.sample.fanout.results.filter((result) => result.providers.length > 1).length);
+const fanout = computed(() => props.sample.fanout);
+const asked = computed(() => [...fanout.value.successfulProviders, ...fanout.value.errors.map((entry) => entry.provider)]);
+const shared = computed(() => fanout.value.results.filter((result) => result.providers.length > 1).length);
 </script>
 
 <template>
-  <div class="web-frame overflow-hidden rounded-xl">
-    <div class="flex items-center justify-between gap-3 border-b border-muted px-4 py-3">
-      <p class="min-w-0 truncate font-mono text-xs text-muted">
-        <span class="text-dimmed">await</span>
-        <span class="ms-2 text-highlighted">searchAllDetailed(<span class="tok-str">"<Transition name="web-roll" mode="out-in"><span :key="sample.query" class="web-roll-slot">{{ sample.query }}</span></Transition>"</span>)</span>
+  <section class="tool-console landing-fanout" aria-label="One fan-out">
+    <span class="console-cross console-cross-tl" aria-hidden="true">+</span>
+    <span class="console-cross console-cross-br" aria-hidden="true">+</span>
+
+    <header class="console-bar">
+      <UTooltip :text="`searchAllDetailed(&quot;${sample.query}&quot;)`">
+        <span class="console-title" tabindex="0"
+          ><span class="console-tag">Call</span>searchAll(<span class="tok-str">"{{ sample.query }}"</span>)</span
+        >
+      </UTooltip>
+      <span class="console-meta">{{ sample.live ? "live" : "recorded" }}</span>
+      <span class="console-mark" aria-hidden="true" />
+    </header>
+    <div class="console-ruler" aria-hidden="true">
+      <span :key="sample.query" class="console-cursor" />
+    </div>
+
+    <div class="web-band">
+      <p class="console-label console-rule-title">
+        <span>Asked <span aria-hidden="true">[ answered · failed · not asked ]</span></span>
+        <span class="console-mark" aria-hidden="true" />
       </p>
-      <span class="web-state shrink-0" :class="sample.live ? 'web-state-ok' : ''">{{ sample.live ? "live" : "sample" }}</span>
+      <ProviderCells :asked="asked" :successful="fanout.successfulProviders" :errors="fanout.errors" />
     </div>
-    <div class="flex flex-wrap items-center gap-1.5 border-b border-muted px-4 py-2.5">
-      <span v-for="entry in asked" :key="entry.provider" class="web-chip" :class="entry.ok ? 'web-chip-ok' : 'web-chip-failed'" :title="entry.message">
-        <span class="web-chip-dot" />
-        {{ providerLabel(entry.provider) }}
-      </span>
-    </div>
-    <ol :key="sample.query" class="web-derive divide-y divide-muted">
-      <li v-for="result in rows" :key="result.url" class="px-4 py-3">
-        <div class="flex items-start justify-between gap-3">
-          <div class="min-w-0">
-            <p class="truncate text-sm font-medium text-highlighted">{{ plainText(result.title) }}</p>
-            <p class="mt-0.5 truncate font-mono text-[11px] text-primary">{{ clip(hostPath(result.url), 60) }}</p>
-          </div>
-          <div class="flex shrink-0 flex-wrap justify-end gap-1">
-            <span v-for="provider in result.providers" :key="provider" class="web-chip web-chip-small">{{ providerLabel(provider) }}</span>
-          </div>
-        </div>
-      </li>
-    </ol>
-    <div class="border-t border-muted px-4 py-3">
-      <p class="font-mono text-[11px] text-dimmed">
-        <span class="text-highlighted">{{ sample.fanout.total }}</span> unique URLs
-        <span class="mx-1">·</span>
-        <span class="text-highlighted">{{ shared }}</span> returned by more than one provider
-        <span class="mx-1">·</span>
-        <span class="text-highlighted">{{ sample.fanout.errors.length }}</span> {{ sample.fanout.errors.length === 1 ? "failure" : "failures" }} kept in <span class="text-highlighted">errors</span>
-      </p>
-    </div>
-  </div>
+
+    <footer class="console-footer console-footer-plain">
+      <span class="fanout-foot"
+        ><span class="console-accent">{{ fanout.total }}</span> unique URLs, {{ shared }} returned by more
+        than one</span
+      >
+      <span class="console-meta">{{ fanout.successfulProviders.length }} of {{ asked.length }} answered</span>
+    </footer>
+  </section>
 </template>
+
+<style scoped>
+.landing-fanout > .console-footer {
+  flex-wrap: nowrap;
+}
+.landing-fanout > .console-footer > .console-meta {
+  flex: none;
+}
+.fanout-foot {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+</style>

@@ -1,0 +1,13 @@
+{
+  "name": "@agntn/web",
+  "short_name": "web",
+  "description": "One TypeScript interface over web search, reverse image search and page reading",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

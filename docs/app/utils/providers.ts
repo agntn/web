@@ -26,6 +26,8 @@ export interface ProviderInfo {
   readonly resultFields: readonly string[];
   readonly readFormats: readonly string[];
   readonly readOptions: readonly string[];
+  /** One sentence on what the adapter talks to, for the roster and the dossier. */
+  readonly about: string;
   readonly to: string;
 }
 
@@ -49,6 +51,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["publishedDate", "favicon", "text"],
     readFormats: [],
     readOptions: [],
+    about:
+      "The Brave Search API, one GET per page, with extra snippets joined into text and a continuation that carries the offset.",
     to: "/providers/brave",
   },
   {
@@ -70,6 +74,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["text", "metadata"],
     readFormats: ["markdown", "html"],
     readOptions: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+    about:
+      "The Context.dev API for search with Markdown ranked by relevance and for scraping pages into Markdown or HTML.",
     to: "/providers/context",
   },
   {
@@ -91,6 +97,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["score", "publishedDate", "author", "image", "favicon", "text", "highlights", "summary"],
     readFormats: ["markdown"],
     readOptions: ["timeout", "noCache"],
+    about:
+      "The Exa neural search API, the richest result shape of the built-ins, with highlights by default and summaries and full text on request, and Exa Contents for reading pages.",
     to: "/providers/exa",
   },
   {
@@ -112,6 +120,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["publishedDate", "image", "text", "metadata"],
     readFormats: ["markdown", "html"],
     readOptions: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+    about:
+      "The Firecrawl v2 API for search with scraped passages and for scraping a page into Markdown or HTML.",
     to: "/providers/firecrawl",
   },
   {
@@ -133,6 +143,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["publishedDate", "image", "text", "metadata"],
     readFormats: ["markdown", "text", "html"],
     readOptions: ["format", "maxTokens", "targetSelector", "removeSelector", "timeout", "noCache"],
+    about:
+      "Jina's s.jina.ai for search and r.jina.ai for reading, the default reader, with an optional key.",
     to: "/providers/jina",
   },
   {
@@ -154,6 +166,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: [],
     readFormats: [],
     readOptions: [],
+    about:
+      "Marginalia Search, an independent index of small personal sites and plain text pages, usable without a key when you name it.",
     to: "/providers/marginalia",
   },
   {
@@ -175,6 +189,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["score", "publishedDate", "image", "metadata"],
     readFormats: [],
     readOptions: [],
+    about:
+      "The Mojeek Search API, an independent index with classic SERP metadata, domain and date filters and paging.",
     to: "/providers/mojeek",
   },
   {
@@ -196,6 +212,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: [],
     readFormats: [],
     readOptions: [],
+    about:
+      "Hosted web search through the ChatGPT Codex backend using an existing Pi, OMP, Codex or OpenCode login. Native sources, not snippets invented by the model.",
     to: "/providers/openai-codex",
   },
   {
@@ -217,6 +235,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["score", "publishedDate", "image", "metadata"],
     readFormats: [],
     readOptions: [],
+    about:
+      "A self-hosted SearXNG metasearch instance, no key, with a reachability probe and the engines behind each result in metadata.",
     to: "/providers/searxng",
   },
   {
@@ -238,6 +258,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["publishedDate", "image", "favicon", "metadata"],
     readFormats: [],
     readOptions: [],
+    about:
+      "SerpAPI's Google endpoints for classic SERP results and Google Lens for reverse image search.",
     to: "/providers/serpapi",
   },
   {
@@ -259,6 +281,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["publishedDate", "image", "favicon", "metadata"],
     readFormats: [],
     readOptions: [],
+    about:
+      "SerpBase's Google SERP endpoints, with a category that picks the web, images, news or videos endpoint.",
     to: "/providers/serpbase",
   },
   {
@@ -280,6 +304,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["score", "publishedDate", "text"],
     readFormats: ["markdown", "text"],
     readOptions: ["format", "timeout"],
+    about:
+      "The Tavily search API, with an optional generated answer in response metadata, and Tavily Extract for reading pages.",
     to: "/providers/tavily",
   },
   {
@@ -301,6 +327,8 @@ export const PROVIDERS: readonly ProviderInfo[] = [
     resultFields: ["publishedDate", "author", "metadata"],
     readFormats: ["markdown", "html"],
     readOptions: ["format", "targetSelector", "removeSelector", "timeout", "noCache"],
+    about:
+      "TinyFish Search for news and research results with publisher metadata, and TinyFish Fetch for reading pages.",
     to: "/providers/tinyfish",
   },
 ];
