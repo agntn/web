@@ -80,7 +80,6 @@
     "consola": "3.4.2",
     "ofetch": "1.5.1",
     "string-width": "8.2.2",
-    "typebox": "1.1.39",
     "zod": "4.3.6"
   },
   "devDependencies": {
@@ -93,6 +92,7 @@
     "ai": "6.0.291",
     "changelogen": "0.6.2",
     "jiti": "2.7.0",
+    "typebox": "1.1.39",
     "typescript": "7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"
@@ -102,7 +102,7 @@
     "@earendil-works/pi-tui": ">=0.86.1 <1",
     "@oh-my-pi/pi-coding-agent": ">=18.0.0 <19",
     "ai": "^6.0.116",
-    "typebox": "^1.1.33",
+    "typebox": "*",
     "zod": "^4.3.6"
   },
   "peerDependenciesMeta": {

@@ -20,6 +20,24 @@ const registryEntry = "test/fixtures/bundle-entry.mjs";
 const versionEntry = "test/fixtures/bundle-entry-version.mjs";
 
 /**
+ * Packages Pi hands its extensions (`HOST_PROVIDED_EXTENSION_PACKAGES` in Pi's resource loader).
+ * A copy in "dependencies" can bypass the host's module mapping, and Pi 0.99 warns on every load
+ * of such a package.
+ */
+const hostProvidedPackages = [
+  "@earendil-works/pi-agent-core",
+  "@earendil-works/pi-ai",
+  "@earendil-works/pi-coding-agent",
+  "@earendil-works/pi-tui",
+  "@mariozechner/pi-agent-core",
+  "@mariozechner/pi-ai",
+  "@mariozechner/pi-coding-agent",
+  "@mariozechner/pi-tui",
+  "@sinclair/typebox",
+  "typebox",
+];
+
+/**
  * Bundles one consumer entry against dist/ the way a consumer's bundler would: trusting
  * package.json about side effects.
  * @param entry - Consumer entry, relative to the repo root.
@@ -64,7 +82,34 @@ function publishedPackage(): string {
   return packageDir;
 }
 
+describe("package manifest", () => {
+  it("leaves the packages Pi supplies to the host", () => {
+    const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+      readonly dependencies?: Readonly<Record<string, string>>;
+      readonly peerDependencies?: Readonly<Record<string, string>>;
+    };
+
+    expect(hostProvidedPackages.filter((name) => name in (manifest.dependencies ?? {}))).toEqual(
+      [],
+    );
+    expect(manifest.peerDependencies?.typebox).toBe("*");
+  });
+});
+
 describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", () => {
+  /** typebox is only an optional peer, so the CLI, the MCP server and their types have to carry their own copy. */
+  it("bundles typebox instead of importing it from dist/", () => {
+    const importers = readdirSync(join(root, "dist"), { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".mjs") || file.endsWith(".d.mts"))
+      .filter((file) =>
+        /(?:from|import)\s*\(?\s*["']typebox(?:\/[^"']*)?["']/u.test(
+          readFileSync(join(root, "dist", file), "utf8"),
+        ),
+      );
+
+    expect(importers).toEqual([]);
+  });
+
   it("keeps every built-in provider listed after a consumer bundles dist/", async () => {
     const outDir = await bundleConsumer(registryEntry);
     const bundle = (await import(pathToFileURL(join(outDir, registryEntry)).href)) as Pick<
