@@ -80,6 +80,66 @@ describe.concurrent("web CLI", () => {
       stderr: "[error] --continuation is only supported for a single query.\n",
     });
   });
+
+  it("refuses an option the command does not declare instead of running without it", async ({
+    expect,
+  }) => {
+    await expect(failure("providers", "--bogus")).resolves.toEqual({
+      code: 1,
+      stdout: "",
+      stderr: "[error] Unknown option --bogus; web providers takes --json\n",
+    });
+    await expect(failure("search-image", "https://example.com/a.jpg", "-x")).resolves.toEqual({
+      code: 1,
+      stdout: "",
+      stderr:
+        "[error] Unknown option -x; web search-image takes --provider, --max-results, --json\n",
+    });
+  });
+
+  it("names a misspelled negated flag the way it was typed", async ({ expect }) => {
+    await expect(
+      failure("read", "https://example.com", "--provider", "exa", "--no-cahce"),
+    ).resolves.toEqual({
+      code: 1,
+      stdout: "",
+      stderr:
+        "[error] Unknown option --no-cahce; web read takes --provider, --format, --max-tokens, --max-chars, --continuation, --links, --images, --cache, --json\n",
+    });
+  });
+
+  it("names a misspelled flag rather than searching for the value it left behind", async ({
+    expect,
+  }) => {
+    const result = await failure("query", "--provider", "brave", "--max-reslts", "3", "--typo=1");
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toMatch(
+      /^\[error\] Unknown options --max-reslts, --typo; web search takes /u,
+    );
+  });
+
+  it("still takes every spelling citty accepts for a declared option", async ({ expect }) => {
+    await expect(
+      failure(
+        "search",
+        "query",
+        "--maxResults",
+        "3",
+        "--no-highlights",
+        "--full-text=true",
+        "--provider",
+        "brave",
+        "--continuation",
+        "garbage",
+      ),
+    ).resolves.toEqual({
+      code: 1,
+      stdout: "",
+      stderr: "[error] Invalid search continuation token\n",
+    });
+  });
 });
 
 interface Run {
@@ -154,6 +214,12 @@ describe.concurrent("web usage paths", () => {
     expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
     expect(providerModules(loaded)).toEqual([]);
   });
+
+  it("web mcp ignores a stray flag from a client config", async ({ expect }) => {
+    const { code, loaded } = await run("mcp", "--bogus");
+    expect(code).toBe(0);
+    expect(new Set(loaded.map(packageOf))).toContain("@modelcontextprotocol/sdk");
+  });
 });
 
 /**
@@ -186,6 +252,13 @@ describe.concurrent("web data paths", () => {
     const { code, loaded } = await run("search", "query", "--provider", "brave");
     expect(code).toBe(1);
     expect(providerModules(loaded)).toEqual(["brave"]);
+  });
+
+  it("web search refuses an undeclared flag before it loads the adapter", async ({ expect }) => {
+    const { code, loaded, stdout } = await run("search", "query", "--provider", "brave", "--bogus");
+    expect(code).toBe(1);
+    expect(stdout).toBe("");
+    expect(providerModules(loaded)).toEqual([]);
   });
 });
 
