@@ -169,7 +169,7 @@ describe("Client", () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
-    it("should call fetch without signal when not provided", async () => {
+    it("should give the request a timeout signal when the caller passes none", async () => {
       const client = new Client();
       const testUrl = "https://api.example.com/data";
       const testData = { result: "success" };
@@ -178,7 +178,11 @@ describe("Client", () => {
 
       const result = await client.getJSON(testUrl);
 
-      expect(mockFetch).toHaveBeenCalledWith(testUrl, { headers: undefined, signal: undefined });
+      expect(mockFetch).toHaveBeenCalledWith(testUrl, {
+        headers: undefined,
+        signal: forwardedSignal(0),
+        retry: false,
+      });
       expect(result).toEqual(testData);
     });
 
@@ -214,7 +218,8 @@ describe("Client", () => {
 
       expect(mockFetch).toHaveBeenCalledWith(testUrl, {
         headers: customHeaders,
-        signal: undefined,
+        signal: forwardedSignal(0),
+        retry: false,
       });
       expect(result).toEqual(testData);
     });
@@ -281,7 +286,8 @@ describe("Client", () => {
         method: "POST",
         body: testBody,
         headers: customHeaders,
-        signal: undefined,
+        signal: forwardedSignal(0),
+        retry: false,
       });
       expect(result).toEqual(testResponse);
     });
@@ -300,7 +306,8 @@ describe("Client", () => {
         method: "POST",
         body: testBody,
         headers: undefined,
-        signal: undefined,
+        signal: forwardedSignal(0),
+        retry: false,
       });
       expect(result).toEqual(testResponse);
     });
@@ -339,7 +346,7 @@ describe("Client", () => {
 
   describe("error mapping", () => {
     it("should map FetchError with statusCode 429 to RateLimitError", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Too many requests");
       error.statusCode = 429;
@@ -364,7 +371,7 @@ describe("Client", () => {
     });
 
     it("should use default retryAfter of 60 when Retry-After header missing", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Too many requests");
       error.statusCode = 429;
@@ -384,7 +391,7 @@ describe("Client", () => {
 
     it("should fall back to 60 for non-numeric Retry-After header", async () => {
       expect.assertions(2);
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Too many requests");
       error.statusCode = 429;
@@ -405,7 +412,7 @@ describe("Client", () => {
 
     it("should fall back to 60 for negative Retry-After header", async () => {
       expect.assertions(2);
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Too many requests");
       error.statusCode = 429;
@@ -425,7 +432,7 @@ describe("Client", () => {
     });
 
     it("should map FetchError with other statusCode to HTTPError", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Server error");
       error.statusCode = 500;
@@ -446,7 +453,7 @@ describe("Client", () => {
     });
 
     it("should stringify error.data when it is an object", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Bad request");
       error.statusCode = 400;
@@ -464,7 +471,7 @@ describe("Client", () => {
     });
 
     it("should leave the body empty for FetchError with null data", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Not found");
       error.statusCode = 404;
@@ -486,7 +493,7 @@ describe("Client", () => {
     });
 
     it("should name the transport failure when no response arrived", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
       const dns = Object.assign(new Error("getaddrinfo ENOTFOUND api.example.com"), {
         code: "ENOTFOUND",
       });
@@ -517,7 +524,7 @@ describe("Client", () => {
     });
 
     it("should list every address behind an aggregate connection failure", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
       const refused = new AggregateError([
         new Error("connect ECONNREFUSED ::1:8080"),
         new Error("connect ECONNREFUSED 127.0.0.1:8080"),
@@ -535,7 +542,7 @@ describe("Client", () => {
     });
 
     it("should leave the body empty when the transport failure has no cause", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       mockFetch.mockRejectedValueOnce(
         new FetchError('[GET] "https://api.example.com/data": <no response>'),
@@ -557,7 +564,7 @@ describe("Client", () => {
     });
 
     it("should redact api_key from URL in HTTPError", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Server error");
       error.statusCode = 500;
@@ -582,7 +589,7 @@ describe("Client", () => {
     });
 
     it("should redact a nested target URL from HTTPError", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Server error");
       error.statusCode = 500;
@@ -609,7 +616,7 @@ describe("Client", () => {
     });
 
     it("should redact secrets from an encoded target URL in the request path", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Server error");
       error.statusCode = 500;
@@ -640,7 +647,7 @@ describe("Client", () => {
     });
 
     it("should preserve an encoded target URL when it contains no secrets", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
       const requestUrl =
         "https://r.jina.ai/https%3A%2F%2Fexample.com%2Fpublic%3Fq%3Dhello%2520world";
 
@@ -663,7 +670,7 @@ describe("Client", () => {
     });
 
     it("should redact multiple sensitive params from URL in HTTPError", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Unauthorized");
       error.statusCode = 401;
@@ -687,7 +694,7 @@ describe("Client", () => {
     });
 
     it("should redact case variants of sensitive params from URL in HTTPError", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Unauthorized");
       error.statusCode = 401;
@@ -718,7 +725,7 @@ describe("Client", () => {
     });
 
     it("should redact repeated mixed-case sensitive params from URL in HTTPError", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Unauthorized");
       error.statusCode = 401;
@@ -749,7 +756,7 @@ describe("Client", () => {
     });
 
     it("should preserve non-sensitive query encoding when redacting secrets", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Unauthorized");
       error.statusCode = 401;
@@ -775,7 +782,7 @@ describe("Client", () => {
     });
 
     it("should preserve flag params and redact sensitive params with explicit values", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Unauthorized");
       error.statusCode = 401;
@@ -799,7 +806,7 @@ describe("Client", () => {
     });
 
     it("should redact userinfo credentials from URL in HTTPError", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Unauthorized");
       error.statusCode = 401;
@@ -826,7 +833,7 @@ describe("Client", () => {
     });
 
     it("should leave URL unchanged when no sensitive params present", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Not found");
       error.statusCode = 404;
@@ -851,7 +858,7 @@ describe("Client", () => {
     });
 
     it("should preserve original URL string when no sensitive params are present", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       const error = new FetchError("Not found");
       error.statusCode = 404;
@@ -874,7 +881,7 @@ describe("Client", () => {
     });
 
     it("should handle non-FetchError errors", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
       const genericError = new Error("Network timeout");
 
       mockFetch.mockRejectedValueOnce(genericError);
@@ -885,13 +892,85 @@ describe("Client", () => {
     });
 
     it("should handle non-Error thrown values", async () => {
-      const client = new Client();
+      const client = new Client({ maxRetries: 0 });
 
       mockFetch.mockRejectedValueOnce("string error");
 
       await expect(
         client.getJSON("https://api.example.com/data", undefined, undefined),
       ).rejects.toThrow("string error");
+    });
+  });
+
+  describe("rate limits", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("waits for the window Brave names before it retries", async () => {
+      vi.useFakeTimers();
+      const client = new Client({ maxRetries: 1, baseDelay: 0 });
+      mockFetch
+        .mockRejectedValueOnce(rateLimited({ remaining: "0, 445", reset: "1, 56000" }))
+        .mockResolvedValueOnce({ result: "success" });
+
+      const pending = client.getJSON("https://api.search.brave.com/res/v1/web/search");
+      await vi.advanceTimersByTimeAsync(999);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(pending).resolves.toEqual({ result: "success" });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it("waits for Retry-After before it retries", async () => {
+      vi.useFakeTimers();
+      const client = new Client({ maxRetries: 1, baseDelay: 0 });
+      mockFetch
+        .mockRejectedValueOnce(rateLimited({ retryAfter: "2" }))
+        .mockResolvedValueOnce({ result: "success" });
+
+      const pending = client.getJSON(
+        "https://api.example.com/data",
+        undefined,
+        new AbortController().signal,
+      );
+      await vi.advanceTimersByTimeAsync(1_999);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+
+      await expect(pending).resolves.toEqual({ result: "success" });
+    });
+
+    it("fails at once with the reset when the wait is too long to retry", async () => {
+      const client = new Client({ maxRetries: 5, baseDelay: 0 });
+      mockFetch.mockRejectedValue(rateLimited({ remaining: "0, 0", reset: "1, 56000" }));
+
+      const error = await client.getJSON("https://api.example.com/data").catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(RateLimitError);
+      expect(error).toHaveProperty("retryAfter", 56_000);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("reports the reset of the exhausted window after the last retry", async () => {
+      const client = new Client({ maxRetries: 0 });
+      mockFetch.mockRejectedValueOnce(rateLimited({ remaining: "0, 445", reset: "1, 56000" }));
+
+      const error = await client.getJSON("https://api.example.com/data").catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(RateLimitError);
+      expect(error).toHaveProperty("message", "Rate limited. Retry after 1s");
+    });
+
+    it("keeps the backoff when a 429 names no reset", async () => {
+      const client = new Client({ maxRetries: 2, baseDelay: 0 });
+      mockFetch.mockRejectedValue(rateLimited({}));
+
+      const error = await client.getJSON("https://api.example.com/data").catch((e: unknown) => e);
+
+      expect(error).toHaveProperty("retryAfter", 60);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -951,4 +1030,22 @@ function rejectOnAbort(signal: Readonly<AbortSignal>): Promise<never> {
       { once: true },
     );
   });
+}
+
+function rateLimited(headers: {
+  readonly retryAfter?: string;
+  readonly remaining?: string;
+  readonly reset?: string;
+}): FetchError {
+  const error = new FetchError("Too many requests");
+  error.statusCode = 429;
+  error.response = new Response(null, {
+    status: 429,
+    headers: {
+      ...(headers.retryAfter === undefined ? {} : { "Retry-After": headers.retryAfter }),
+      ...(headers.remaining === undefined ? {} : { "X-RateLimit-Remaining": headers.remaining }),
+      ...(headers.reset === undefined ? {} : { "X-RateLimit-Reset": headers.reset }),
+    },
+  });
+  return error;
 }
