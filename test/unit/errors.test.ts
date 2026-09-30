@@ -8,7 +8,7 @@ import {
   NoProviderAvailableError,
   InvalidDateFilterError,
   normalizeError,
-  parseRetryAfter,
+  rateLimitWait,
   validateDateFilters,
 } from "../../src/core/errors.ts";
 
@@ -308,45 +308,61 @@ describe("normalizeError", () => {
   });
 });
 
-describe("parseRetryAfter", () => {
-  it("should parse valid numeric string", () => {
-    expect(parseRetryAfter("120")).toBe(120);
+describe("rateLimitWait", () => {
+  const wait = (headers: Readonly<Record<string, string>>) => rateLimitWait(new Headers(headers));
+
+  it("should parse valid numeric Retry-After", () => {
+    expect(wait({ "Retry-After": "120" })).toBe(120);
   });
 
-  it("should return 60 for null", () => {
-    expect(parseRetryAfter(null)).toBe(60);
-  });
-
-  it("should return 60 for undefined", () => {
-    expect(parseRetryAfter(undefined)).toBe(60);
-  });
-
-  it("should return 60 for non-numeric string", () => {
-    expect(parseRetryAfter("soon")).toBe(60);
-  });
-
-  it("should return 60 for negative value", () => {
-    expect(parseRetryAfter("-5")).toBe(60);
-  });
-
-  it("should return 60 for empty string", () => {
-    expect(parseRetryAfter("")).toBe(60);
+  it("should give no wait without headers", () => {
+    expect(rateLimitWait(undefined)).toBeUndefined();
+    expect(wait({})).toBeUndefined();
   });
 
   it("should handle zero as valid", () => {
-    expect(parseRetryAfter("0")).toBe(0);
+    expect(wait({ "Retry-After": "0" })).toBe(0);
   });
 
-  it("should reject fractional values", () => {
-    expect(parseRetryAfter("1.5")).toBe(60);
+  it.each(["soon", "-5", "", "1.5", "10s", "9".repeat(400)])(
+    "should ignore Retry-After %j",
+    (value) => {
+      expect(wait({ "Retry-After": value })).toBeUndefined();
+    },
+  );
+
+  it("should take the longest reset among exhausted windows", () => {
+    expect(wait({ "X-RateLimit-Remaining": "0, 445", "X-RateLimit-Reset": "1, 56000" })).toBe(1);
+    expect(wait({ "X-RateLimit-Remaining": "0, 0", "X-RateLimit-Reset": "1, 56000" })).toBe(56000);
   });
 
-  it("should reject numeric prefix with trailing text", () => {
-    expect(parseRetryAfter("10s")).toBe(60);
+  it("should prefer Retry-After over X-RateLimit-Reset", () => {
+    expect(
+      wait({ "Retry-After": "3", "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "30" }),
+    ).toBe(3);
   });
 
-  it("should fall back for digit string that overflows to Infinity", () => {
-    expect(parseRetryAfter("9".repeat(400))).toBe(60);
+  it("should read a single window without X-RateLimit-Remaining", () => {
+    expect(wait({ "X-RateLimit-Reset": "7" })).toBe(7);
+  });
+
+  it("should not guess which of several windows ran out", () => {
+    expect(wait({ "X-RateLimit-Reset": "1, 56000" })).toBeUndefined();
+    expect(
+      wait({ "X-RateLimit-Remaining": "1, 445", "X-RateLimit-Reset": "1, 56000" }),
+    ).toBeUndefined();
+  });
+
+  it("should ignore a reset given as a Unix timestamp", () => {
+    expect(
+      wait({ "X-RateLimit-Remaining": "0", "X-RateLimit-Reset": "1790000000" }),
+    ).toBeUndefined();
+  });
+
+  it("should ignore a malformed reset list", () => {
+    expect(
+      wait({ "X-RateLimit-Remaining": "0, 0", "X-RateLimit-Reset": "1, soon" }),
+    ).toBeUndefined();
   });
 });
 

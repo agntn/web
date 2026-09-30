@@ -385,10 +385,7 @@ function normalizeFetchLikeError(error: FetchLikeError, provider?: string): WebE
     case 404:
       return new HTTPError(404, "", message);
     case 429:
-      return new RateLimitError(
-        parseRetryAfter(error.response?.headers?.get("Retry-After")),
-        provider,
-      );
+      return rateLimitError(error.response?.headers, provider);
     default:
       return error.status >= 500 ? new HTTPError(error.status, "", message) : new WebError(message);
   }
@@ -396,20 +393,51 @@ function normalizeFetchLikeError(error: FetchLikeError, provider?: string): WebE
 
 export const DEFAULT_RETRY_AFTER = 60;
 
-export function parseRetryAfter(header: string | null | undefined): number {
-  if (header === null || header === undefined) {
-    return DEFAULT_RETRY_AFTER;
-  }
+/** A reset this large is a Unix timestamp, not seconds to wait. */
+const EPOCH_SECONDS_FLOOR = 1_000_000_000;
 
-  const trimmed = header.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    return DEFAULT_RETRY_AFTER;
-  }
+type ResponseHeaders = Readonly<{ get: (name: string) => string | null }>;
 
-  const parsed = Number.parseInt(trimmed, 10);
-  if (!Number.isFinite(parsed)) {
-    return DEFAULT_RETRY_AFTER;
-  }
+/**
+ * Build the error for a 429 response, waiting {@link DEFAULT_RETRY_AFTER} when its headers name no wait.
+ * @param headers - Response headers of the rate limited request.
+ * @param provider - Provider that answered, when known.
+ * @returns {RateLimitError} Error carrying the wait in `retryAfter`.
+ */
+export function rateLimitError(headers?: ResponseHeaders, provider?: string): RateLimitError {
+  return new RateLimitError(rateLimitWait(headers) ?? DEFAULT_RETRY_AFTER, provider);
+}
 
-  return parsed;
+/**
+ * Seconds a rate limited response asks the caller to wait.
+ * `Retry-After` comes first. Without it, `X-RateLimit-Reset` counts seconds per window, as Brave
+ * sends it (`1, 56000` beside `X-RateLimit-Remaining: 0, 445`), and the longest reset among the
+ * windows with nothing left is the wait.
+ * @param headers - Response headers of the rate limited request.
+ * @returns {number | undefined} Seconds to wait, or undefined when the response gives no usable hint.
+ */
+export function rateLimitWait(headers?: ResponseHeaders): number | undefined {
+  return seconds(headers?.get("Retry-After") ?? undefined) ?? exhaustedWindowReset(headers);
+}
+
+function exhaustedWindowReset(headers?: ResponseHeaders): number | undefined {
+  const resets = secondsList(headers?.get("X-RateLimit-Reset"));
+  if (!resets || resets.some((reset) => reset >= EPOCH_SECONDS_FLOOR)) return undefined;
+  const remaining = secondsList(headers?.get("X-RateLimit-Remaining"));
+  if (remaining?.length !== resets.length) return resets.length === 1 ? resets[0] : undefined;
+
+  const exhausted = resets.filter((_, index) => remaining[index] === 0);
+  return exhausted.length > 0 ? Math.max(...exhausted) : undefined;
+}
+
+function secondsList(header: string | null | undefined): number[] | undefined {
+  const values = header?.split(",").map(seconds);
+  return values?.every((value): value is number => value !== undefined) ? values : undefined;
+}
+
+function seconds(value: string | undefined): number | undefined {
+  const trimmed = value?.trim();
+  if (trimmed === undefined || !/^\d+$/.test(trimmed)) return undefined;
+  const parsed = Number(trimmed);
+  return Number.isSafeInteger(parsed) ? parsed : undefined;
 }

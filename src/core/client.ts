@@ -1,6 +1,6 @@
 import type { $Fetch } from "ofetch";
 import type { ClientOptions } from "./types.ts";
-import { HTTPError, RateLimitError, parseRetryAfter } from "./errors.ts";
+import { HTTPError, RateLimitError, rateLimitError, rateLimitWait } from "./errors.ts";
 import { version } from "../version.ts";
 import { readSseJson } from "./sse.ts";
 
@@ -9,9 +9,18 @@ const DEFAULT_BASE_DELAY = 50;
 const DEFAULT_TIMEOUT = 30_000;
 const DEFAULT_USER_AGENT = `agntn-web/${version}`;
 const RETRY_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
+/** Longest reset a rate limited request waits for before it retries instead of failing. */
+const MAX_RATE_LIMIT_WAIT_SECONDS = 5;
 const MAX_CAUSE_DEPTH = 8;
 
 type Ofetch = typeof import("ofetch");
+
+/** What a retry decision reads from an ofetch `FetchError`. */
+type FailedAttempt = Readonly<{
+  statusCode?: number;
+  response?: Readonly<{ headers: Readonly<{ get: (name: string) => string | null }> }>;
+}>;
+
 let ofetchModule: Promise<Ofetch> | undefined;
 
 /**
@@ -40,22 +49,13 @@ export class Client {
     this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
   }
 
-  /** @returns {Promise<$Fetch>} The ofetch instance, created with the first request. */
+  /**
+   * Retries run in {@link fetchWithRetry}, so every request passes `retry: false` to ofetch.
+   * @returns {Promise<$Fetch>} The ofetch instance, created with the first request.
+   */
   private fetcher(): Promise<$Fetch> {
-    const maxRetries = this.maxRetries;
-    const baseDelay = this.baseDelay;
-
     this.fetch ??= loadOfetch().then(({ ofetch }) =>
       ofetch.create({
-        retry: maxRetries,
-        retryDelay(context) {
-          const remaining = typeof context.options.retry === "number" ? context.options.retry : 0;
-          const attempt = maxRetries - remaining;
-          const delay = baseDelay * Math.pow(2, attempt - 1);
-          const jitter = delay * Math.random() * 0.1;
-          return delay + jitter;
-        },
-        retryStatusCodes: [408, 429, 500, 502, 503, 504],
         timeout: this.timeout,
         headers: {
           Accept: "application/json",
@@ -80,12 +80,10 @@ export class Client {
   ): Promise<T> {
     try {
       const fetch = await this.fetcher();
-      return signal
-        ? await this.fetchWithCancellation(
-            (attemptSignal) => fetch<T>(url, { headers, signal: attemptSignal, retry: false }),
-            signal,
-          )
-        : await fetch<T>(url, { headers, signal });
+      return await this.fetchWithRetry(
+        (attemptSignal) => fetch<T>(url, { headers, signal: attemptSignal, retry: false }),
+        signal,
+      );
     } catch (error) {
       throw await this.mapError(error, url);
     }
@@ -107,24 +105,11 @@ export class Client {
   ): Promise<T> {
     try {
       const fetch = await this.fetcher();
-      return signal
-        ? await this.fetchWithCancellation(
-            (attemptSignal) =>
-              fetch<T>(url, {
-                method: "POST",
-                body,
-                headers,
-                signal: attemptSignal,
-                retry: false,
-              }),
-            signal,
-          )
-        : await fetch<T>(url, {
-            method: "POST",
-            body,
-            headers,
-            signal,
-          });
+      return await this.fetchWithRetry(
+        (attemptSignal) =>
+          fetch<T>(url, { method: "POST", body, headers, signal: attemptSignal, retry: false }),
+        signal,
+      );
     } catch (error) {
       throw await this.mapError(error, url);
     }
@@ -193,8 +178,7 @@ export class Client {
     signal.throwIfAborted();
     if (!response.ok) {
       await response.body?.cancel().catch(() => {});
-      if (response.status === 429)
-        throw new RateLimitError(parseRetryAfter(response.headers.get("Retry-After")));
+      if (response.status === 429) throw rateLimitError(response.headers);
       throw new HTTPError(response.status, safeUrl, "Streaming request rejected");
     }
     const contentType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
@@ -205,20 +189,20 @@ export class Client {
     return response._data;
   }
 
-  private async fetchWithCancellation<T>(
-    request: (signal: Readonly<AbortSignal>) => Promise<T>,
-    signal: Readonly<AbortSignal>,
+  private async fetchWithRetry<T>(
+    request: (signal?: Readonly<AbortSignal>) => Promise<T>,
+    signal?: Readonly<AbortSignal>,
   ): Promise<T> {
     const { FetchError } = await loadOfetch();
     for (let attempt = 0; ; attempt += 1) {
-      signal.throwIfAborted();
+      signal?.throwIfAborted();
       try {
         return await this.requestWithTimeout(request, signal);
       } catch (error) {
-        signal.throwIfAborted();
-        const retryable = error instanceof FetchError && isRetryableStatus(error.statusCode);
-        if (attempt >= this.maxRetries || !retryable) throw error;
-        await abortableDelay(this.retryDelay(attempt), signal);
+        signal?.throwIfAborted();
+        const delay = error instanceof FetchError ? this.retryDelay(error, attempt) : undefined;
+        if (attempt >= this.maxRetries || delay === undefined) throw error;
+        await abortableDelay(delay, signal);
       }
     }
   }
@@ -230,8 +214,8 @@ export class Client {
    * @returns {Promise<T>} Parsed response body.
    */
   private async requestWithTimeout<T>(
-    request: (signal: Readonly<AbortSignal>) => Promise<T>,
-    signal: Readonly<AbortSignal>,
+    request: (signal?: Readonly<AbortSignal>) => Promise<T>,
+    signal?: Readonly<AbortSignal>,
   ): Promise<T> {
     if (!this.timeout) return request(signal);
 
@@ -244,23 +228,37 @@ export class Client {
       this.timeout,
     );
     try {
-      return await request(AbortSignal.any([signal, controller.signal]));
+      return await request(
+        signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+      );
     } finally {
       clearTimeout(timer);
     }
   }
 
-  private retryDelay(attempt: number): number {
+  /**
+   * A rate limited request waits for the reset the provider names: a backoff of milliseconds
+   * lands every retry in the same window, as with Brave's one request per second.
+   * @param error - Failed attempt.
+   * @param attempt - Zero-based attempt number.
+   * @returns {number | undefined} Milliseconds before the next attempt, or undefined when it should not retry.
+   */
+  private retryDelay(error: FailedAttempt, attempt: number): number | undefined {
+    if (!isRetryableStatus(error.statusCode)) return undefined;
     const delay = this.baseDelay * Math.pow(2, attempt - 1);
-    return delay + delay * Math.random() * 0.1;
+    const backoff = delay + delay * Math.random() * 0.1;
+    if (error.statusCode !== 429) return backoff;
+
+    const wait = rateLimitWait(error.response?.headers);
+    if (wait === undefined) return backoff;
+    return wait > MAX_RATE_LIMIT_WAIT_SECONDS ? undefined : Math.max(wait * 1000, backoff);
   }
 
   private async mapError(error: unknown, url: string): Promise<Error> {
     const { FetchError } = await loadOfetch();
     if (error instanceof FetchError) {
       if (error.statusCode === 429) {
-        const retryAfter = parseRetryAfter(error.response?.headers.get("Retry-After"));
-        return new RateLimitError(retryAfter);
+        return rateLimitError(error.response?.headers);
       }
 
       const body = responseBody(error.data) || transportFailure(error.cause);
@@ -313,18 +311,18 @@ function isRetryableStatus(statusCode = 0): boolean {
   return statusCode === 0 || RETRY_STATUS_CODES.has(statusCode);
 }
 
-function abortableDelay(milliseconds: number, signal: Readonly<AbortSignal>): Promise<void> {
-  signal.throwIfAborted();
+function abortableDelay(milliseconds: number, signal?: Readonly<AbortSignal>): Promise<void> {
+  signal?.throwIfAborted();
   return new Promise((resolve, reject) => {
     const onAbort = (): void => {
       clearTimeout(timer);
-      reject(signal.reason ?? new DOMException("The operation was aborted", "AbortError"));
+      reject(signal?.reason ?? new DOMException("The operation was aborted", "AbortError"));
     };
     const timer = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
+      signal?.removeEventListener("abort", onAbort);
       resolve();
     }, milliseconds);
-    signal.addEventListener("abort", onAbort, { once: true });
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
