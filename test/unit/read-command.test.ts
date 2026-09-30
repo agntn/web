@@ -156,6 +156,29 @@ describe("read command", () => {
     });
   });
 
+  it("asks for a fresh copy with --no-cache", async () => {
+    await runCommand(readCommand, { rawArgs: ["https://example.com", "--no-cache"] });
+
+    expect(mockReadUrlDetailed).toHaveBeenCalledWith("https://example.com", {
+      noCache: true,
+    });
+  });
+
+  it("passes --no-cache to every URL of a batch", async () => {
+    const urls = ["https://example.com/one", "https://example.com/two"];
+    mockReadBatchDetailed.mockResolvedValueOnce([]);
+
+    await runCommand(readCommand, { rawArgs: [...urls, "--no-cache"] });
+
+    expect(mockReadBatchDetailed).toHaveBeenCalledWith(urls, { noCache: true });
+  });
+
+  it("leaves the provider cache alone without --no-cache", async () => {
+    await runCommand(readCommand, { rawArgs: ["https://example.com"] });
+
+    expect(mockReadUrlDetailed.mock.calls[0]?.[1]).not.toHaveProperty("noCache");
+  });
+
   it("prints requested links and images in human output", async () => {
     mockReadUrlDetailed.mockResolvedValueOnce({
       result: {

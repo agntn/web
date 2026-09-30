@@ -52,6 +52,12 @@ export default defineCommand({
       type: "boolean",
       description: "Keep the page's image URLs in a bounded read",
     },
+    cache: {
+      type: "boolean",
+      description: "Let the provider answer from its cache",
+      negativeDescription: "Ask the provider for a fresh copy when it supports that",
+      default: true,
+    },
     json: {
       type: "boolean",
       description: "Output as JSON",
@@ -88,6 +94,7 @@ type ReadCommandArgs = {
   readonly continuation?: string;
   readonly links?: boolean;
   readonly images?: boolean;
+  readonly cache?: boolean;
   readonly json: boolean;
 };
 
@@ -101,6 +108,7 @@ type ParsedReadArguments = {
     readonly continuation?: string;
     readonly links?: boolean;
     readonly images?: boolean;
+    readonly noCache?: boolean;
   };
 };
 
@@ -129,6 +137,7 @@ function parseReadArguments(args: ReadCommandArgs, maxBatchItems: number): Parse
       maxChars: maxChars.value,
       continuation,
       ...pageFieldOptions(args),
+      ...cacheOption(args),
     },
   };
 }
@@ -140,6 +149,10 @@ function pageFieldOptions(
     ...(args.links ? { links: true } : {}),
     ...(args.images ? { images: true } : {}),
   };
+}
+
+function cacheOption(args: ReadCommandArgs): Pick<ParsedReadArguments["options"], "noCache"> {
+  return args.cache === false ? { noCache: true } : {};
 }
 
 function parseProviderOption(input: string | undefined): { readonly provider?: string } {
