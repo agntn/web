@@ -1,23 +1,23 @@
+import { spawnSync } from "node:child_process";
 import {
   cpSync,
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
-import { join, sep } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as ompTypebox from "@oh-my-pi/omptype/typebox";
 import { createJiti } from "jiti/static";
 import { build } from "vite-plus/pack";
-import { describe, expect, it, onTestFinished } from "vite-plus/test";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vite-plus/test";
 import { builtinProviders } from "../src/index.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const registryEntry = "test/fixtures/bundle-entry.mjs";
-const versionEntry = "test/fixtures/bundle-entry-version.mjs";
+let packageDir = "";
 
 /**
  * Packages Pi hands its extensions (`HOST_PROVIDED_EXTENSION_PACKAGES` in Pi's resource loader).
@@ -38,20 +38,24 @@ const hostProvidedPackages = [
 ];
 
 /**
- * Bundles one consumer entry against dist/ the way a consumer's bundler would: trusting
- * package.json about side effects.
- * @param entry - Consumer entry, relative to the repo root.
+ * Bundles a consumer of one root export against the packed dist/ the way a consumer's bundler
+ * would: trusting package.json about side effects.
+ * @param name - The export the consumer re-exports.
  * @returns {Promise<string>} The output directory, removed when the test finishes.
  */
-async function bundleConsumer(entry: string): Promise<string> {
-  mkdirSync(join(root, "node_modules/.cache"), { recursive: true });
-  const outDir = mkdtempSync(join(root, "node_modules/.cache/web-bundle-"));
-  onTestFinished(() => rmSync(outDir, { recursive: true, force: true }));
+async function bundleConsumer(name: "providers" | "version"): Promise<string> {
+  const consumerDir = mkdtempSync(join(root, "node_modules/.cache/web-consumer-"));
+  onTestFinished(() => rmSync(consumerDir, { recursive: true, force: true }));
+  const entry = join(consumerDir, "consumer.mjs");
+  writeFileSync(
+    entry,
+    `export { ${name} } from ${JSON.stringify(join(packageDir, "dist/index.mjs"))};\n`,
+  );
 
-  const outputName = entry.slice(0, -".mjs".length);
+  const outDir = join(consumerDir, "out");
   await build({
     cwd: root,
-    entry: { [outputName]: entry },
+    entry: { consumer: entry },
     outDir,
     dts: false,
     clean: false,
@@ -60,26 +64,6 @@ async function bundleConsumer(entry: string): Promise<string> {
     treeshake: true,
   });
   return outDir;
-}
-
-/**
- * Copies the files package.json publishes into a directory inside the checkout, so bare imports
- * resolve through the repo's node_modules the way they would in a consumer's install.
- * @returns {string} The package directory, removed when the test finishes.
- */
-function publishedPackage(): string {
-  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
-    readonly files: readonly string[];
-  };
-  mkdirSync(join(root, "node_modules/.cache"), { recursive: true });
-  const packageDir = mkdtempSync(join(root, "node_modules/.cache/web-published-"));
-  onTestFinished(() => rmSync(packageDir, { recursive: true, force: true }));
-
-  cpSync(join(root, "package.json"), join(packageDir, "package.json"));
-  for (const entry of manifest.files) {
-    cpSync(join(root, entry), join(packageDir, entry), { recursive: true });
-  }
-  return packageDir;
 }
 
 describe("package manifest", () => {
@@ -96,14 +80,44 @@ describe("package manifest", () => {
   });
 });
 
-describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", () => {
+describe("bundled package", () => {
+  /**
+   * Packs the current source with the repo's own `vp pack` config and copies the other files
+   * package.json publishes beside it, so no test reads a dist/ left from an older build. The
+   * directory sits under node_modules, where bare imports resolve the way they do in a consumer's
+   * install.
+   */
+  beforeAll(() => {
+    mkdirSync(join(root, "node_modules/.cache"), { recursive: true });
+    packageDir = mkdtempSync(join(root, "node_modules/.cache/web-package-"));
+    const bin = fileURLToPath(import.meta.resolve("vite-plus/bin"));
+    const { status, stderr } = spawnSync(
+      process.execPath,
+      [bin, "pack", "--out-dir", join(packageDir, "dist")],
+      { cwd: root, encoding: "utf8" },
+    );
+    if (status !== 0) throw new Error(`vp pack failed:\n${stderr}`);
+
+    const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
+      readonly files: readonly string[];
+    };
+    cpSync(join(root, "package.json"), join(packageDir, "package.json"));
+    for (const entry of manifest.files.filter((file) => file !== "dist")) {
+      cpSync(join(root, entry), join(packageDir, entry), { recursive: true });
+    }
+  });
+
+  afterAll(() => {
+    if (packageDir) rmSync(packageDir, { recursive: true, force: true });
+  });
+
   /** typebox is only an optional peer, so the CLI, the MCP server and their types have to carry their own copy. */
   it("bundles typebox instead of importing it from dist/", () => {
-    const importers = readdirSync(join(root, "dist"), { recursive: true, encoding: "utf8" })
+    const importers = readdirSync(join(packageDir, "dist"), { recursive: true, encoding: "utf8" })
       .filter((file) => file.endsWith(".mjs") || file.endsWith(".d.mts"))
       .filter((file) =>
         /(?:from|import)\s*\(?\s*["']typebox(?:\/[^"']*)?["']/u.test(
-          readFileSync(join(root, "dist", file), "utf8"),
+          readFileSync(join(packageDir, "dist", file), "utf8"),
         ),
       );
 
@@ -111,8 +125,8 @@ describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", ()
   });
 
   it("keeps every built-in provider listed after a consumer bundles dist/", async () => {
-    const outDir = await bundleConsumer(registryEntry);
-    const bundle = (await import(pathToFileURL(join(outDir, registryEntry)).href)) as Pick<
+    const outDir = await bundleConsumer("providers");
+    const bundle = (await import(pathToFileURL(join(outDir, "consumer.mjs")).href)) as Pick<
       typeof import("../src/index.ts"),
       "providers"
     >;
@@ -122,22 +136,21 @@ describe.skipIf(!existsSync(join(root, "dist/index.mjs")))("bundled package", ()
 
   /** With no import side effects declared, a consumer that never touches the registry ships no adapter, not even as a chunk. */
   it("drops every provider from a consumer that only reads the version", async () => {
-    const outDir = await bundleConsumer(versionEntry);
-    const bundle = (await import(pathToFileURL(join(outDir, versionEntry)).href)) as Pick<
+    const outDir = await bundleConsumer("version");
+    const bundle = (await import(pathToFileURL(join(outDir, "consumer.mjs")).href)) as Pick<
       typeof import("../src/index.ts"),
       "version"
     >;
-    const files = readdirSync(outDir, { recursive: true, encoding: "utf8" })
-      .filter((file) => file.endsWith(".mjs"))
-      .map((file) => file.split(sep).join("/"));
+    const files = readdirSync(outDir, { recursive: true, encoding: "utf8" }).filter((file) =>
+      file.endsWith(".mjs"),
+    );
 
     expect(bundle.version).toMatch(/^\d+\.\d+\.\d+/u);
-    expect(files).toEqual([versionEntry]);
+    expect(files).toEqual(["consumer.mjs"]);
   });
 
   /** Pi and OMP load the extension source from the installed package, so every file it imports has to ship. */
   it("loads the Pi and OMP extensions from the published files", async () => {
-    const packageDir = publishedPackage();
     const jiti = createJiti(import.meta.url, { moduleCache: false, tryNative: false });
     const load = (host: string) =>
       jiti.import<(pi: unknown) => Promise<void>>(
