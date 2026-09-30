@@ -21,6 +21,13 @@
       "id": "8285cbe91449494ab97650ffb22f7bc8"
     }
   ],
+  "ratelimits": [
+    {
+      "name": "QUERY_LIMIT",
+      "namespace_id": "3304",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
   "cache": {
     "enabled": true
   },
