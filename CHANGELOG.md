@@ -1,5 +1,50 @@
 # Changelog
 
+## v0.7.4
+
+[compare changes](https://github.com/agntn/web/compare/v0.7.3...v0.7.4)
+
+### 🚀 Enhancements
+
+- **mcp:** Take src edits on restart ([#223](https://github.com/agntn/web/pull/223))
+- **docs:** Landing and explorer as instruments ([#238](https://github.com/agntn/web/pull/238))
+- **cli:** Let web read skip the provider cache ([#253](https://github.com/agntn/web/pull/253))
+
+### 🔥 Performance
+
+- **search:** Cap Tavily and Firecrawl snippets ([#213](https://github.com/agntn/web/pull/213))
+- **fallback:** Ask spent providers last ([#220](https://github.com/agntn/web/pull/220))
+
+### 🩹 Fixes
+
+- **errors:** Put the provider on RateLimitError ([#209](https://github.com/agntn/web/pull/209))
+- **read:** Keep maxTokens off the auto fallback ([#211](https://github.com/agntn/web/pull/211))
+- **cli:** Exit quietly once the reader hangs up ([#222](https://github.com/agntn/web/pull/222))
+- **docs:** Count readers from the catalog ([#224](https://github.com/agntn/web/pull/224))
+- **cli:** Drop colors in pipes and NO_COLOR ([#226](https://github.com/agntn/web/pull/226))
+- **tinyfish:** Read plain-text files whole ([#233](https://github.com/agntn/web/pull/233))
+- **tinyfish:** Wrap a text file in <pre> for HTML ([#235](https://github.com/agntn/web/pull/235))
+- **tinyfish:** Let a blocked read fall back ([#241](https://github.com/agntn/web/pull/241))
+- **tavily:** Pass a failed fetch on to Exa ([#244](https://github.com/agntn/web/pull/244))
+- **client:** Wait out the rate limit window ([#250](https://github.com/agntn/web/pull/250))
+- **deps:** Leave typebox to Pi ([#251](https://github.com/agntn/web/pull/251))
+- **docs:** Let Cloudflare count explorer misses ([#252](https://github.com/agntn/web/pull/252))
+- **cli:** Refuse unknown flags ([#255](https://github.com/agntn/web/pull/255))
+- **tinyfish:** Refetch a tree the cache left null ([#257](https://github.com/agntn/web/pull/257))
+
+### 📖 Documentation
+
+- **serpapi:** Free plan gives 250 searches ([#225](https://github.com/agntn/web/pull/225))
+
+### ✅ Tests
+
+- Bundle the source, not a stale dist ([#258](https://github.com/agntn/web/pull/258))
+
+### ❤️ Contributors
+
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+- Ori ([@oritwoen](https://github.com/oritwoen))
+
 ## v0.7.3
 
 [compare changes](https://github.com/agntn/web/compare/v0.7.2...v0.7.3)
