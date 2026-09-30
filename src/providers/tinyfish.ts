@@ -142,6 +142,8 @@ export class TinyfishProvider extends Provider {
 
   /**
    * The Markdown already answered, so a failed tree keeps it instead of failing the read.
+   * A tree asked for right after the Markdown can come from its cache entry as `text: null`,
+   * and only an uncached request builds it, so that answer gets one more try with `ttl: 0`.
    * @param body - Request body of the Markdown fetch.
    * @param options - Read options carrying the caller's signal.
    * @returns {Promise<TinyfishFetchResult | undefined>} The JSON result, or undefined when it failed.
@@ -150,11 +152,11 @@ export class TinyfishProvider extends Provider {
     body: Readonly<Record<string, unknown>>,
     options?: Readonly<ReadOptions>,
   ): Promise<TinyfishFetchResult | undefined> {
+    const treeBody = { ...body, format: "json", links: false, image_links: false };
     try {
-      return await this.fetchResult(
-        { ...body, format: "json", links: false, image_links: false },
-        options,
-      );
+      const tree = await this.fetchResult(treeBody, options);
+      if (tree.text !== null || body.ttl === 0) return tree;
+      return await this.fetchResult({ ...treeBody, ttl: 0 }, options);
     } catch (error) {
       if (options?.signal?.aborted) throw error;
       return undefined;

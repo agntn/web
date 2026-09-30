@@ -415,6 +415,54 @@ describe("tinyfish provider", () => {
     expect(result.content).toBe(html);
   });
 
+  it("asks for a fresh document tree when the cached one is null", async () => {
+    const source = "#include <key.h>\n#include <script/sign.h>\n\nint main() {}\n";
+    mockPostJSON
+      .mockResolvedValueOnce({
+        results: [{ url: "https://example.com/key.cpp", text: "#include", format: "markdown" }],
+        errors: [],
+      })
+      .mockResolvedValueOnce({
+        results: [{ url: "https://example.com/key.cpp", text: null, format: "json" }],
+        errors: [],
+      })
+      .mockResolvedValueOnce({
+        results: [
+          {
+            url: "https://example.com/key.cpp",
+            text: { type: "document", children: [{ type: "code", text: source }] },
+            format: "json",
+          },
+        ],
+        errors: [],
+      });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+
+    const result = await provider.read("https://example.com/key.cpp");
+
+    expect(mockPostJSON.mock.calls[1]?.[1]).not.toHaveProperty("ttl");
+    expect(mockPostJSON.mock.calls[2]?.[1]).toMatchObject({ format: "json", ttl: 0 });
+    expect(result.content).toBe(source);
+  });
+
+  it("keeps the Markdown when an uncached document tree is null", async () => {
+    mockPostJSON
+      .mockResolvedValueOnce({
+        results: [{ url: "https://example.com/key.cpp", text: "#include", format: "markdown" }],
+        errors: [],
+      })
+      .mockResolvedValueOnce({
+        results: [{ url: "https://example.com/key.cpp", text: null, format: "json" }],
+        errors: [],
+      });
+    const provider = await createTinyfishProvider({ apiKey: "tf-test-key" });
+
+    const result = await provider.read("https://example.com/key.cpp", { noCache: true });
+
+    expect(mockPostJSON).toHaveBeenCalledTimes(2);
+    expect(result.content).toBe("#include");
+  });
+
   it("keeps the Markdown of an untitled page that is not one code block", async () => {
     mockPostJSON
       .mockResolvedValueOnce({
