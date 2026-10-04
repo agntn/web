@@ -1,4 +1,4 @@
-/** Parts that make a key secret, case and punctuation aside, like `access_token`. */
+/** A key holding any of these is secret: `author` loses its value, but no `x_api_key` slips by. */
 const SENSITIVE_KEY_PARTS = [
   "token",
   "key",
@@ -35,7 +35,8 @@ export function sanitizeUrl(url: string): string {
 
 /**
  * Redact each sensitive `key=value` and `scheme:user:pass@` in text, whatever URL holds them.
- * Up to three layers of percent-encoding are looked through; base64 or JSON in a value are not.
+ * Up to three percent-encoding layers are looked through, not base64 or JSON. A revealed secret
+ * leaves the text decoded, since a redacted URL is a diagnostic, not a request to replay.
  * @param text - URL or message, already redacted by URL structure or not.
  * @param depth - Percent-decoding layers left to look through.
  * @returns {string} The text with those secrets as `[REDACTED]`; running it twice changes nothing.
