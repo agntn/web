@@ -1,5 +1,6 @@
 const SENSITIVE_PARAMS = ["api_key", "key", "token", "secret", "password", "apikey", "url"];
 const SENSITIVE_PARAM_SET = new Set(SENSITIVE_PARAMS.map((param) => param.toLowerCase()));
+const REDACTED = encodeURIComponent("[REDACTED]");
 
 /**
  * Strip credentials out of a URL before an error message shows it to anyone.
@@ -23,10 +24,11 @@ function redactUrlComponents(url: string): { url: string; changed: boolean } {
     parsed.password.length > 0,
   );
   const queryRedacted = redactSensitiveQueryParams(userInfoRedacted.url);
+  const fragmentRedacted = redactSensitiveFragmentParams(queryRedacted.url);
 
   return {
-    url: queryRedacted.url,
-    changed: userInfoRedacted.changed || queryRedacted.changed,
+    url: fragmentRedacted.url,
+    changed: userInfoRedacted.changed || queryRedacted.changed || fragmentRedacted.changed,
   };
 }
 
@@ -128,60 +130,88 @@ function redactSensitiveQueryParams(url: string): { url: string; changed: boolea
 
   const fragmentStart = url.indexOf("#", queryStart);
   const queryEnd = fragmentStart === -1 ? url.length : fragmentStart;
-  const prefix = url.slice(0, queryStart + 1);
-  const query = url.slice(queryStart + 1, queryEnd);
-  const suffix = fragmentStart === -1 ? "" : url.slice(fragmentStart);
-
-  let changed = false;
-  let redactedQuery = "";
-  let segmentStart = 0;
-
-  for (let index = 0; index <= query.length; index += 1) {
-    const isEnd = index === query.length;
-    const char = query[index];
-    if (!isEnd && char !== "&") {
-      continue;
-    }
-
-    const segment = query.slice(segmentStart, index);
-    redactedQuery += redactSegment(segment);
-    if (!isEnd) {
-      redactedQuery += char;
-    }
-    segmentStart = index + 1;
-  }
-
-  if (!changed) {
+  const query = redactPairs(url.slice(queryStart + 1, queryEnd), "&");
+  if (!query.changed) {
     return { url, changed: false };
   }
 
-  return { url: `${prefix}${redactedQuery}${suffix}`, changed: true };
+  return {
+    url: `${url.slice(0, queryStart + 1)}${query.text}${url.slice(queryEnd)}`,
+    changed: true,
+  };
+}
 
-  function redactSegment(segment: string): string {
-    if (!segment) {
-      return segment;
+/**
+ * Redact the same keys in a fragment, where OAuth hands out tokens and a hash router keeps a query.
+ * @param url - URL whose query is already redacted.
+ * @returns {{ url: string; changed: boolean }} The URL and whether its fragment changed.
+ */
+function redactSensitiveFragmentParams(url: string): { url: string; changed: boolean } {
+  const fragmentStart = url.indexOf("#");
+  if (fragmentStart === -1) {
+    return { url, changed: false };
+  }
+
+  const fragment = redactPairs(url.slice(fragmentStart + 1), "&?");
+  if (!fragment.changed) {
+    return { url, changed: false };
+  }
+
+  return { url: `${url.slice(0, fragmentStart + 1)}${fragment.text}`, changed: true };
+}
+
+/**
+ * Replace the value of every sensitive `key=value` pair in a query or fragment.
+ * @param text - Pairs without the leading `?` or `#`.
+ * @param separators - Characters that end a pair.
+ * @returns {{ text: string; changed: boolean }} The pairs and whether any value was redacted.
+ */
+function redactPairs(text: string, separators: string): { text: string; changed: boolean } {
+  let changed = false;
+  let redacted = "";
+  let segmentStart = 0;
+
+  for (let index = 0; index <= text.length; index += 1) {
+    const isEnd = index === text.length;
+    const char = text.charAt(index);
+    if (!isEnd && !separators.includes(char)) {
+      continue;
     }
 
-    const separatorIndex = segment.indexOf("=");
-    const rawKey = separatorIndex === -1 ? segment : segment.slice(0, separatorIndex);
+    const segment = text.slice(segmentStart, index);
+    const safe = redactSegment(segment);
+    changed ||= safe !== segment;
+    redacted += isEnd ? safe : `${safe}${char}`;
+    segmentStart = index + 1;
+  }
 
-    let decodedKey = rawKey;
-    try {
-      decodedKey = decodeURIComponent(rawKey);
-    } catch {
-      decodedKey = rawKey;
-    }
+  return { text: redacted, changed };
+}
 
-    if (!SENSITIVE_PARAM_SET.has(decodedKey.toLowerCase())) {
-      return segment;
-    }
+/**
+ * Redact one `key=value` pair when its key names a secret.
+ * @param segment - One pair, raw.
+ * @returns {string} The pair, with `[REDACTED]` for a sensitive value.
+ */
+function redactSegment(segment: string): string {
+  const separatorIndex = segment.indexOf("=");
+  if (separatorIndex === -1) {
+    return segment;
+  }
 
-    if (separatorIndex === -1) {
-      return segment;
-    }
+  const rawKey = segment.slice(0, separatorIndex);
+  if (!SENSITIVE_PARAM_SET.has(decodedKey(rawKey).toLowerCase())) {
+    return segment;
+  }
 
-    changed = true;
-    return `${rawKey}=${encodeURIComponent("[REDACTED]")}`;
+  return `${rawKey}=${REDACTED}`;
+}
+
+function decodedKey(rawKey: string): string {
+  try {
+    return decodeURIComponent(rawKey);
+  } catch {
+    return rawKey;
   }
 }
 
@@ -209,13 +239,14 @@ export function sanitizeUrlsIn(text: string): string {
 }
 
 /**
- * Redact one URL token, keeping the quote marks and punctuation that close it.
+ * Redact one URL token, keeping its closing punctuation unless a redacted value may own it.
  * @param token - Text that starts with a URL scheme.
  * @returns {string} The token with its URL passed through {@link sanitizeUrl}.
  */
 function sanitizeQuoted(token: string): string {
   const end = trailerStart(token);
-  return `${sanitizeUrl(token.slice(0, end))}${token.slice(end)}`;
+  const safe = sanitizeUrl(token.slice(0, end));
+  return safe.endsWith(REDACTED) ? safe : `${safe}${token.slice(end)}`;
 }
 
 /**

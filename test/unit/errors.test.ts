@@ -315,7 +315,7 @@ describe("normalizeError", () => {
     });
 
     expect(error.message).toBe(
-      'HTTP 404: [GET] "https://example.com/user\'s?api_key=%5BREDACTED%5D": 404, ' +
+      "HTTP 404: [GET] \"https://example.com/user's?api_key=%5BREDACTED%5D 404, " +
         '[GET] "https://example.com/a\\"b?token=%5BREDACTED%5D&id=7": 404',
     );
   });
@@ -341,6 +341,30 @@ describe("normalizeError", () => {
       "HTTP 500: Failed: https://safe.example,https://[REDACTED]:[REDACTED]@secret.example/p " +
         "https://a.example/?url=%5BREDACTED%5D",
     );
+  });
+
+  it("lets a redacted value at the end of a URL take its trailing punctuation", () => {
+    const error = normalizeError({
+      status: 404,
+      message: '[GET] "https://example.com/?api_key=abc!!!": 404',
+    });
+
+    expect(error.message).toBe('HTTP 404: [GET] "https://example.com/?api_key=%5BREDACTED%5D 404');
+  });
+
+  it("redacts secrets in a URL fragment", () => {
+    const error = normalizeError({
+      status: 404,
+      message: "Not Found",
+      response: { url: "https://example.com/missing#token=s6&tab=2" },
+    });
+
+    expect(error).toMatchObject({
+      url: "https://example.com/missing#token=%5BREDACTED%5D&tab=2",
+    } satisfies Partial<HTTPError>);
+    expect(
+      normalizeError({ status: 500, message: "https://example.com/#/r?secret=s7 failed" }).message,
+    ).toBe("HTTP 500: https://example.com/#/r?secret=%5BREDACTED%5D failed");
   });
 
   it("keeps a hostile URL on one line in the message", () => {
