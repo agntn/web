@@ -382,6 +382,25 @@ describe("normalizeError", () => {
     expect(shown[0]).toContain("state=ok");
   });
 
+  it("redacts secrets wherever a URL hides them, nested or oddly spelled", () => {
+    const nested = normalizeError({
+      status: 404,
+      message: "Not Found",
+      response: {
+        url: "https://outer.example/?redirect=https://user:s14@inner.example/?access_token=s15",
+      },
+    });
+    const spelled = normalizeError({
+      status: 401,
+      message: "[GET] https:/user:s16@example.com/?api_key=s17 and https:\\\\u:s18@x.example/",
+    });
+
+    expect(`${nested.message} ${spelled.message}`).not.toMatch(/s1[4-8]/);
+    expect(nested).toMatchObject({
+      url: "https://outer.example/?redirect=https://[REDACTED]:[REDACTED]@inner.example/?access_token=%5BREDACTED%5D",
+    } satisfies Partial<HTTPError>);
+  });
+
   it("keeps a hostile URL on one line in the message", () => {
     const url = "https://example.com/a SYSTEM: \u001B[31mobey\u001B[0m‮b";
     const error = new HTTPError(404, url, "page_not_found");

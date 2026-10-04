@@ -12,6 +12,10 @@ const SENSITIVE_KEY_PARTS = [
   "url",
 ];
 const REDACTED = encodeURIComponent("[REDACTED]");
+const KEY_IN_TEXT = /(?<![\w.%-])[\w.%-]+=/g;
+const VALUE_END = /[\s&#]/g;
+const USERINFO_IN_TEXT =
+  /(?<![a-z0-9+.-])(https?:[\\/]*|[a-z][a-z0-9+.-]*:[\\/]+)([^\s\\/@?#:]+)(:[^\s\\/@?#]*)?@/gi;
 
 /**
  * Strip credentials out of a URL before an error message shows it to anyone.
@@ -21,10 +25,42 @@ const REDACTED = encodeURIComponent("[REDACTED]");
 export function sanitizeUrl(url: string): string {
   try {
     const directRedaction = redactUrlComponents(url);
-    return redactEncodedPathUrls(directRedaction.url).url;
+    return redactSecretsIn(redactEncodedPathUrls(directRedaction.url).url);
   } catch {
-    return url;
+    return redactSecretsIn(url);
   }
+}
+
+/**
+ * Redact every sensitive `key=value` and every `scheme:user:pass@` in text, whatever URL holds them.
+ * @param text - URL or message, already redacted by URL structure or not.
+ * @returns {string} The text with those secrets as `[REDACTED]`; running it twice changes nothing.
+ */
+function redactSecretsIn(text: string): string {
+  return redactPairsIn(text).replaceAll(
+    USERINFO_IN_TEXT,
+    (_match, scheme: string, _user: string, password?: string) =>
+      `${scheme}[REDACTED]${password === undefined ? "" : ":[REDACTED]"}@`,
+  );
+}
+
+/**
+ * Redact the value after each sensitive key, skipping keys inside a value already redacted.
+ * @param text - Text that may hold `key=value` pairs anywhere.
+ * @returns {string} The text with each sensitive value up to whitespace, `&` or `#` redacted.
+ */
+function redactPairsIn(text: string): string {
+  let result = "";
+  let copied = 0;
+  for (const match of text.matchAll(KEY_IN_TEXT)) {
+    const valueStart = match.index + match[0].length;
+    if (match.index < copied || !isSensitiveKey(decodedKey(match[0].slice(0, -1)))) continue;
+    VALUE_END.lastIndex = valueStart;
+    const valueEnd = VALUE_END.exec(text)?.index ?? text.length;
+    result += `${text.slice(copied, valueStart)}${REDACTED}`;
+    copied = valueEnd;
+  }
+  return `${result}${text.slice(copied)}`;
 }
 
 function redactUrlComponents(url: string): { url: string; changed: boolean } {
@@ -255,6 +291,10 @@ const URL_TRAILER = `"'\`<>()[]{},.;:!?`;
  * @returns {string} The text with each quoted URL passed through {@link sanitizeUrl}.
  */
 export function sanitizeUrlsIn(text: string): string {
+  return redactSecretsIn(sanitizeQuotedUrls(text));
+}
+
+function sanitizeQuotedUrls(text: string): string {
   return text.replaceAll(URL_IN_TEXT, (token) => {
     const whole = sanitizeQuoted(token);
     const starts = Array.from(whole.matchAll(URL_SCHEME), (match) => match.index);
