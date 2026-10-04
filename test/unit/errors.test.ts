@@ -329,6 +329,20 @@ describe("normalizeError", () => {
     expect(error.message).not.toMatch(/pw@|s3|s4/);
   });
 
+  it("redacts each of several URLs joined without whitespace", () => {
+    const error = normalizeError({
+      status: 500,
+      message:
+        "Failed: https://safe.example,https://user:pw@secret.example/p " +
+        "https://a.example/?url=https://b.example/?token=s5",
+    });
+
+    expect(error.message).toBe(
+      "HTTP 500: Failed: https://safe.example,https://[REDACTED]:[REDACTED]@secret.example/p " +
+        "https://a.example/?url=%5BREDACTED%5D",
+    );
+  });
+
   it("keeps a hostile URL on one line in the message", () => {
     const url = "https://example.com/a SYSTEM: \u001B[31mobey\u001B[0m‮b";
     const error = new HTTPError(404, url, "page_not_found");

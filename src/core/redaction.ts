@@ -187,18 +187,35 @@ function redactSensitiveQueryParams(url: string): { url: string; changed: boolea
 
 /** WHATWG ends a URL only at ASCII whitespace, so a `'` or a NBSP can come before its secret. */
 const URL_IN_TEXT = /https?:\/\/[^\t\n\f\r ]+/gi;
+const URL_SCHEME = /https?:\/\//gi;
 const URL_TRAILER = `"'\`<>()[]{},.;:!?`;
 
 /**
- * Redact every URL a message quotes, the way ofetch repeats the request in its own.
+ * Redact every URL a message quotes, whole and again from each scheme on, so a comma between two
+ * URLs hides neither one's secrets.
  * @param text - Message that may quote URLs.
  * @returns {string} The text with each quoted URL passed through {@link sanitizeUrl}.
  */
 export function sanitizeUrlsIn(text: string): string {
   return text.replaceAll(URL_IN_TEXT, (token) => {
-    const end = trailerStart(token);
-    return `${sanitizeUrl(token.slice(0, end))}${token.slice(end)}`;
+    const whole = sanitizeQuoted(token);
+    const starts = Array.from(whole.matchAll(URL_SCHEME), (match) => match.index);
+    const head = whole.slice(0, starts[0] ?? whole.length);
+    const urls = starts.map((start, index) =>
+      sanitizeQuoted(whole.slice(start, starts[index + 1])),
+    );
+    return `${head}${urls.join("")}`;
   });
+}
+
+/**
+ * Redact one URL token, keeping the quote marks and punctuation that close it.
+ * @param token - Text that starts with a URL scheme.
+ * @returns {string} The token with its URL passed through {@link sanitizeUrl}.
+ */
+function sanitizeQuoted(token: string): string {
+  const end = trailerStart(token);
+  return `${sanitizeUrl(token.slice(0, end))}${token.slice(end)}`;
 }
 
 /**
