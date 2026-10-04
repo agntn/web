@@ -1,5 +1,16 @@
-const SENSITIVE_PARAMS = ["api_key", "key", "token", "secret", "password", "apikey", "url"];
-const SENSITIVE_PARAM_SET = new Set(SENSITIVE_PARAMS.map((param) => param.toLowerCase()));
+/** Parts that make a key secret, case and punctuation aside, like `access_token`. */
+const SENSITIVE_KEY_PARTS = [
+  "token",
+  "key",
+  "secret",
+  "pass",
+  "pwd",
+  "auth",
+  "sig",
+  "session",
+  "credential",
+  "url",
+];
 const REDACTED = encodeURIComponent("[REDACTED]");
 
 /**
@@ -17,12 +28,7 @@ export function sanitizeUrl(url: string): string {
 }
 
 function redactUrlComponents(url: string): { url: string; changed: boolean } {
-  const parsed = new URL(url);
-  const userInfoRedacted = redactUserInfo(
-    url,
-    parsed.username.length > 0 || parsed.password.length > 0,
-    parsed.password.length > 0,
-  );
+  const userInfoRedacted = redactCredentials(url);
   const queryRedacted = redactSensitiveQueryParams(userInfoRedacted.url);
   const fragmentRedacted = redactSensitiveFragmentParams(queryRedacted.url);
 
@@ -30,6 +36,23 @@ function redactUrlComponents(url: string): { url: string; changed: boolean } {
     url: fragmentRedacted.url,
     changed: userInfoRedacted.changed || queryRedacted.changed || fragmentRedacted.changed,
   };
+}
+
+/**
+ * Redact userinfo the parser sees, by the original spelling when `://` shows where it is.
+ * @param url - URL to redact.
+ * @returns {{ url: string; changed: boolean }} The URL and whether it carried credentials.
+ */
+function redactCredentials(url: string): { url: string; changed: boolean } {
+  const parsed = new URL(url);
+  const hasPassword = parsed.password.length > 0;
+  const hasUserInfo = parsed.username.length > 0 || hasPassword;
+  const spelled = redactUserInfo(url, hasUserInfo, hasPassword);
+  if (spelled.changed || !hasUserInfo) return spelled;
+
+  parsed.username = "[REDACTED]";
+  if (hasPassword) parsed.password = "[REDACTED]";
+  return { url: parsed.href, changed: true };
 }
 
 function redactEncodedPathUrls(url: string): { url: string; changed: boolean } {
@@ -200,11 +223,16 @@ function redactSegment(segment: string): string {
   }
 
   const rawKey = segment.slice(0, separatorIndex);
-  if (!SENSITIVE_PARAM_SET.has(decodedKey(rawKey).toLowerCase())) {
+  if (!isSensitiveKey(decodedKey(rawKey))) {
     return segment;
   }
 
   return `${rawKey}=${REDACTED}`;
+}
+
+function isSensitiveKey(key: string): boolean {
+  const name = key.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+  return SENSITIVE_KEY_PARTS.some((part) => name.includes(part));
 }
 
 function decodedKey(rawKey: string): string {

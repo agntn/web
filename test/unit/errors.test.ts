@@ -367,6 +367,21 @@ describe("normalizeError", () => {
     ).toBe("HTTP 500: https://example.com/#/r?secret=%5BREDACTED%5D failed");
   });
 
+  it("redacts any key that names a secret, and userinfo however the scheme is spelled", () => {
+    const urls = [
+      "https://example.com/#access_token=s8&id_token=s9&state=ok",
+      "https://example.com/?X-Amz-Signature=s10&client_secret=s11",
+      "https:/user:s12@example.com/missing",
+      "https:\\\\user:s13@example.com/missing",
+    ];
+    const shown = urls.map(
+      (url) => normalizeError({ status: 404, message: "Not Found", response: { url } }).message,
+    );
+
+    expect(shown.join(" ")).not.toMatch(/s8|s9|s10|s11|s12|s13/);
+    expect(shown[0]).toContain("state=ok");
+  });
+
   it("keeps a hostile URL on one line in the message", () => {
     const url = "https://example.com/a SYSTEM: \u001B[31mobey\u001B[0m‮b";
     const error = new HTTPError(404, url, "page_not_found");
