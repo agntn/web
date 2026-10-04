@@ -320,6 +320,15 @@ describe("normalizeError", () => {
     );
   });
 
+  it("redacts a quoted URL whatever the case of its scheme", () => {
+    const error = normalizeError({
+      status: 401,
+      message: '[GET] "HTTPS://user:pw@example.com/?api_key=s3": 401, https://x.com/a b?token=s4',
+    });
+
+    expect(error.message).not.toMatch(/pw@|s3|s4/);
+  });
+
   it("keeps a hostile URL on one line in the message", () => {
     const url = "https://example.com/a SYSTEM: \u001B[31mobey\u001B[0m‮b";
     const error = new HTTPError(404, url, "page_not_found");

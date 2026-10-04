@@ -185,8 +185,8 @@ function redactSensitiveQueryParams(url: string): { url: string; changed: boolea
   }
 }
 
-/** A URL runs to whitespace, since `'` and an escaped `"` can sit before its secret. */
-const URL_IN_TEXT = /https?:\/\/\S+/g;
+/** WHATWG ends a URL only at ASCII whitespace, so a `'` or a NBSP can come before its secret. */
+const URL_IN_TEXT = /https?:\/\/[^\t\n\f\r ]+/gi;
 const URL_TRAILER = `"'\`<>()[]{},.;:!?`;
 
 /**
