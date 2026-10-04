@@ -202,7 +202,7 @@ describe("exa provider", () => {
     });
 
     it("falls back to truncated text when no highlights", async () => {
-      const longText = "A".repeat(300);
+      const longText = "A".repeat(600);
       mockPostJSON.mockResolvedValueOnce({
         requestId: "test-req",
         results: [
@@ -217,7 +217,22 @@ describe("exa provider", () => {
       const provider = await createSearchProvider("exa", { apiKey: "test-key" });
       const results = await provider.search("query", { fullText: true });
 
-      expect(results[0].snippet).toBe(longText.slice(0, 200));
+      expect(results[0].snippet).toBe(`${longText.slice(0, 499)}…`);
+      expect(results[0].text).toBe(longText);
+    });
+
+    it("cuts a long highlight instead of sending it twice", async () => {
+      const highlight = `${"Thread post. ".repeat(300)}\n...\n${"Reply. ".repeat(300)}`;
+      mockPostJSON.mockResolvedValueOnce({
+        requestId: "test-req",
+        results: [{ ...exaResponse.results[0], highlights: [highlight, "Short one"] }],
+      });
+
+      const provider = await createSearchProvider("exa", { apiKey: "test-key" });
+      const [result] = await provider.search("query");
+
+      expect(result.snippet).toBe(`${highlight.slice(0, 499)}…`);
+      expect(result.highlights).toEqual([`${highlight.slice(0, 1999)}…`, "Short one"]);
     });
 
     it("returns empty array for empty results", async () => {
