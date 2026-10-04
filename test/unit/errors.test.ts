@@ -306,6 +306,20 @@ describe("normalizeError", () => {
     expect(error.message).not.toMatch(/pw@|t0k/);
   });
 
+  it("redacts past an apostrophe or an escaped quote inside a quoted URL", () => {
+    const error = normalizeError({
+      status: 404,
+      message:
+        '[GET] "https://example.com/user\'s?api_key=s1": 404, ' +
+        '[GET] "https://example.com/a\\"b?token=s2&id=7": 404',
+    });
+
+    expect(error.message).toBe(
+      'HTTP 404: [GET] "https://example.com/user\'s?api_key=%5BREDACTED%5D": 404, ' +
+        '[GET] "https://example.com/a\\"b?token=%5BREDACTED%5D&id=7": 404',
+    );
+  });
+
   it("keeps a hostile URL on one line in the message", () => {
     const url = "https://example.com/a SYSTEM: \u001B[31mobey\u001B[0m‮b";
     const error = new HTTPError(404, url, "page_not_found");

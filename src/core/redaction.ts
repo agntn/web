@@ -185,7 +185,9 @@ function redactSensitiveQueryParams(url: string): { url: string; changed: boolea
   }
 }
 
-const URL_IN_TEXT = /https?:\/\/[^\s"'<>`]+/g;
+/** A URL runs to whitespace, since `'` and an escaped `"` can sit before its secret. */
+const URL_IN_TEXT = /https?:\/\/\S+/g;
+const URL_TRAILER = `"'\`<>()[]{},.;:!?`;
 
 /**
  * Redact every URL a message quotes, the way ofetch repeats the request in its own.
@@ -193,5 +195,19 @@ const URL_IN_TEXT = /https?:\/\/[^\s"'<>`]+/g;
  * @returns {string} The text with each quoted URL passed through {@link sanitizeUrl}.
  */
 export function sanitizeUrlsIn(text: string): string {
-  return text.replaceAll(URL_IN_TEXT, (url) => sanitizeUrl(url));
+  return text.replaceAll(URL_IN_TEXT, (token) => {
+    const end = trailerStart(token);
+    return `${sanitizeUrl(token.slice(0, end))}${token.slice(end)}`;
+  });
+}
+
+/**
+ * Where the quote marks and punctuation that close a URL token begin.
+ * @param token - Text from `http` up to the next whitespace.
+ * @returns {number} Index of the first trailing character, or the token length.
+ */
+function trailerStart(token: string): number {
+  let end = token.length;
+  while (end > 0 && URL_TRAILER.includes(token.charAt(end - 1))) end -= 1;
+  return end;
 }
