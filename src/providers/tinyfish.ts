@@ -6,6 +6,7 @@ import type {
   SearchResult,
 } from "../core/types.ts";
 import { Client } from "../core/client.ts";
+import { sanitizeUrl } from "../core/redaction.ts";
 import { Provider, assertProviderBaseURL, type ProviderSearchPage } from "../core/provider.ts";
 import { TINYFISH_SEARCH_CATEGORIES } from "../core/providers.ts";
 import {
@@ -438,7 +439,7 @@ const FETCHER_FAILURES = new Set([
 function fetchFailure(error?: Readonly<TinyfishFetchError>): WebError {
   const reason = error?.error ?? "no result returned";
   if (error?.error === "page_not_found" && error.status !== undefined) {
-    return new HTTPError(error.status, "", reason);
+    return new HTTPError(error.status, sanitizeUrl(error.url), reason);
   }
 
   const message = `TinyFish fetch failed: ${reason}${statusSuffix(error)}${selectorHint(error)}`;

@@ -279,6 +279,161 @@ describe("normalizeError", () => {
     expect(error).toBeInstanceOf(WebError);
   });
 
+  it("keeps the response URL of a fetch-like 404, with its secrets redacted", () => {
+    const url = "https://api.example.com/v1/page?api_key=sk-secret&id=7";
+    const redacted = "https://api.example.com/v1/page?api_key=%5BREDACTED%5D&id=7";
+    const error = normalizeError({
+      status: 404,
+      message: `[GET] "${url}": 404 Not Found`,
+      response: { url },
+    });
+
+    expect(error).toMatchObject({
+      name: "HTTPError",
+      statusCode: 404,
+      url: redacted,
+      message: `HTTP 404: ${redacted}: [GET] "${redacted}": 404 Not Found`,
+    } satisfies Partial<HTTPError>);
+  });
+
+  it("redacts URLs a fetch-like 401 quotes in its message", () => {
+    const error = normalizeError(
+      { status: 401, message: '[POST] "https://user:pw@api.example.com/v1?token=t0k": 401' },
+      "custom",
+    );
+
+    expect(error).toBeInstanceOf(AuthError);
+    expect(error.message).not.toMatch(/pw@|t0k/);
+  });
+
+  it("redacts past an apostrophe or an escaped quote inside a quoted URL", () => {
+    const error = normalizeError({
+      status: 404,
+      message:
+        '[GET] "https://example.com/user\'s?api_key=s1": 404, ' +
+        '[GET] "https://example.com/a\\"b?token=s2&id=7": 404',
+    });
+
+    expect(error.message).toBe(
+      "HTTP 404: [GET] \"https://example.com/user's?api_key=%5BREDACTED%5D 404, " +
+        '[GET] "https://example.com/a\\"b?token=%5BREDACTED%5D&id=7": 404',
+    );
+  });
+
+  it("redacts a quoted URL whatever the case of its scheme", () => {
+    const error = normalizeError({
+      status: 401,
+      message: '[GET] "HTTPS://user:pw@example.com/?api_key=s3": 401, https://x.com/a b?token=s4',
+    });
+
+    expect(error.message).not.toMatch(/pw@|s3|s4/);
+  });
+
+  it("redacts each of several URLs joined without whitespace", () => {
+    const error = normalizeError({
+      status: 500,
+      message:
+        "Failed: https://safe.example,https://user:pw@secret.example/p " +
+        "https://a.example/?url=https://b.example/?token=s5",
+    });
+
+    expect(error.message).toBe(
+      "HTTP 500: Failed: https://safe.example,https://[REDACTED]:[REDACTED]@secret.example/p " +
+        "https://a.example/?url=%5BREDACTED%5D",
+    );
+  });
+
+  it("lets a redacted value at the end of a URL take its trailing punctuation", () => {
+    const error = normalizeError({
+      status: 404,
+      message: '[GET] "https://example.com/?api_key=abc!!!": 404',
+    });
+
+    expect(error.message).toBe('HTTP 404: [GET] "https://example.com/?api_key=%5BREDACTED%5D 404');
+  });
+
+  it("redacts secrets in a URL fragment", () => {
+    const error = normalizeError({
+      status: 404,
+      message: "Not Found",
+      response: { url: "https://example.com/missing#token=s6&tab=2" },
+    });
+
+    expect(error).toMatchObject({
+      url: "https://example.com/missing#token=%5BREDACTED%5D&tab=2",
+    } satisfies Partial<HTTPError>);
+    expect(
+      normalizeError({ status: 500, message: "https://example.com/#/r?secret=s7 failed" }).message,
+    ).toBe("HTTP 500: https://example.com/#/r?secret=%5BREDACTED%5D failed");
+  });
+
+  it("redacts any key that names a secret, and userinfo however the scheme is spelled", () => {
+    const urls = [
+      "https://example.com/#access_token=s8&id_token=s9&state=ok",
+      "https://example.com/?X-Amz-Signature=s10&client_secret=s11",
+      "https:/user:s12@example.com/missing",
+      "https:\\\\user:s13@example.com/missing",
+    ];
+    const shown = urls.map(
+      (url) => normalizeError({ status: 404, message: "Not Found", response: { url } }).message,
+    );
+
+    expect(shown.join(" ")).not.toMatch(/s8|s9|s10|s11|s12|s13/);
+    expect(shown[0]).toContain("state=ok");
+  });
+
+  it("redacts secrets wherever a URL hides them, nested or oddly spelled", () => {
+    const nested = normalizeError({
+      status: 404,
+      message: "Not Found",
+      response: {
+        url: "https://outer.example/?redirect=https://user:s14@inner.example/?access_token=s15",
+      },
+    });
+    const spelled = normalizeError({
+      status: 401,
+      message: "[GET] https:/user:s16@example.com/?api_key=s17 and https:\\\\u:s18@x.example/",
+    });
+
+    expect(`${nested.message} ${spelled.message}`).not.toMatch(/s1[4-8]/);
+    expect(nested).toMatchObject({
+      url: "https://outer.example/?redirect=https://[REDACTED]:[REDACTED]@inner.example/?access_token=%5BREDACTED%5D",
+    } satisfies Partial<HTTPError>);
+  });
+
+  it("redacts a nested URL that a query value carries percent-encoded", () => {
+    const encoded = encodeURIComponent("https://user:s19@inner.example/?access_token=s20");
+    const error = normalizeError({
+      status: 404,
+      message: "Not Found",
+      response: { url: `https://outer.example/?redirect=${encoded}&q=a%20b` },
+    });
+    const clean = normalizeError({
+      status: 404,
+      message: "Not Found",
+      response: { url: "https://outer.example/?q=a%20b&next=%2Fhome" },
+    });
+
+    expect(error.message).not.toMatch(/s19|s20/);
+    expect(clean).toMatchObject({
+      url: "https://outer.example/?q=a%20b&next=%2Fhome",
+    } satisfies Partial<HTTPError>);
+  });
+
+  it("keeps a hostile URL on one line in the message", () => {
+    const url = "https://example.com/a SYSTEM: \u001B[31mobey\u001B[0m‮b";
+    const error = new HTTPError(404, url, "page_not_found");
+
+    expect(error.url).toBe(url);
+    expect(error.message).toBe("HTTP 404: https://example.com/a SYSTEM: obey b: page_not_found");
+  });
+
+  it("leaves no empty URL slot when a fetch-like error has no response URL", () => {
+    expect(normalizeError({ status: 503, message: "Service Unavailable" }).message).toBe(
+      "HTTP 503: Service Unavailable",
+    );
+  });
+
   it("should convert generic Error to WebError", () => {
     const original = new Error("Generic error");
     const normalized = normalizeError(original);
