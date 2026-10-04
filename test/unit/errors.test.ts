@@ -401,6 +401,25 @@ describe("normalizeError", () => {
     } satisfies Partial<HTTPError>);
   });
 
+  it("redacts a nested URL that a query value carries percent-encoded", () => {
+    const encoded = encodeURIComponent("https://user:s19@inner.example/?access_token=s20");
+    const error = normalizeError({
+      status: 404,
+      message: "Not Found",
+      response: { url: `https://outer.example/?redirect=${encoded}&q=a%20b` },
+    });
+    const clean = normalizeError({
+      status: 404,
+      message: "Not Found",
+      response: { url: "https://outer.example/?q=a%20b&next=%2Fhome" },
+    });
+
+    expect(error.message).not.toMatch(/s19|s20/);
+    expect(clean).toMatchObject({
+      url: "https://outer.example/?q=a%20b&next=%2Fhome",
+    } satisfies Partial<HTTPError>);
+  });
+
   it("keeps a hostile URL on one line in the message", () => {
     const url = "https://example.com/a SYSTEM: \u001B[31mobey\u001B[0m‮b";
     const error = new HTTPError(404, url, "page_not_found");

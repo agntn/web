@@ -12,6 +12,8 @@ const SENSITIVE_KEY_PARTS = [
   "url",
 ];
 const REDACTED = encodeURIComponent("[REDACTED]");
+const PERCENT_LAYERS = 3;
+const PERCENT_RUN = /(?:%[\da-f]{2})+/gi;
 const KEY_IN_TEXT = /(?<![\w.%-])[\w.%-]+=/g;
 const VALUE_END = /[\s&#]/g;
 const USERINFO_IN_TEXT =
@@ -32,11 +34,31 @@ export function sanitizeUrl(url: string): string {
 }
 
 /**
- * Redact every sensitive `key=value` and every `scheme:user:pass@` in text, whatever URL holds them.
+ * Redact each sensitive `key=value` and `scheme:user:pass@` in text, whatever URL holds them.
+ * Up to three layers of percent-encoding are looked through; base64 or JSON in a value are not.
  * @param text - URL or message, already redacted by URL structure or not.
+ * @param depth - Percent-decoding layers left to look through.
  * @returns {string} The text with those secrets as `[REDACTED]`; running it twice changes nothing.
  */
-function redactSecretsIn(text: string): string {
+function redactSecretsIn(text: string, depth = PERCENT_LAYERS): string {
+  const plain = redactLiteralSecrets(text);
+  if (depth === 0 || !plain.includes("%")) return plain;
+
+  const decoded = plain.replaceAll(PERCENT_RUN, decodePercentRun);
+  if (decoded === plain) return plain;
+  const revealed = redactSecretsIn(decoded, depth - 1);
+  return revealed === decoded ? plain : revealed;
+}
+
+function decodePercentRun(run: string): string {
+  try {
+    return decodeURIComponent(run);
+  } catch {
+    return run;
+  }
+}
+
+function redactLiteralSecrets(text: string): string {
   return redactPairsIn(text).replaceAll(
     USERINFO_IN_TEXT,
     (_match, scheme: string, _user: string, password?: string) =>
@@ -57,7 +79,8 @@ function redactPairsIn(text: string): string {
     if (match.index < copied || !isSensitiveKey(decodedKey(match[0].slice(0, -1)))) continue;
     VALUE_END.lastIndex = valueStart;
     const valueEnd = VALUE_END.exec(text)?.index ?? text.length;
-    result += `${text.slice(copied, valueStart)}${REDACTED}`;
+    const value = text.slice(valueStart, valueEnd);
+    result += `${text.slice(copied, valueStart)}${value === "[REDACTED]" ? value : REDACTED}`;
     copied = valueEnd;
   }
   return `${result}${text.slice(copied)}`;
