@@ -592,6 +592,8 @@ describe("tinyfish provider", () => {
     await expect(provider.read("https://example.com/missing")).rejects.toMatchObject({
       name: "HTTPError",
       statusCode: 404,
+      url: "https://example.com/missing",
+      message: "HTTP 404: https://example.com/missing: page_not_found",
     } satisfies Partial<HTTPError>);
   });
 });

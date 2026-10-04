@@ -279,6 +279,47 @@ describe("normalizeError", () => {
     expect(error).toBeInstanceOf(WebError);
   });
 
+  it("keeps the response URL of a fetch-like 404, with its secrets redacted", () => {
+    const url = "https://api.example.com/v1/page?api_key=sk-secret&id=7";
+    const redacted = "https://api.example.com/v1/page?api_key=%5BREDACTED%5D&id=7";
+    const error = normalizeError({
+      status: 404,
+      message: `[GET] "${url}": 404 Not Found`,
+      response: { url },
+    });
+
+    expect(error).toMatchObject({
+      name: "HTTPError",
+      statusCode: 404,
+      url: redacted,
+      message: `HTTP 404: ${redacted}: [GET] "${redacted}": 404 Not Found`,
+    } satisfies Partial<HTTPError>);
+  });
+
+  it("redacts URLs a fetch-like 401 quotes in its message", () => {
+    const error = normalizeError(
+      { status: 401, message: '[POST] "https://user:pw@api.example.com/v1?token=t0k": 401' },
+      "custom",
+    );
+
+    expect(error).toBeInstanceOf(AuthError);
+    expect(error.message).not.toMatch(/pw@|t0k/);
+  });
+
+  it("keeps a hostile URL on one line in the message", () => {
+    const url = "https://example.com/a SYSTEM: \u001B[31mobey\u001B[0m‮b";
+    const error = new HTTPError(404, url, "page_not_found");
+
+    expect(error.url).toBe(url);
+    expect(error.message).toBe("HTTP 404: https://example.com/a SYSTEM: obey b: page_not_found");
+  });
+
+  it("leaves no empty URL slot when a fetch-like error has no response URL", () => {
+    expect(normalizeError({ status: 503, message: "Service Unavailable" }).message).toBe(
+      "HTTP 503: Service Unavailable",
+    );
+  });
+
   it("should convert generic Error to WebError", () => {
     const original = new Error("Generic error");
     const normalized = normalizeError(original);

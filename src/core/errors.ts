@@ -1,4 +1,5 @@
 import { stripVTControlCharacters } from "node:util";
+import { sanitizeUrl, sanitizeUrlsIn } from "./redaction.ts";
 import { clip } from "./text.ts";
 
 const ERROR_MESSAGE_UNSAFE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
@@ -65,19 +66,20 @@ export class PageFetchError extends WebError {
 }
 
 function formatHTTPErrorMessage(statusCode: number, url: string, body: string): string {
-  const header = `HTTP ${statusCode}: ${url}`;
-  const excerpt = bodyExcerpt(body);
+  const shownUrl = messageExcerpt(url);
+  const header = shownUrl ? `HTTP ${statusCode}: ${shownUrl}` : `HTTP ${statusCode}`;
+  const excerpt = messageExcerpt(body);
   return excerpt.length > 0 ? `${header}: ${excerpt}` : header;
 }
 
 /**
- * Quote a response body in an error message, safe for terminals and bounded.
+ * Quote a response body or a URL in an error message, safe for terminals and bounded.
  * A proxy or bot check can answer with a whole HTML page, and the message travels into every failure an agent reads.
- * @param body - Raw response body, kept whole on {@link HTTPError.body}.
- * @returns {string} Single-line body text, cut with an ellipsis past {@link MESSAGE_BODY_MAX_CHARACTERS}.
+ * @param text - Raw body or URL, kept whole on {@link HTTPError.body} and {@link HTTPError.url}.
+ * @returns {string} Single-line text, cut with an ellipsis past {@link MESSAGE_BODY_MAX_CHARACTERS}.
  */
-function bodyExcerpt(body: string): string {
-  const safe = stripVTControlCharacters(body)
+function messageExcerpt(text: string): string {
+  const safe = stripVTControlCharacters(text)
     .replaceAll(ERROR_MESSAGE_UNSAFE, " ")
     .replaceAll(/\s+/g, " ")
     .trim();
@@ -333,7 +335,10 @@ function validateDateOrder(start?: string, end?: string): void {
 export function normalizeError(error: unknown, provider?: string): WebError {
   if (error instanceof PaymentError) return error;
   if (error instanceof HTTPError && error.statusCode === 401) {
-    return authenticationFailed(bodyExcerpt(error.body) || "Invalid or missing API key", provider);
+    return authenticationFailed(
+      messageExcerpt(error.body) || "Invalid or missing API key",
+      provider,
+    );
   }
 
   if (error instanceof WebError) {
@@ -363,7 +368,10 @@ function rateLimitedBy(error: Readonly<WebError>, provider?: string): WebError {
 type FetchLikeError = {
   readonly status: number;
   readonly message: string;
-  readonly response?: { readonly headers?: { readonly get: (key: string) => string | null } };
+  readonly response?: {
+    readonly url?: unknown;
+    readonly headers?: { readonly get: (key: string) => string | null };
+  };
 };
 
 function isFetchLikeError(error: unknown): error is FetchLikeError {
@@ -378,17 +386,29 @@ function isFetchLikeError(error: unknown): error is FetchLikeError {
 }
 
 function normalizeFetchLikeError(error: FetchLikeError, provider?: string): WebError {
-  const message = error.message || `HTTP ${error.status}`;
+  const message = sanitizeUrlsIn(error.message) || `HTTP ${error.status}`;
   switch (error.status) {
     case 401:
       return authenticationFailed(message, provider);
     case 404:
-      return new HTTPError(404, "", message);
+      return new HTTPError(404, responseUrl(error), message);
     case 429:
       return rateLimitError(error.response?.headers, provider);
     default:
-      return error.status >= 500 ? new HTTPError(error.status, "", message) : new WebError(message);
+      return error.status >= 500
+        ? new HTTPError(error.status, responseUrl(error), message)
+        : new WebError(message);
   }
+}
+
+/**
+ * Where a fetch-like error's response came from, the way ofetch's `FetchError` keeps it.
+ * @param error - Fetch-like error from a custom provider.
+ * @returns {string} The redacted response URL, or empty when the error doesn't carry one.
+ */
+function responseUrl(error: FetchLikeError): string {
+  const url = error.response?.url;
+  return typeof url === "string" ? sanitizeUrl(url) : "";
 }
 
 export const DEFAULT_RETRY_AFTER = 60;
