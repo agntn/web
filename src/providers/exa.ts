@@ -8,6 +8,7 @@ import type {
 import { Client } from "../core/client.ts";
 import { Provider } from "../core/provider.ts";
 import { AuthError, WebError, normalizeError } from "../core/errors.ts";
+import { clip, snippet } from "../core/text.ts";
 
 interface ExaSearchRequest {
   readonly query: string;
@@ -64,6 +65,9 @@ interface ExaContentsResponse {
 /** `livecrawlTimeout` is capped at 90 s, so the read client waits a little longer than that. */
 const EXA_MAX_LIVECRAWL_TIMEOUT_MS = 90_000;
 const EXA_CONTENTS_CLIENT_TIMEOUT_MS = 100_000;
+
+/** An Exa highlight runs to 8,000 characters, and 2,000 keeps most of the query terms. */
+const EXA_HIGHLIGHT_MAX_CHARACTERS = 2000;
 
 export class ExaProvider extends Provider {
   static readonly providerName = "exa";
@@ -200,14 +204,14 @@ function mapResult(result: ExaResult): SearchResult {
   return {
     url: result.url,
     title: result.title ?? "",
-    snippet: result.highlights?.[0] ?? (result.text ? result.text.slice(0, 200) : ""),
+    snippet: snippet(result.highlights?.[0] ?? result.text ?? ""),
     score: result.score,
     publishedDate: result.publishedDate,
     author: result.author,
     image: result.image,
     favicon: result.favicon,
     text: result.text,
-    highlights: result.highlights ? [...result.highlights] : undefined,
+    highlights: result.highlights?.map((text) => clip(text, EXA_HIGHLIGHT_MAX_CHARACTERS)),
     summary: result.summary,
   };
 }
