@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import {
   cpSync,
   mkdirSync,
@@ -15,6 +14,7 @@ import { createJiti } from "jiti/static";
 import { build } from "vite-plus/pack";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from "vite-plus/test";
 import { builtinProviders } from "../src/index.ts";
+import { packSource } from "./fixtures/pack.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 let packageDir = "";
@@ -90,13 +90,7 @@ describe("bundled package", () => {
   beforeAll(() => {
     mkdirSync(join(root, "node_modules/.cache"), { recursive: true });
     packageDir = mkdtempSync(join(root, "node_modules/.cache/web-package-"));
-    const bin = fileURLToPath(import.meta.resolve("vite-plus/bin"));
-    const { status, stderr } = spawnSync(
-      process.execPath,
-      [bin, "pack", "--out-dir", join(packageDir, "dist")],
-      { cwd: root, encoding: "utf8" },
-    );
-    if (status !== 0) throw new Error(`vp pack failed:\n${stderr}`);
+    packSource(join(packageDir, "dist"));
 
     const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
       readonly files: readonly string[];
