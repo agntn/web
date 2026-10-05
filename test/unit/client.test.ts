@@ -1,37 +1,19 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vite-plus/test";
 
-const mockFetch = vi.fn();
-
-vi.mock("ofetch", () => ({
-  ofetch: {
-    create: vi.fn(() => mockFetch),
-  },
-  FetchError: class FetchError extends Error {
-    statusCode: number;
-    data: unknown;
-    response?: Response;
-
-    constructor(message: string, options?: Readonly<ErrorOptions>) {
-      super(message, options);
-      this.name = "FetchError";
-      this.statusCode = 0;
-      this.data = null;
-    }
-  },
-}));
-
 import { Client, defaultClient, resetDefaultClientForTests } from "../../src/core/client.ts";
 import { HTTPError, RateLimitError } from "../../src/core/errors.ts";
 import { version } from "../../src/version.ts";
-import { FetchError } from "ofetch";
+
+const mockFetch = vi.fn<typeof fetch>();
 
 describe("Client", () => {
   beforeEach(() => {
     mockFetch.mockReset();
-    vi.clearAllMocks();
+    vi.stubGlobal("fetch", mockFetch);
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     resetDefaultClientForTests();
   });
 
@@ -80,15 +62,11 @@ describe("Client", () => {
       const controller = new AbortController();
       const reason = new DOMException("cancelled after response", "AbortError");
 
-      mockFetch.mockResolvedValueOnce(testData);
+      respondJSON(testData);
 
       const result = await client.getJSON(testUrl, undefined, controller.signal);
 
-      expect(mockFetch).toHaveBeenCalledWith(testUrl, {
-        headers: undefined,
-        signal: forwardedSignal(0),
-        retry: false,
-      });
+      expect(sent(0)).toMatchObject({ url: testUrl, method: "GET", body: undefined });
       expect(result).toEqual(testData);
       controller.abort(reason);
       expect(abortReason(0)).toBe(reason);
@@ -97,10 +75,7 @@ describe("Client", () => {
     it("should apply the timeout while a caller signal remains active", async () => {
       const client = new Client({ timeout: 20, maxRetries: 0 });
       const controller = new AbortController();
-      mockFetch.mockImplementationOnce(
-        (_url: string, options: Readonly<{ signal: Readonly<AbortSignal> }>) =>
-          rejectOnAbort(options.signal),
-      );
+      mockFetch.mockImplementationOnce(async (_url, init) => rejectOnAbort(init?.signal));
 
       const outcome = await Promise.race([
         client.getJSON("https://api.example.com/slow", undefined, controller.signal).then(
@@ -123,11 +98,8 @@ describe("Client", () => {
     it("should retry after a timeout with a fresh timeout", async () => {
       const client = new Client({ timeout: 20, maxRetries: 1, baseDelay: 0 });
       mockFetch
-        .mockImplementationOnce(
-          (_url: string, options: Readonly<{ signal: Readonly<AbortSignal> }>) =>
-            rejectOnAbort(options.signal),
-        )
-        .mockResolvedValueOnce({ result: "success" });
+        .mockImplementationOnce(async (_url, init) => rejectOnAbort(init?.signal))
+        .mockImplementationOnce(async () => jsonResponse({ result: "success" }));
 
       await expect(
         client.getJSON("https://api.example.com/slow", undefined, new AbortController().signal),
@@ -139,9 +111,8 @@ describe("Client", () => {
 
     it("should retry eligible failures while a caller signal remains active", async () => {
       const client = new Client({ maxRetries: 1, baseDelay: 0 });
-      const error = new FetchError("Server error");
-      error.statusCode = 500;
-      mockFetch.mockRejectedValueOnce(error).mockResolvedValueOnce({ result: "success" });
+      respond(500, "Server error");
+      respondJSON({ result: "success" });
 
       await expect(
         client.getJSON("https://api.example.com/data", undefined, new AbortController().signal),
@@ -153,9 +124,7 @@ describe("Client", () => {
       const client = new Client({ maxRetries: 2, baseDelay: 10_000 });
       const signalController = new AbortController();
       const reason = new DOMException("cancelled during backoff", "AbortError");
-      const error = new FetchError("Server error");
-      error.statusCode = 500;
-      mockFetch.mockRejectedValue(error);
+      respondAlways(500, "Server error");
 
       const pending = client.getJSON(
         "https://api.example.com/data",
@@ -174,15 +143,12 @@ describe("Client", () => {
       const testUrl = "https://api.example.com/data";
       const testData = { result: "success" };
 
-      mockFetch.mockResolvedValueOnce(testData);
+      respondJSON(testData);
 
       const result = await client.getJSON(testUrl);
 
-      expect(mockFetch).toHaveBeenCalledWith(testUrl, {
-        headers: undefined,
-        signal: forwardedSignal(0),
-        retry: false,
-      });
+      expect(sent(0)).toMatchObject({ url: testUrl, method: "GET" });
+      expect(forwardedSignal(0).aborted).toBe(false);
       expect(result).toEqual(testData);
     });
 
@@ -194,7 +160,7 @@ describe("Client", () => {
       }
 
       const testData: TestResponse = { id: 1, name: "test" };
-      mockFetch.mockResolvedValueOnce(testData);
+      respondJSON(testData);
 
       const result = await client.getJSON<TestResponse>("https://api.example.com/data");
 
@@ -212,15 +178,15 @@ describe("Client", () => {
       };
       const testData = { result: "success" };
 
-      mockFetch.mockResolvedValueOnce(testData);
+      respondJSON(testData);
 
       const result = await client.getJSON(testUrl, customHeaders);
 
-      expect(mockFetch).toHaveBeenCalledWith(testUrl, {
-        headers: customHeaders,
-        signal: forwardedSignal(0),
-        retry: false,
-      });
+      const { headers } = sent(0);
+      expect(headers.get("Authorization")).toBe("Bearer token123");
+      expect(headers.get("X-Custom-Header")).toBe("custom-value");
+      expect(headers.get("Accept")).toBe("application/json");
+      expect(headers.get("User-Agent")).toBe(`agntn-web/${version}`);
       expect(result).toEqual(testData);
     });
 
@@ -228,11 +194,7 @@ describe("Client", () => {
       const client = new Client();
       const testUrl = "https://api.example.com/data";
 
-      const error = new FetchError("Not found");
-      error.statusCode = 404;
-      error.data = "Resource not found";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(404, "Resource not found");
 
       try {
         await client.getJSON(testUrl, undefined, undefined);
@@ -254,17 +216,16 @@ describe("Client", () => {
       const testResponse = { success: true };
       const signal = new AbortController().signal;
 
-      mockFetch.mockResolvedValueOnce(testResponse);
+      respondJSON(testResponse);
 
       const result = await client.postJSON(testUrl, testBody, undefined, signal);
 
-      expect(mockFetch).toHaveBeenCalledWith(testUrl, {
+      expect(sent(0)).toMatchObject({
+        url: testUrl,
         method: "POST",
-        body: testBody,
-        headers: undefined,
-        signal: forwardedSignal(0),
-        retry: false,
+        body: JSON.stringify(testBody),
       });
+      expect(sent(0).headers.get("Content-Type")).toBe("application/json");
       expect(result).toEqual(testResponse);
     });
 
@@ -278,17 +239,13 @@ describe("Client", () => {
       };
       const testResponse = { success: true };
 
-      mockFetch.mockResolvedValueOnce(testResponse);
+      respondJSON(testResponse);
 
       const result = await client.postJSON(testUrl, testBody, customHeaders);
 
-      expect(mockFetch).toHaveBeenCalledWith(testUrl, {
-        method: "POST",
-        body: testBody,
-        headers: customHeaders,
-        signal: forwardedSignal(0),
-        retry: false,
-      });
+      expect(sent(0)).toMatchObject({ method: "POST", body: JSON.stringify(testBody) });
+      expect(sent(0).headers.get("Authorization")).toBe("Bearer token123");
+      expect(sent(0).headers.get("X-Custom-Header")).toBe("custom-value");
       expect(result).toEqual(testResponse);
     });
 
@@ -298,17 +255,16 @@ describe("Client", () => {
       const testBody = { data: "test" };
       const testResponse = { success: true };
 
-      mockFetch.mockResolvedValueOnce(testResponse);
+      respondJSON(testResponse);
 
       const result = await client.postJSON(testUrl, testBody);
 
-      expect(mockFetch).toHaveBeenCalledWith(testUrl, {
+      expect(sent(0)).toMatchObject({
+        url: testUrl,
         method: "POST",
-        body: testBody,
-        headers: undefined,
-        signal: forwardedSignal(0),
-        retry: false,
+        body: JSON.stringify(testBody),
       });
+      expect(sent(0).headers.get("Content-Type")).toBe("application/json");
       expect(result).toEqual(testResponse);
     });
 
@@ -320,7 +276,7 @@ describe("Client", () => {
       }
 
       const testResponse: SubmitResponse = { id: "abc123", timestamp: 1234567890 };
-      mockFetch.mockResolvedValueOnce(testResponse);
+      respondJSON(testResponse);
 
       const result = await client.postJSON<SubmitResponse>("https://api.example.com/submit", {
         data: "test",
@@ -334,28 +290,17 @@ describe("Client", () => {
       const client = new Client();
       const testUrl = "https://api.example.com/submit";
 
-      const error = new FetchError("Bad request");
-      error.statusCode = 400;
-      error.data = "Invalid input";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(400, "Invalid input");
 
       await expect(client.postJSON(testUrl, { data: "test" })).rejects.toThrow(HTTPError);
     });
   });
 
   describe("error mapping", () => {
-    it("should map FetchError with statusCode 429 to RateLimitError", async () => {
+    it("should map a 429 to RateLimitError", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Too many requests");
-      error.statusCode = 429;
-      error.data = null;
-      error.response = new Response(null, {
-        headers: { "Retry-After": "120" },
-      });
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(429, null, { "Retry-After": "120" });
 
       await expect(
         client.getJSON("https://api.example.com/data", undefined, undefined),
@@ -373,12 +318,7 @@ describe("Client", () => {
     it("should use default retryAfter of 60 when Retry-After header missing", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Too many requests");
-      error.statusCode = 429;
-      error.data = null;
-      error.response = new Response(null);
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(429, null);
 
       try {
         await client.getJSON("https://api.example.com/data", undefined, undefined);
@@ -393,12 +333,7 @@ describe("Client", () => {
       expect.assertions(2);
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Too many requests");
-      error.statusCode = 429;
-      error.data = null;
-      error.response = new Response(null, { headers: { "Retry-After": "soon" } });
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(429, null, { "Retry-After": "soon" });
 
       try {
         await client.getJSON("https://api.example.com/data", undefined, undefined);
@@ -414,12 +349,7 @@ describe("Client", () => {
       expect.assertions(2);
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Too many requests");
-      error.statusCode = 429;
-      error.data = null;
-      error.response = new Response(null, { headers: { "Retry-After": "-10" } });
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(429, null, { "Retry-After": "-10" });
 
       try {
         await client.getJSON("https://api.example.com/data", undefined, undefined);
@@ -431,14 +361,10 @@ describe("Client", () => {
       }
     });
 
-    it("should map FetchError with other statusCode to HTTPError", async () => {
+    it("should map any other status to HTTPError", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Server error");
-      error.statusCode = 500;
-      error.data = "Internal server error";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(500, "Internal server error");
 
       try {
         await client.getJSON("https://api.example.com/data", undefined, undefined);
@@ -452,32 +378,26 @@ describe("Client", () => {
       }
     });
 
-    it("should stringify error.data when it is an object", async () => {
+    it("should keep a JSON error body as the server sent it", async () => {
+      expect.assertions(1);
       const client = new Client({ maxRetries: 0 });
+      const data = JSON.stringify({ field: "email", message: "Invalid format" }, null, 2);
 
-      const error = new FetchError("Bad request");
-      error.statusCode = 400;
-      error.data = { field: "email", message: "Invalid format" };
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(400, data, { "Content-Type": "application/json" });
 
       try {
         await client.getJSON("https://api.example.com/data", undefined, undefined);
       } catch (err) {
         if (err instanceof HTTPError) {
-          expect(err.body).toBe(JSON.stringify(error.data));
+          expect(err.body).toBe(data);
         }
       }
     });
 
-    it("should leave the body empty for FetchError with null data", async () => {
+    it("should leave the body empty for an error without one", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Not found");
-      error.statusCode = 404;
-      error.data = null;
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(404, null);
 
       try {
         await client.getJSON("https://api.example.com/data", undefined, undefined);
@@ -498,12 +418,8 @@ describe("Client", () => {
         code: "ENOTFOUND",
       });
       const fetchFailed = new TypeError("fetch failed", { cause: dns });
-      const error = new FetchError(
-        '[GET] "https://api.example.com/data?api_key=sk-live-secret": <no response> fetch failed',
-        { cause: fetchFailed },
-      );
 
-      mockFetch.mockRejectedValueOnce(error);
+      mockFetch.mockRejectedValueOnce(fetchFailed);
 
       try {
         await client.getJSON("https://api.example.com/data?api_key=sk-live-secret");
@@ -529,24 +445,18 @@ describe("Client", () => {
         new Error("connect ECONNREFUSED ::1:8080"),
         new Error("connect ECONNREFUSED 127.0.0.1:8080"),
       ]);
-      const error = new FetchError(
-        '[GET] "http://localhost:8080/search": <no response> fetch failed',
-        { cause: new TypeError("fetch failed", { cause: refused }) },
-      );
 
-      mockFetch.mockRejectedValueOnce(error);
+      mockFetch.mockRejectedValueOnce(new TypeError("fetch failed", { cause: refused }));
 
       await expect(client.getJSON("http://localhost:8080/search")).rejects.toThrow(
         "HTTP 0: http://localhost:8080/search: fetch failed: connect ECONNREFUSED ::1:8080, connect ECONNREFUSED 127.0.0.1:8080",
       );
     });
 
-    it("should leave the body empty when the transport failure has no cause", async () => {
+    it("should leave the body empty when fetch rejects with a non-Error", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      mockFetch.mockRejectedValueOnce(
-        new FetchError('[GET] "https://api.example.com/data": <no response>'),
-      );
+      mockFetch.mockRejectedValueOnce("socket gone");
 
       try {
         await client.getJSON("https://api.example.com/data");
@@ -559,18 +469,14 @@ describe("Client", () => {
         expect(err.statusCode).toBe(0);
         expect(err.body).toBe("");
         expect(err.message).toBe("HTTP 0: https://api.example.com/data");
-        expect(err.cause).toBeUndefined();
+        expect(err.cause).toBe("socket gone");
       }
     });
 
     it("should redact api_key from URL in HTTPError", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Server error");
-      error.statusCode = 500;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(500, "");
 
       try {
         await client.getJSON(
@@ -591,11 +497,7 @@ describe("Client", () => {
     it("should redact a nested target URL from HTTPError", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Server error");
-      error.statusCode = 500;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(500, "");
 
       try {
         await client.getJSON(
@@ -618,11 +520,7 @@ describe("Client", () => {
     it("should redact secrets from an encoded target URL in the request path", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Server error");
-      error.statusCode = 500;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(500, "");
 
       try {
         await client.getJSON(
@@ -651,11 +549,7 @@ describe("Client", () => {
       const requestUrl =
         "https://r.jina.ai/https%3A%2F%2Fexample.com%2Fpublic%3Fq%3Dhello%2520world";
 
-      const error = new FetchError("Not found");
-      error.statusCode = 404;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(404, "");
 
       try {
         await client.getJSON(requestUrl, undefined, undefined);
@@ -672,11 +566,7 @@ describe("Client", () => {
     it("should redact multiple sensitive params from URL in HTTPError", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Unauthorized");
-      error.statusCode = 401;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(401, "");
 
       try {
         await client.getJSON(
@@ -696,11 +586,7 @@ describe("Client", () => {
     it("should redact case variants of sensitive params from URL in HTTPError", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Unauthorized");
-      error.statusCode = 401;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(401, "");
 
       try {
         await client.getJSON(
@@ -727,11 +613,7 @@ describe("Client", () => {
     it("should redact repeated mixed-case sensitive params from URL in HTTPError", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Unauthorized");
-      error.statusCode = 401;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(401, "");
 
       try {
         await client.getJSON(
@@ -758,11 +640,7 @@ describe("Client", () => {
     it("should preserve non-sensitive query encoding when redacting secrets", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Unauthorized");
-      error.statusCode = 401;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(401, "");
 
       try {
         await client.getJSON(
@@ -784,11 +662,7 @@ describe("Client", () => {
     it("should preserve flag params and redact sensitive params with explicit values", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Unauthorized");
-      error.statusCode = 401;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(401, "");
 
       try {
         await client.getJSON("https://example.com/api?api_key&token=&q=test", undefined, undefined);
@@ -808,11 +682,7 @@ describe("Client", () => {
     it("should redact userinfo credentials from URL in HTTPError", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Unauthorized");
-      error.statusCode = 401;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(401, "");
 
       try {
         await client.getJSON(
@@ -835,11 +705,7 @@ describe("Client", () => {
     it("should leave URL unchanged when no sensitive params present", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Not found");
-      error.statusCode = 404;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(404, "");
 
       try {
         await client.getJSON(
@@ -860,11 +726,7 @@ describe("Client", () => {
     it("should preserve original URL string when no sensitive params are present", async () => {
       const client = new Client({ maxRetries: 0 });
 
-      const error = new FetchError("Not found");
-      error.statusCode = 404;
-      error.data = "";
-
-      mockFetch.mockRejectedValueOnce(error);
+      respond(404, "");
 
       const originalUrl = "https://api.example.com/search?q=hello%20world&x=~tilde";
 
@@ -880,25 +742,20 @@ describe("Client", () => {
       }
     });
 
-    it("should handle non-FetchError errors", async () => {
+    it("should treat any fetch rejection as a transport failure", async () => {
       const client = new Client({ maxRetries: 0 });
       const genericError = new Error("Network timeout");
 
       mockFetch.mockRejectedValueOnce(genericError);
 
-      await expect(
-        client.getJSON("https://api.example.com/data", undefined, undefined),
-      ).rejects.toThrow("Network timeout");
-    });
+      const error = await client.getJSON("https://api.example.com/data").catch((e: unknown) => e);
 
-    it("should handle non-Error thrown values", async () => {
-      const client = new Client({ maxRetries: 0 });
-
-      mockFetch.mockRejectedValueOnce("string error");
-
-      await expect(
-        client.getJSON("https://api.example.com/data", undefined, undefined),
-      ).rejects.toThrow("string error");
+      expect(error).toBeInstanceOf(HTTPError);
+      expect(error).toMatchObject({ statusCode: 0, cause: genericError });
+      expect(error).toHaveProperty(
+        "message",
+        "HTTP 0: https://api.example.com/data: Network timeout",
+      );
     });
   });
 
@@ -911,8 +768,8 @@ describe("Client", () => {
       vi.useFakeTimers();
       const client = new Client({ maxRetries: 1, baseDelay: 0 });
       mockFetch
-        .mockRejectedValueOnce(rateLimited({ remaining: "0, 445", reset: "1, 56000" }))
-        .mockResolvedValueOnce({ result: "success" });
+        .mockImplementationOnce(rateLimited({ remaining: "0, 445", reset: "1, 56000" }))
+        .mockImplementationOnce(async () => jsonResponse({ result: "success" }));
 
       const pending = client.getJSON("https://api.search.brave.com/res/v1/web/search");
       await vi.advanceTimersByTimeAsync(999);
@@ -927,8 +784,8 @@ describe("Client", () => {
       vi.useFakeTimers();
       const client = new Client({ maxRetries: 1, baseDelay: 0 });
       mockFetch
-        .mockRejectedValueOnce(rateLimited({ retryAfter: "2" }))
-        .mockResolvedValueOnce({ result: "success" });
+        .mockImplementationOnce(rateLimited({ retryAfter: "2" }))
+        .mockImplementationOnce(async () => jsonResponse({ result: "success" }));
 
       const pending = client.getJSON(
         "https://api.example.com/data",
@@ -944,7 +801,7 @@ describe("Client", () => {
 
     it("fails at once with the reset when the wait is too long to retry", async () => {
       const client = new Client({ maxRetries: 5, baseDelay: 0 });
-      mockFetch.mockRejectedValue(rateLimited({ remaining: "0, 0", reset: "1, 56000" }));
+      mockFetch.mockImplementation(rateLimited({ remaining: "0, 0", reset: "1, 56000" }));
 
       const error = await client.getJSON("https://api.example.com/data").catch((e: unknown) => e);
 
@@ -955,7 +812,7 @@ describe("Client", () => {
 
     it("reports the reset of the exhausted window after the last retry", async () => {
       const client = new Client({ maxRetries: 0 });
-      mockFetch.mockRejectedValueOnce(rateLimited({ remaining: "0, 445", reset: "1, 56000" }));
+      mockFetch.mockImplementationOnce(rateLimited({ remaining: "0, 445", reset: "1, 56000" }));
 
       const error = await client.getJSON("https://api.example.com/data").catch((e: unknown) => e);
 
@@ -965,7 +822,7 @@ describe("Client", () => {
 
     it("keeps the backoff when a 429 names no reset", async () => {
       const client = new Client({ maxRetries: 2, baseDelay: 0 });
-      mockFetch.mockRejectedValue(rateLimited({}));
+      mockFetch.mockImplementation(rateLimited({}));
 
       const error = await client.getJSON("https://api.example.com/data").catch((e: unknown) => e);
 
@@ -1001,17 +858,28 @@ describe("Client", () => {
   });
 });
 
+/* What one fetch call sent, read back from its arguments. */
+function sent(call: number): {
+  url: string;
+  method: string;
+  body: unknown;
+  headers: Headers;
+} {
+  const [url, init] = mockFetch.mock.calls[call] ?? [];
+  return {
+    url: url instanceof Request ? url.url : url.toString(),
+    method: init?.method ?? "GET",
+    body: init?.body,
+    headers: new Headers(init?.headers),
+  };
+}
+
 function forwardedSignal(call: number): AbortSignal {
-  const options: unknown = mockFetch.mock.calls[call]?.[1];
-  if (
-    typeof options !== "object" ||
-    options === null ||
-    !("signal" in options) ||
-    !(options.signal instanceof AbortSignal)
-  ) {
+  const signal = mockFetch.mock.calls[call]?.[1]?.signal;
+  if (!(signal instanceof AbortSignal)) {
     throw new Error(`fetch call ${call} carried no signal`);
   }
-  return options.signal;
+  return signal;
 }
 
 function abortReason(call: number): DOMException {
@@ -1022,30 +890,57 @@ function abortReason(call: number): DOMException {
   return reason;
 }
 
-function rejectOnAbort(signal: Readonly<AbortSignal>): Promise<never> {
+/* Native fetch rejects with the abort reason itself. */
+function rejectOnAbort(signal?: Readonly<AbortSignal> | null): Promise<never> {
   return new Promise((_resolve, reject) => {
-    signal.addEventListener(
-      "abort",
-      () => reject(new FetchError(String(signal.reason), { cause: signal.reason })),
-      { once: true },
-    );
+    signal?.addEventListener("abort", () => reject(signal.reason), { once: true });
   });
+}
+
+/* A fresh JSON answer each call, since a Response body reads once. */
+function jsonResponse(data: unknown): Response {
+  return new Response(JSON.stringify(data), {
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+function respondJSON(data: unknown): void {
+  mockFetch.mockImplementationOnce(async () => jsonResponse(data));
+}
+
+function statusResponse(
+  status: number,
+  body: string | null,
+  headers: Readonly<Record<string, string>> = {},
+): Response {
+  return new Response(body, { status, headers });
+}
+
+function respond(
+  status: number,
+  body: string | null,
+  headers?: Readonly<Record<string, string>>,
+): void {
+  mockFetch.mockImplementationOnce(async () => statusResponse(status, body, headers));
+}
+
+function respondAlways(
+  status: number,
+  body: string | null,
+  headers?: Readonly<Record<string, string>>,
+): void {
+  mockFetch.mockImplementation(async () => statusResponse(status, body, headers));
 }
 
 function rateLimited(headers: {
   readonly retryAfter?: string;
   readonly remaining?: string;
   readonly reset?: string;
-}): FetchError {
-  const error = new FetchError("Too many requests");
-  error.statusCode = 429;
-  error.response = new Response(null, {
-    status: 429,
-    headers: {
+}): () => Promise<Response> {
+  return async () =>
+    statusResponse(429, null, {
       ...(headers.retryAfter === undefined ? {} : { "Retry-After": headers.retryAfter }),
       ...(headers.remaining === undefined ? {} : { "X-RateLimit-Remaining": headers.remaining }),
       ...(headers.reset === undefined ? {} : { "X-RateLimit-Reset": headers.reset }),
-    },
-  });
-  return error;
+    });
 }

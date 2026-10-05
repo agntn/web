@@ -1,4 +1,3 @@
-import type { $Fetch } from "ofetch";
 import type { ClientOptions } from "./types.ts";
 import { HTTPError, RateLimitError, rateLimitError, rateLimitWait } from "./errors.ts";
 import { version } from "../version.ts";
@@ -13,26 +12,31 @@ const RETRY_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504]);
 /** Longest reset a rate limited request waits for before it retries instead of failing. */
 const MAX_RATE_LIMIT_WAIT_SECONDS = 5;
 const MAX_CAUSE_DEPTH = 8;
+/** JSON media types, `+json` suffixes included; an answer without a Content-Type counts too. */
+const JSON_MEDIA_TYPE = /^application\/(?:[\w!#$%&*.^`~-]*\+)?json$/iu;
 
-type Ofetch = typeof import("ofetch");
+type ResponseHeaders = Readonly<{ get: (name: string) => string | null }>;
 
-/** What a retry decision reads from an ofetch `FetchError`. */
-type FailedAttempt = Readonly<{
-  statusCode?: number;
-  response?: Readonly<{ headers: Readonly<{ get: (name: string) => string | null }> }>;
-}>;
+/** One attempt that got no usable answer: status 0 means no response arrived at all. */
+class FailedAttempt extends Error {
+  readonly status: number;
+  readonly body: string;
+  readonly headers: ResponseHeaders | undefined;
+  /** False once the server has answered, so a metered request is never paid for twice. */
+  readonly retryable: boolean;
 
-let ofetchModule: Promise<Ofetch> | undefined;
-
-/**
- * Loads ofetch with the first request. Its Node entry imports `node:http` and `node:https`, so a
- * static import made every MCP server start and every provider listing pay for an HTTP stack
- * they never used.
- * @returns {Promise<Ofetch>} The cached ofetch module.
- */
-function loadOfetch(): Promise<Ofetch> {
-  ofetchModule ??= import("ofetch");
-  return ofetchModule;
+  constructor(
+    status: number,
+    body: string,
+    options: Readonly<{ headers?: ResponseHeaders; cause?: unknown; retryable?: boolean }> = {},
+  ) {
+    super(`HTTP ${status}`, options.cause === undefined ? undefined : { cause: options.cause });
+    this.name = "FailedAttempt";
+    this.status = status;
+    this.body = body;
+    this.headers = options.headers;
+    this.retryable = options.retryable ?? true;
+  }
 }
 
 /** HTTP client with exponential backoff retry and error mapping to web error types. */
@@ -41,30 +45,12 @@ export class Client {
   readonly baseDelay: number;
   readonly timeout: number;
   readonly userAgent: string;
-  private fetch: Promise<$Fetch> | undefined;
 
   constructor(options: Readonly<ClientOptions> = {}) {
     this.maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     this.baseDelay = options.baseDelay ?? DEFAULT_BASE_DELAY;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT;
     this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
-  }
-
-  /**
-   * Retries run in {@link fetchWithRetry}, so every request passes `retry: false` to ofetch.
-   * @returns {Promise<$Fetch>} The ofetch instance, created with the first request.
-   */
-  private fetcher(): Promise<$Fetch> {
-    this.fetch ??= loadOfetch().then(({ ofetch }) =>
-      ofetch.create({
-        timeout: this.timeout,
-        headers: {
-          Accept: "application/json",
-          "User-Agent": this.userAgent,
-        },
-      }),
-    );
-    return this.fetch;
   }
 
   /**
@@ -79,15 +65,7 @@ export class Client {
     headers?: Readonly<Record<string, string>>,
     signal?: Readonly<AbortSignal>,
   ): Promise<T> {
-    try {
-      const fetch = await this.fetcher();
-      return await this.fetchWithRetry(
-        (attemptSignal) => fetch<T>(url, { headers, signal: attemptSignal, retry: false }),
-        signal,
-      );
-    } catch (error) {
-      throw await this.mapError(error, url);
-    }
+    return this.send<T>(url, () => ({ headers: this.headers(headers) }), signal);
   }
 
   /**
@@ -104,16 +82,11 @@ export class Client {
     headers?: Readonly<Record<string, string>>,
     signal?: Readonly<AbortSignal>,
   ): Promise<T> {
-    try {
-      const fetch = await this.fetcher();
-      return await this.fetchWithRetry(
-        (attemptSignal) =>
-          fetch<T>(url, { method: "POST", body, headers, signal: attemptSignal, retry: false }),
-        signal,
-      );
-    } catch (error) {
-      throw await this.mapError(error, url);
-    }
+    return this.send<T>(
+      url,
+      () => ({ method: "POST", body: JSON.stringify(body), headers: this.headers(headers, true) }),
+      signal,
+    );
   }
 
   /**
@@ -164,16 +137,13 @@ export class Client {
     signal: Readonly<AbortSignal>,
   ): Promise<Readonly<ReadableStream<Uint8Array>>> {
     const safeUrl = sanitizeUrl(url);
-    const fetch = await this.fetcher();
-    const response = await fetch.raw<unknown, "stream">(url, {
+    const requestHeaders = this.headers(headers, true);
+    requestHeaders.set("Accept", "text/event-stream");
+    const response = await fetch(url, {
       method: "POST",
-      body,
-      headers: { ...headers, Accept: "text/event-stream" },
-      responseType: "stream",
+      body: JSON.stringify(body),
+      headers: requestHeaders,
       redirect: "error",
-      retry: false,
-      timeout: 0,
-      ignoreResponseError: true,
       signal,
     });
     signal.throwIfAborted();
@@ -183,25 +153,61 @@ export class Client {
       throw new HTTPError(response.status, safeUrl, "Streaming request rejected");
     }
     const contentType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase();
-    if (!response._data || (contentType !== undefined && contentType !== "text/event-stream")) {
+    if (!response.body || (contentType !== undefined && contentType !== "text/event-stream")) {
       await response.body?.cancel().catch(() => {});
       throw new HTTPError(502, safeUrl, "Expected an SSE response body");
     }
-    return response._data;
+    return response.body;
+  }
+
+  /**
+   * Set one by one, so a lowercase `accept` replaces `Accept` instead of joining it.
+   * @param headers - Caller headers.
+   * @param json - Whether the request carries a JSON body.
+   * @returns {Headers} Headers for one request.
+   */
+  private headers(headers?: Readonly<Record<string, string>>, json = false): Headers {
+    const merged = new Headers({ Accept: "application/json", "User-Agent": this.userAgent });
+    for (const [name, value] of Object.entries(headers ?? {})) merged.set(name, value);
+    if (json && !merged.has("Content-Type")) merged.set("Content-Type", "application/json");
+    return merged;
+  }
+
+  /**
+   * Built inside the error boundary, so a body JSON can't encode fails as the caller's.
+   * @param url - Request URL.
+   * @param init - Builds the request options once.
+   * @param signal - Caller cancellation.
+   * @returns {Promise<T>} Parsed response body.
+   */
+  private async send<T>(
+    url: string,
+    init: () => RequestInit,
+    signal?: Readonly<AbortSignal>,
+  ): Promise<T> {
+    try {
+      const request = init();
+      return await this.fetchWithRetry(
+        (attemptSignal) =>
+          attempt<T>(() => fetch(url, { ...request, signal: attemptSignal ?? null })),
+        signal,
+      );
+    } catch (error) {
+      throw this.mapError(error, url);
+    }
   }
 
   private async fetchWithRetry<T>(
     request: (signal?: Readonly<AbortSignal>) => Promise<T>,
     signal?: Readonly<AbortSignal>,
   ): Promise<T> {
-    const { FetchError } = await loadOfetch();
     for (let attempt = 0; ; attempt += 1) {
       signal?.throwIfAborted();
       try {
         return await this.requestWithTimeout(request, signal);
       } catch (error) {
         signal?.throwIfAborted();
-        const delay = error instanceof FetchError ? this.retryDelay(error, attempt) : undefined;
+        const delay = error instanceof FailedAttempt ? this.retryDelay(error, attempt) : undefined;
         if (attempt >= this.maxRetries || delay === undefined) throw error;
         await abortableDelay(delay, signal);
       }
@@ -209,7 +215,7 @@ export class Client {
   }
 
   /**
-   * ofetch skips its own timeout once a signal is supplied, so each attempt gets one here.
+   * Each attempt gets a fresh deadline that covers the headers and the body.
    * @param request - Function that performs one attempt with the effective signal.
    * @param signal - Caller cancellation signal.
    * @returns {Promise<T>} Parsed response body.
@@ -244,42 +250,95 @@ export class Client {
    * @param attempt - Zero-based attempt number.
    * @returns {number | undefined} Milliseconds before the next attempt, or undefined when it should not retry.
    */
-  private retryDelay(error: FailedAttempt, attempt: number): number | undefined {
-    if (!isRetryableStatus(error.statusCode)) return undefined;
+  private retryDelay(error: Readonly<FailedAttempt>, attempt: number): number | undefined {
+    if (!error.retryable || !isRetryableStatus(error.status)) return undefined;
     const delay = this.baseDelay * Math.pow(2, attempt - 1);
     const backoff = delay + delay * Math.random() * 0.1;
-    if (error.statusCode !== 429) return backoff;
+    if (error.status !== 429) return backoff;
 
-    const wait = rateLimitWait(error.response?.headers);
+    const wait = rateLimitWait(error.headers);
     if (wait === undefined) return backoff;
     return wait > MAX_RATE_LIMIT_WAIT_SECONDS ? undefined : Math.max(wait * 1000, backoff);
   }
 
-  private async mapError(error: unknown, url: string): Promise<Error> {
-    const { FetchError } = await loadOfetch();
-    if (error instanceof FetchError) {
-      if (error.statusCode === 429) {
-        return rateLimitError(error.response?.headers);
-      }
-
-      const body = responseBody(error.data) || transportFailure(error.cause);
-      const options = error.cause === undefined ? undefined : { cause: error.cause };
-
-      return new HTTPError(error.statusCode ?? 0, sanitizeUrl(url), body, options);
+  private mapError(error: unknown, url: string): Error {
+    if (!(error instanceof FailedAttempt)) {
+      return error instanceof Error ? error : new Error(String(error));
     }
-    return error instanceof Error ? error : new Error(String(error));
+    if (error.status === 429) return rateLimitError(error.headers);
+
+    const body = error.body || transportFailure(error.cause);
+    const options = error.cause === undefined ? undefined : { cause: error.cause };
+    return new HTTPError(error.status, sanitizeUrl(url), body, options);
   }
 }
 
-function responseBody(data: unknown): string {
-  if (typeof data === "string") return data;
-  return data === undefined || data === null ? "" : JSON.stringify(data);
+/**
+ * A dead connection is status 0 and retried; a body cut off after the status isn't, it's paid for.
+ * @param request - Sends the request.
+ * @returns {Promise<T>} Parsed response body.
+ */
+async function attempt<T>(request: () => Promise<Response>): Promise<T> {
+  const { response, text } = await receive(request);
+  if (!response.ok) {
+    throw new FailedAttempt(response.status, text ?? "", { headers: response.headers });
+  }
+  return parseBody(response.headers.get("Content-Type"), text) as T;
+}
+
+async function receive(
+  request: () => Promise<Response>,
+): Promise<{ response: Response; text: string | undefined }> {
+  let response: Response;
+  try {
+    response = await request();
+  } catch (error) {
+    throw new FailedAttempt(0, "", { cause: error });
+  }
+  try {
+    return { response, text: response.body === null ? undefined : await response.text() };
+  } catch (error) {
+    throw new FailedAttempt(0, "", { cause: error, retryable: false });
+  }
+}
+
+/**
+ * JSON and untyped answers parse as JSON or stay text, other types stay text, no body is undefined.
+ * @param contentType - Content-Type of the answer.
+ * @param text - Body text, undefined when the answer had none.
+ * @returns {unknown} The decoded body.
+ */
+function parseBody(contentType: string | null, text: string | undefined): unknown {
+  if (text === undefined) return undefined;
+  const mediaType = contentType?.split(";")[0].trim() ?? "";
+  return mediaType === "" || JSON_MEDIA_TYPE.test(mediaType) ? parseJson(text) : text;
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text, dropPrototypeKeys);
+  } catch {
+    return text;
+  }
+}
+
+/**
+ * Plain `JSON.parse` keeps `__proto__` as an own key, and `Object.assign` then swaps prototypes.
+ * @param key - Property name.
+ * @param value - Parsed value.
+ * @returns {unknown} The value, or undefined to drop the key.
+ */
+function dropPrototypeKeys(key: string, value: unknown): unknown {
+  if (key === "__proto__") return undefined;
+  if (key === "constructor" && typeof value === "object" && value !== null && "prototype" in value)
+    return undefined;
+  return value;
 }
 
 /**
  * Name the failure behind a request that produced no usable response.
- * Reads the chain under the ofetch error, never its own message, which repeats the unredacted URL.
- * @param cause - Cause attached to the ofetch error.
+ * Reads the chain under the failed request, never a message that repeats the unredacted URL.
+ * @param cause - What the failed request threw.
  * @returns {string} Distinct cause messages from the outside in, or an empty string.
  */
 function transportFailure(cause: unknown): string {
