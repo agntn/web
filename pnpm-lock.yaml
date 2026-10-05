@@ -30,9 +30,6 @@ importers:
       consola:
         specifier: 3.4.2
         version: 3.4.2
-      ofetch:
-        specifier: 1.5.1
-        version: 1.5.1
       string-width:
         specifier: 8.2.2
         version: 8.2.2
