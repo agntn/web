@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.7.5
+
+[compare changes](https://github.com/agntn/web/compare/v0.7.4...v0.7.5)
+
+### 🩹 Fixes
+
+- **exa:** Stop sending each long highlight twice ([#270](https://github.com/agntn/web/pull/270))
+- **errors:** Keep the failing URL on HTTPError ([#271](https://github.com/agntn/web/pull/271))
+- **deps:** Let web install next to Pi 1.0 ([#273](https://github.com/agntn/web/pull/273))
+- **docs:** Give each IPv6 /64 one quota, not 2^64 ([#277](https://github.com/agntn/web/pull/277))
+
+### 💅 Refactors
+
+- **client:** Fetch on its own ([#275](https://github.com/agntn/web/pull/275))
+
+### ✅ Tests
+
+- Pack the bin instead of trusting dist/ ([#278](https://github.com/agntn/web/pull/278))
+
+### ❤️ Contributors
+
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+- Ori ([@oritwoen](https://github.com/oritwoen))
+
 ## v0.7.4
 
 [compare changes](https://github.com/agntn/web/compare/v0.7.3...v0.7.4)
