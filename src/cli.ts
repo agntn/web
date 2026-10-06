@@ -118,7 +118,7 @@ function isMcpModule(value: unknown): value is { readonly default: typeof McpCom
 
 /**
  * Loads the MCP command. A built bin inside a checkout runs the live source, as the Pi and OMP
- * extensions do, so a local server needs a restart after a change instead of `vp pack`. The npm
+ * extensions do, so a local server needs a restart after a change instead of a build. The npm
  * package ships no `src/commands` and keeps the bundle, and so does a copy under `node_modules`,
  * where Node refuses to strip types. `WEB_DIST=1` keeps it everywhere, for tests of the build. The
  * URL is built at runtime, because a literal import would pull the source into the bundle.

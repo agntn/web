@@ -119,7 +119,7 @@ export default defineNuxtConfig({
       deployConfig: true,
       nodeCompat: true,
     },
-    /** Vite+ Pack defines this for dist/; the sources otherwise hash the package root at load time, which the bundle cannot reach. */
+    /** `build.config.ts` defines this for dist/; the sources otherwise hash the package root at load time, which the bundle cannot reach. */
     replace: {
       __AGNTN_WEB_BUILD_ID__: JSON.stringify(createSourceBuildId(resolve(librarySource, ".."))),
     },

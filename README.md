@@ -177,7 +177,7 @@ Missing your favourite engine? Extend `Provider`, implement `search`, `read` or 
 vp install
 vp check         # format, lint and type-check
 vp test
-vp pack          # package the library
+vp run build     # obuild, straight into dist/
 vp run docs      # Docus on :3000, bundling src/ itself
 ```
 

@@ -82,7 +82,7 @@ describe("package manifest", () => {
 
 describe("bundled package", () => {
   /**
-   * Packs the current source with the repo's own `vp pack` config and copies the other files
+   * Packs the current source with the repo's own `build.config.ts` and copies the other files
    * package.json publishes beside it, so no test reads a dist/ left from an older build. The
    * directory sits under node_modules, where bare imports resolve the way they do in a consumer's
    * install.
@@ -116,6 +116,13 @@ describe("bundled package", () => {
       );
 
     expect(importers).toEqual([]);
+  });
+
+  /** A bundled typebox still owes its MIT notice, and obuild writes it here on its own. */
+  it("ships the typebox license beside the bundle", () => {
+    const licenses = readFileSync(join(packageDir, "dist/THIRD-PARTY-LICENSES.md"), "utf8");
+
+    expect(licenses).toMatch(/^## typebox$[\s\S]*?Copyright \(c\) .* Haydn Paterson/mu);
   });
 
   it("keeps every built-in provider listed after a consumer bundles dist/", async () => {
