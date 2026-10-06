@@ -316,13 +316,13 @@ export default async function webOmpExtension(pi: ExtensionAPI): Promise<void> {
   });
 
   pi.registerTool({
-    name: "web_search_image",
+    name: "web_image_search",
     label: "Search by Image",
     description:
       "Find public pages containing or resembling an image URL, with page and image matches.",
     parameters: imageSearchParameters,
     approval: "read",
-    ...renderers("web_search_image"),
+    ...renderers("web_image_search"),
     async execute(_toolCallId, params, signal) {
       const web = await loadWeb();
       const provider = normalizeImageProvider(params.provider, web.searchImageProviders());

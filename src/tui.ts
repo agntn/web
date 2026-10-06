@@ -245,7 +245,7 @@ function inputSubject(name: WebToolName, record: Readonly<Record<string, unknown
     const url = record.url;
     return Array.isArray(url) ? `${url.length} pages` : sanitizeTerminalText(url ?? "Page");
   }
-  if (name === "web_search_image") return sanitizeTerminalText(record.url ?? "Image");
+  if (name === "web_image_search") return sanitizeTerminalText(record.url ?? "Image");
   return "Provider registry";
 }
 
@@ -280,7 +280,7 @@ function inputMeta(name: WebToolName, record: Readonly<Record<string, unknown>>)
   const operationMeta =
     name === "web_search"
       ? searchInputMeta(record)
-      : name === "web_search_image"
+      : name === "web_image_search"
         ? searchInputMeta(record).slice(0, 1)
         : name === "web_read"
           ? readInputMeta(record)
@@ -400,7 +400,7 @@ function providersPreview(details: unknown): string | undefined {
 }
 
 function structuredPreview(name: WebToolName, details: unknown): string | undefined {
-  if (name === "web_search" || name === "web_search_image") return searchPreview(details);
+  if (name === "web_search" || name === "web_image_search") return searchPreview(details);
   if (name === "web_read") return readPreview(details);
   return providersPreview(details);
 }
@@ -501,7 +501,7 @@ function providersMeta(details: unknown): string[] {
 
 function resultMeta(name: WebToolName, details: unknown): string[] {
   if (name === "web_search") return searchMeta(details).slice(0, 4);
-  if (name === "web_search_image") return imageMeta(details).slice(0, 4);
+  if (name === "web_image_search") return imageMeta(details).slice(0, 4);
   if (name === "web_read") return readMeta(details).slice(0, 4);
   return providersMeta(details).slice(0, 4);
 }
@@ -540,7 +540,7 @@ function previewBody(text: string, theme: Readonly<StatusTheme>, width: number):
 
 function activityLabel(name: WebToolName): string {
   if (name === "web_search") return "Searching";
-  if (name === "web_search_image") return "Matching image";
+  if (name === "web_image_search") return "Matching image";
   if (name === "web_read") return "Reading";
   return "Checking providers";
 }
@@ -558,7 +558,7 @@ function renderFailure(
 
 function resultVerb(name: WebToolName): string {
   if (name === "web_search") return "found";
-  if (name === "web_search_image") return "matched";
+  if (name === "web_image_search") return "matched";
   if (name === "web_read") return "read";
   return "checked";
 }

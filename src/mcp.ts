@@ -406,8 +406,8 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       execute: executeSearch,
     },
     {
-      name: "web_search_image",
-      title: webToolTitle("web_search_image"),
+      name: "web_image_search",
+      title: webToolTitle("web_image_search"),
       description:
         "Find public pages containing or resembling an image available by URL. Returns matched page and image URLs with dimensions and rank metadata.",
       inputSchema: Type.Object({
@@ -430,7 +430,7 @@ const toolsByName: Record<string, ToolDefinition> = Object.fromEntries(
       }),
       outputSchema: imageSearchOutputSchema,
       annotations: {
-        title: webToolTitle("web_search_image"),
+        title: webToolTitle("web_image_search"),
         readOnlyHint: true,
         destructiveHint: false,
         idempotentHint: true,

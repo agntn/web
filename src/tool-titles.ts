@@ -1,9 +1,9 @@
 /** Web tools with dedicated Pi and OMP presentation. */
-export type WebToolName = "web_search" | "web_search_image" | "web_read" | "web_providers";
+export type WebToolName = "web_search" | "web_image_search" | "web_read" | "web_providers";
 
 const PRESENTATION: Readonly<Record<WebToolName, { symbol: string; label: string }>> = {
   web_search: { symbol: "⌕", label: "Web Search" },
-  web_search_image: { symbol: "▧", label: "Search by Image" },
+  web_image_search: { symbol: "▧", label: "Search by Image" },
   web_read: { symbol: "↗", label: "Web Read" },
   web_providers: { symbol: "◫", label: "Web Providers" },
 };

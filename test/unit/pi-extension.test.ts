@@ -51,7 +51,7 @@ describe("Pi extension", () => {
 
   it("registers reverse image search and portable read controls", () => {
     const tools = captureTools();
-    expect(tools.has("web_search_image")).toBe(true);
+    expect(tools.has("web_image_search")).toBe(true);
     const read = tools.get("web_read");
     const schema = read?.parameters as {
       readonly properties?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
@@ -271,7 +271,7 @@ describe("Pi extension", () => {
     customProviderCleanups.push(register(SignalProvider));
     const tools = captureTools();
     const searchTool = tools.get("web_search");
-    const imageTool = tools.get("web_search_image");
+    const imageTool = tools.get("web_image_search");
     const readTool = tools.get("web_read");
     if (!searchTool || !imageTool || !readTool) throw new Error("Web tool was not registered");
     const signal = new AbortController().signal;
@@ -391,8 +391,8 @@ describe("Pi extension", () => {
     resetDefaultClientForTests();
 
     try {
-      const searchImageTool = captureTools().get("web_search_image");
-      if (!searchImageTool) throw new Error("web_search_image was not registered");
+      const searchImageTool = captureTools().get("web_image_search");
+      if (!searchImageTool) throw new Error("web_image_search was not registered");
       const execution: unknown = Reflect.apply(
         searchImageTool.execute.bind(searchImageTool),
         undefined,
@@ -707,7 +707,7 @@ describe("Pi extension", () => {
     customProviderCleanups.push(register(LiveProvider));
     const tools = captureTools();
     const searchTool = tools.get("web_search");
-    const imageTool = tools.get("web_search_image");
+    const imageTool = tools.get("web_image_search");
     const readTool = tools.get("web_read");
     if (!searchTool || !imageTool || !readTool) throw new Error("Missing web tools");
 

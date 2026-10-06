@@ -98,7 +98,7 @@ describe("OMP extension", () => {
     expect(label).toBe("Web");
     expect([...tools.keys()]).toEqual([
       "web_search",
-      "web_search_image",
+      "web_image_search",
       "web_read",
       "web_providers",
     ]);
@@ -349,7 +349,7 @@ describe("OMP extension", () => {
     customProviderCleanups.push(register(SignalProvider));
     const tools = captureOmpExtension().tools;
     const search = requiredTool(tools, "web_search");
-    const image = requiredTool(tools, "web_search_image");
+    const image = requiredTool(tools, "web_image_search");
     const read = requiredTool(tools, "web_read");
     const signal = new AbortController().signal;
 
@@ -585,7 +585,7 @@ describe("OMP extension", () => {
       undefined,
       {} as never,
     );
-    const imageResult = await requiredTool(tools, "web_search_image").execute(
+    const imageResult = await requiredTool(tools, "web_image_search").execute(
       "image-call",
       { url: "https://example.com/input.jpg", provider: providerName },
       undefined,
