@@ -7,7 +7,7 @@ allowBuilds:
   sharp: false
 
 minimumReleaseAgeExclude:
-  - "@agntn/ox@0.1.0"
+  - "@agntn/*"
 
 packages:
   - packages/*
