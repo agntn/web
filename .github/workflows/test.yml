@@ -20,7 +20,7 @@ jobs:
           cache: true
       - name: Check
         run: vp check
-      - name: Pack
-        run: vp pack
+      - name: Build
+        run: vp run build
       - name: Test
         run: vp test

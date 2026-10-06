@@ -71,7 +71,7 @@ function checkout(): string {
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
-    "vite.config.ts",
+    "build.config.ts",
     ...globSync("tsconfig*.json", { cwd: root }),
   ]);
   symlinkSync(join(root, "node_modules"), join(copy, "node_modules"));
