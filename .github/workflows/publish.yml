@@ -19,7 +19,7 @@ jobs:
 
       - uses: voidzero-dev/setup-vp@24d870228786dc83ae73482406bdd1e7befaec14 # v1.21.0
         with:
-          node-version: 26
+          node-version: v26.10.0
           registry-url: https://registry.npmjs.org
           cache: true
 
