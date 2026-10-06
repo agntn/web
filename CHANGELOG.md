@@ -1,5 +1,37 @@
 # Changelog
 
+## v0.8.0
+
+[compare changes](https://github.com/agntn/web/compare/v0.7.5...v0.8.0)
+
+### 🩹 Fixes
+
+- **docs:** Take MCP out of the page menu ([#279](https://github.com/agntn/web/pull/279))
+- **deps:** Trust our own releases on day one ([#280](https://github.com/agntn/web/pull/280))
+
+### 💅 Refactors
+
+- ⚠️  Name the image tool web_image_search ([#284](https://github.com/agntn/web/pull/284))
+
+### 📦 Build
+
+- Go back to obuild ([#283](https://github.com/agntn/web/pull/283))
+
+### 🏡 Chore
+
+- ⚠️  Raise the Node.js floor to 26 ([#281](https://github.com/agntn/web/pull/281))
+- Add `CODEOWNERS` ([#282](https://github.com/agntn/web/pull/282))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Name the image tool web_image_search ([#284](https://github.com/agntn/web/pull/284))
+- ⚠️  Raise the Node.js floor to 26 ([#281](https://github.com/agntn/web/pull/281))
+
+### ❤️ Contributors
+
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+- Ori ([@oritwoen](https://github.com/oritwoen))
+
 ## v0.7.5
 
 [compare changes](https://github.com/agntn/web/compare/v0.7.4...v0.7.5)
