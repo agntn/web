@@ -131,7 +131,7 @@ describe("web MCP server", () => {
 
     expect(response.tools.map((tool) => tool.name)).toEqual([
       "web_search",
-      "web_search_image",
+      "web_image_search",
       "web_read",
       "web_providers",
     ]);
@@ -191,7 +191,7 @@ describe("web MCP server", () => {
       web_search: {
         result: { provider: 42, results: [], ignoredFilters: [], undeclaredFilters: [] },
       },
-      web_search_image: { result: [{ pageUrl: 42 }] },
+      web_image_search: { result: [{ pageUrl: 42 }] },
       web_read: {
         result: {
           result: { url: "https://example.com", content: "page" },
@@ -411,7 +411,7 @@ describe("web MCP server", () => {
       arguments: { query: "custom query", provider: providerName },
     });
     const imageResult = await client.callTool({
-      name: "web_search_image",
+      name: "web_image_search",
       arguments: { url: "https://example.com/input.jpg", provider: providerName },
     });
     const readResult = await client.callTool({
@@ -592,7 +592,7 @@ describe("web MCP server", () => {
     const client = await connectTestClient();
 
     const response = await client.callTool({
-      name: "web_search_image",
+      name: "web_image_search",
       arguments: { url: "https://example.com/input.jpg", maxResults: 5 },
     });
 

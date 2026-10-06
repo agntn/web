@@ -95,7 +95,7 @@ const adaptersTitle = `${total[0]!.toUpperCase()}${total.slice(1)} adapters, one
       to="/guide/agents"
       link="AI SDK, MCP, Pi and OMP"
       :checks="[
-        'web_search, web_search_image, web_read and web_providers, same schema on every surface',
+        'web_search, web_image_search, web_read and web_providers, same schema on every surface',
         'Provider names are checked against the live registry, so a custom provider works in a tool call too',
         'The host abort signal cancels the provider request. Reads default to 20 000 characters',
       ]"

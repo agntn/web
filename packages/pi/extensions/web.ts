@@ -554,16 +554,16 @@ export default async function webExtension(pi: ExtensionAPI) {
   });
 
   pi.registerTool({
-    name: "web_search_image",
+    name: "web_image_search",
     label: "Search by Image",
     description:
       "Read-only/open-world reverse image search: find public pages containing or resembling an image available by URL. Returns matched page and image URLs with dimensions and rank metadata.",
-    promptSnippet: "Find pages containing or resembling a public image URL with web_search_image.",
+    promptSnippet: "Find pages containing or resembling a public image URL with web_image_search.",
     promptGuidelines: [
-      "Use web_search_image for reverse image lookup. Use web_search for text queries and web_read for page content.",
+      "Use web_image_search for reverse image lookup. Use web_search for text queries and web_read for page content.",
     ],
     parameters: imageSearchParameters,
-    ...statusRenderers("web_search_image", tui),
+    ...statusRenderers("web_image_search", tui),
     async execute(_toolCallId, params, signal): Promise<AgentToolResult<ImageSearchDetails>> {
       const web = await loadWeb();
       const provider = normalizeImageSearchProviderInput(

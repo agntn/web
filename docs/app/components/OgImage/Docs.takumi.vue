@@ -14,7 +14,7 @@ const { title, description, headline } = defineProps<{
 const { name: siteName } = useSiteConfig();
 
 /** The four agent tools, the same on MCP, the AI SDK, Pi and OMP. */
-const TOOLS = ["web_search", "web_search_image", "web_read", "web_providers"];
+const TOOLS = ["web_search", "web_image_search", "web_read", "web_providers"];
 
 const LINE = "#262c35";
 const CORNER = "#5b636d";
