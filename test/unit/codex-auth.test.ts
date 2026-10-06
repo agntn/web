@@ -256,6 +256,65 @@ describe("native host auth scope", () => {
     expect(isProviderConfigured("openai-codex")).toBe(false);
   });
 
+  it("borrows the OMP 18.3+ login from authStorage.oauth", async () => {
+    /* Shaped like OMP's OAuthAccounts: private state, so a detached `access` would throw. */
+    class OAuthAccounts {
+      readonly #calls: Array<{ session?: string; force: boolean; reason?: string }> = [];
+      get calls() {
+        return this.#calls;
+      }
+      accounts(provider: string) {
+        return provider === "openai-codex" ? [{ position: 0, credentialId: 1, active: false }] : [];
+      }
+      async access(
+        _provider: string,
+        session?: string,
+        options?: Readonly<{ forceRefresh?: boolean; refreshReason?: string }>,
+      ) {
+        this.#calls.push({
+          session,
+          force: options?.forceRefresh === true,
+          reason: options?.refreshReason,
+        });
+        const rotated = options?.forceRefresh ? "-rotated" : "";
+        return { accessToken: `${token("omp-oauth")}${rotated}`, credentialId: 1 };
+      }
+    }
+    const oauth = new OAuthAccounts();
+    const getApiKey = vi.fn();
+    fetchMock.mockResolvedValueOnce(new Response("expired", { status: 401 }));
+    await withCodexHostAuth(
+      { oauth, getApiKey, reload: vi.fn() },
+      async () => {
+        expect(isProviderConfigured("openai-codex")).toBe(true);
+        expect((await searchProviderDetailed("openai-codex", "query")).results).toHaveLength(2);
+      },
+      "session-test",
+    );
+    expect(oauth.calls).toEqual([
+      { session: "session-test", force: false, reason: undefined },
+      { session: "session-test", force: true, reason: "auth-recovery" },
+    ]);
+    expect(getApiKey).not.toHaveBeenCalled();
+    expect(new Request(...fetchMock.mock.calls[1]).headers.get("chatgpt-account-id")).toBe(
+      "omp-oauth",
+    );
+  });
+
+  it("leaves an OMP host without a Codex account to the saved logins", async () => {
+    const access = vi.fn();
+    writeAuth(join(home, ".codex", "auth.json"), {
+      tokens: { access_token: token("saved-codex") },
+    });
+    await withCodexHostAuth({ oauth: { access, accounts: () => [] } }, () =>
+      searchProviderDetailed("openai-codex", "query"),
+    );
+    expect(access).not.toHaveBeenCalled();
+    expect(new Request(...fetchMock.mock.calls[0]).headers.get("chatgpt-account-id")).toBe(
+      "saved-codex",
+    );
+  });
+
   it("uses Pi's existing auth resolver without copying or persisting refresh tokens", async () => {
     let resolutions = 0;
     const host: CodexHostAuth = {

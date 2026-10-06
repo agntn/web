@@ -18,6 +18,17 @@ export interface ResolvedCodexCredentials {
   readonly accountId: string;
 }
 
+/** OMP's OAuth lookup; `auth-recovery` tells it a backend just rejected the bearer. */
+type OmpOAuthAccess = (
+  provider: string,
+  sessionId?: string,
+  options?: {
+    readonly forceRefresh?: boolean;
+    readonly refreshReason?: "auth-recovery";
+    readonly signal?: Readonly<AbortSignal>;
+  },
+) => Promise<CodexCredentials | undefined>;
+
 /** Minimal native Pi/OMP auth interface; refresh tokens never cross it. */
 export interface CodexHostAuth {
   readonly getProviderAuthStatus?: (provider: string) => { readonly configured: boolean };
@@ -29,11 +40,13 @@ export interface CodexHostAuth {
   readonly get?: (provider: string) => unknown;
   readonly reload?: () => void;
   readonly getApiKey?: (provider: string) => Promise<string | undefined>;
-  readonly getOAuthAccess?: (
-    provider: string,
-    sessionId?: string,
-    options?: { readonly forceRefresh?: boolean; readonly signal?: Readonly<AbortSignal> },
-  ) => Promise<CodexCredentials | undefined>;
+  /** OMP before 18.3. */
+  readonly getOAuthAccess?: OmpOAuthAccess;
+  /** OMP 18.3 and later moved the lookup here; `accounts` lists logins without refreshing one. */
+  readonly oauth?: {
+    readonly access: OmpOAuthAccess;
+    readonly accounts: (provider: string) => readonly unknown[];
+  };
 }
 
 /**
@@ -51,9 +64,11 @@ export function withCodexHostAuth<T>(
   if (!host || !hasHostAuth(host)) return run();
   return hostCredentials.run(async ({ refresh, signal }) => {
     signal.throwIfAborted();
-    if (host.getOAuthAccess) {
-      const credentials = await host.getOAuthAccess("openai-codex", sessionId, {
+    const access = ompOAuthAccess(host);
+    if (access) {
+      const credentials = await access("openai-codex", sessionId, {
         forceRefresh: refresh,
+        refreshReason: refresh ? "auth-recovery" : undefined,
         signal,
       });
       if (!credentials) throw missingLogin();
@@ -79,9 +94,20 @@ async function resolvePiHostCredentials(host: CodexHostAuth): Promise<CodexCrede
   return { accessToken, accountId: stringValue(credential?.accountId) };
 }
 
+/**
+ * OMP's OAuth lookup from whichever place this release keeps it, bound to its owner.
+ * @param host - OMP auth storage, or Pi's registry, which has neither.
+ * @returns {OmpOAuthAccess | undefined} The lookup, or `undefined` on Pi.
+ */
+function ompOAuthAccess(host: CodexHostAuth): OmpOAuthAccess | undefined {
+  if (host.oauth) return host.oauth.access.bind(host.oauth);
+  return host.getOAuthAccess?.bind(host);
+}
+
 function hasHostAuth(host: CodexHostAuth): boolean {
   if (host.getProviderAuth && host.getProviderAuthStatus)
     return host.getProviderAuthStatus("openai-codex").configured;
+  if (host.oauth) return host.oauth.accounts("openai-codex").length > 0;
   if (host.hasOAuth) return host.hasOAuth("openai-codex");
   return record(host.get?.("openai-codex"))?.type === "oauth";
 }
