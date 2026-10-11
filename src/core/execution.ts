@@ -1,10 +1,10 @@
+import { MAX_AGENT_TIMEOUT_SECONDS } from "./limits.ts";
 import type { ExecutionOptions } from "./types.ts";
 
 export const DEFAULT_CONCURRENCY = 3;
 export const MAX_CONCURRENCY = 10;
 
-/** Longest time budget an agent surface accepts through `timeoutSeconds`. */
-export const MAX_AGENT_TIMEOUT_SECONDS = 3_600;
+export { MAX_AGENT_TIMEOUT_SECONDS };
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
 const executionBudget = Symbol("executionBudget");

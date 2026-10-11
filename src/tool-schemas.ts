@@ -1,10 +1,10 @@
 import { Type, type TProperties } from "@agntn/tools";
 
-import { MAX_AGENT_TIMEOUT_SECONDS } from "./core/execution.ts";
 import {
   DEFAULT_AGENT_READ_MAX_CHARS,
   MAX_AGENT_READ_CHARS,
   MAX_AGENT_RESULTS,
+  MAX_AGENT_TIMEOUT_SECONDS,
   MAX_BATCH_ITEMS,
   MAX_READ_CONTINUATION_LENGTH,
   MAX_SEARCH_CONTINUATION_LENGTH,

@@ -11,6 +11,9 @@ export const MAX_SEARCH_CONTINUATION_LENGTH = 4_096;
 /** Longest read continuation token a caller can hand back. */
 export const MAX_READ_CONTINUATION_LENGTH = 1_024;
 
+/** Longest time budget an agent surface accepts through `timeoutSeconds`. */
+export const MAX_AGENT_TIMEOUT_SECONDS = 3_600;
+
 /** Default portable content limit used by agent surfaces. */
 export const DEFAULT_AGENT_READ_MAX_CHARS = 20_000;
 

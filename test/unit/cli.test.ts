@@ -199,6 +199,14 @@ describe.concurrent("web usage paths", () => {
       expect(
         loaded.filter((url) => /\/src\/(providers\/|mcp\.ts|core\/client\.ts)/u.test(url)),
       ).toEqual([]);
+      expect(coreModules(loaded)).toEqual([
+        "errors",
+        "limits",
+        "providers",
+        "redaction",
+        "text",
+        "types",
+      ]);
     },
   );
 
@@ -218,6 +226,15 @@ describe.concurrent("web usage paths", () => {
     expect(new Set(loaded.map(packageOf))).toContain("@modelcontextprotocol/server");
   });
 });
+
+/**
+ * The core modules a run loaded, so a usage path proves it stopped at the data the schemas need.
+ * @param loaded - Every module URL the load hook reported.
+ * @returns {string[]} Module names under `src/core/`, sorted.
+ */
+function coreModules(loaded: readonly string[]): string[] {
+  return loaded.flatMap((url) => /\/src\/core\/([a-z-]+)\.ts$/u.exec(url)?.[1] ?? []).sort();
+}
 
 /**
  * The provider modules a run loaded, by name, so a test can say which adapters a command needs.
