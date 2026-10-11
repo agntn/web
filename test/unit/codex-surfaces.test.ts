@@ -1,10 +1,8 @@
-import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { runCommand } from "citty";
+import { Client as McpClient, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { searchTool } from "../../src/ai.ts";
-import searchCommand from "../../src/commands/search.ts";
 import { createMcpServer } from "../../src/mcp.ts";
+import { runWeb } from "../fixtures/cli.ts";
 import { completedEvents, sse } from "../fixtures/codex.ts";
 
 beforeEach(() => {
@@ -21,16 +19,18 @@ afterEach(() => {
 
 describe("Codex public transports", () => {
   it("runs CLI search with environment credentials and JSON output", async () => {
-    const writes: string[] = [];
-    vi.spyOn(process.stdout, "write").mockImplementation((chunk: unknown) => {
-      writes.push(String(chunk));
-      return true;
-    });
-    await runCommand(searchCommand, {
-      rawArgs: ["public query", "--provider", "openai-codex", "--summary", "--json"],
-    });
-    const output: unknown = JSON.parse(writes.join(""));
-    expect(output).toMatchObject({
+    const { stdout, code } = await runWeb(
+      "search",
+      "public query",
+      "--provider",
+      "openai-codex",
+      "--summary",
+      "--json",
+    );
+    expect(code).toBe(0);
+    const output: unknown = JSON.parse(stdout);
+    expect(output).toHaveProperty("result");
+    expect((output as { result: unknown }).result).toMatchObject({
       provider: "openai-codex",
       results: [
         { url: "https://example.com/", snippet: "" },
@@ -42,11 +42,12 @@ describe("Codex public transports", () => {
 
   it("exposes sources and generated answer through the AI SDK tool", async () => {
     if (!searchTool.execute) throw new Error("Missing AI SDK executor");
-    const result = await searchTool.execute(
+    const output = await searchTool.execute(
       { query: "public query", provider: "openai-codex", summary: true },
-      { toolCallId: "codex-test", messages: [] },
+      { toolCallId: "codex-test", messages: [], context: {} },
     );
-    expect(result).toMatchObject({
+    expect(output).toHaveProperty("text");
+    expect((output as { result: unknown }).result).toMatchObject({
       provider: "openai-codex",
       results: [{ url: "https://example.com/" }, { url: "https://other.example/page" }],
       metadata: { answer: "Generated answer with a citation. https://invented.example/" },

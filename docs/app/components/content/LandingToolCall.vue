@@ -4,10 +4,7 @@ import { providerIcon, providerLabel } from "../../utils/providers";
 
 const props = defineProps<{ sample: SearchSample }>();
 
-/**
- * The recorded answer in the shape `web_search` puts in `content[0].text`, minus what the docs
- * worker never keeps: the continuation token and `undeclaredFilters`.
- */
+/** The recorded answer as `structuredContent.result`, minus the token and `undeclaredFilters`. */
 const response = computed(() =>
   JSON.stringify({
     provider: props.sample.provider,
@@ -44,8 +41,8 @@ const response = computed(() =>
           <span class="console-label">Tool / read-only</span>
           <h3>{{ providerLabel(sample.provider) }}</h3>
           <p class="call-note">
-            The model gets the normalized answer as JSON, with the provider diagnostics attached. No
-            prose to parse.
+            The model reads a header and numbered results. Your code gets the same answer as data,
+            diagnostics and all.
           </p>
         </div>
       </div>
@@ -71,7 +68,7 @@ const response = computed(() =>
       :title="`web_search(&quot;${sample.query}&quot;)`"
       :text="response"
       source="recorded sample"
-      description="The recorded answer as JSON, in the shape of content[0].text, without the continuation token."
+      description="The recorded answer as structuredContent.result, without the continuation token."
     />
 
     <footer class="console-footer console-footer-plain">

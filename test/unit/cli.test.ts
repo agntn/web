@@ -16,8 +16,7 @@ interface Failure {
 
 /*
  * A failed command rejects with its streams attached, so the test reads what a script would see.
- * Every case fails before a request, and the blank keys keep it that way. consola prints its plain
- * reporter under NODE_ENV=test, so the line reads `[error] ...` here and ` ERROR  ...` in a shell.
+ * Every case fails before a request, and the blank keys keep it that way.
  */
 async function failure(...args: readonly string[]): Promise<Failure> {
   try {
@@ -39,7 +38,7 @@ describe.concurrent("web CLI", () => {
     ).resolves.toEqual({
       code: 1,
       stdout: "",
-      stderr: "[error] Invalid search continuation token\n",
+      stderr: "Invalid search continuation token\n",
     });
   });
 
@@ -57,7 +56,7 @@ describe.concurrent("web CLI", () => {
       code: 1,
       stdout: "",
       stderr:
-        '[error] Invalid date filter startPublishedDate="foo x": must be ISO 8601 (e.g. "2024-01-01" or "2024-01-01T00:00:00Z")\n',
+        'Invalid date filter startPublishedDate="foo x": must be ISO 8601 (e.g. "2024-01-01" or "2024-01-01T00:00:00Z")\n',
     });
   });
 
@@ -67,7 +66,7 @@ describe.concurrent("web CLI", () => {
     ).resolves.toEqual({
       code: 1,
       stdout: "",
-      stderr: "[error] --continuation is not supported with --provider all.\n",
+      stderr: "continuation is not supported with provider=all\n",
     });
   });
 
@@ -77,7 +76,7 @@ describe.concurrent("web CLI", () => {
     ).resolves.toEqual({
       code: 1,
       stdout: "",
-      stderr: "[error] --continuation is only supported for a single query.\n",
+      stderr: "continuation is only supported for a single query\n",
     });
   });
 
@@ -87,13 +86,12 @@ describe.concurrent("web CLI", () => {
     await expect(failure("providers", "--bogus")).resolves.toEqual({
       code: 1,
       stdout: "",
-      stderr: "[error] Unknown option --bogus; web providers takes --json\n",
+      stderr: 'Invalid arguments: unknown option "--bogus"; takes --json\n',
     });
     await expect(failure("search-image", "https://example.com/a.jpg", "-x")).resolves.toEqual({
       code: 1,
       stdout: "",
-      stderr:
-        "[error] Unknown option -x; web search-image takes --provider, --max-results, --json\n",
+      stderr: 'Invalid arguments: unknown option "-x"; takes --provider, --max-results, --json\n',
     });
   });
 
@@ -104,7 +102,7 @@ describe.concurrent("web CLI", () => {
       code: 1,
       stdout: "",
       stderr:
-        "[error] Unknown option --no-cahce; web read takes --provider, --format, --max-tokens, --max-chars, --continuation, --links, --images, --cache, --json\n",
+        'Invalid arguments: unknown option "--no-cahce"; takes --provider, --format, --max-tokens, --max-chars, --continuation, --links, --images, --target-selector, --remove-selector, --timeout, --timeout-seconds, --cache, --json\n',
     });
   });
 
@@ -115,20 +113,18 @@ describe.concurrent("web CLI", () => {
 
     expect(result.code).toBe(1);
     expect(result.stdout).toBe("");
-    expect(result.stderr).toMatch(
-      /^\[error\] Unknown options --max-reslts, --typo; web search takes /u,
-    );
+    expect(result.stderr).toMatch(/^Invalid arguments: unknown option "--max-reslts"; takes /u);
+    expect(result.stderr).toMatch(/\nInvalid arguments: unknown option "--typo=1"; takes /u);
   });
 
-  it("still takes every spelling citty accepts for a declared option", async ({ expect }) => {
+  it("takes the kebab spellings, short of a value for a flag", async ({ expect }) => {
     await expect(
       failure(
         "search",
         "query",
-        "--maxResults",
-        "3",
+        "--max-results=3",
         "--no-highlights",
-        "--full-text=true",
+        "--full-text",
         "--provider",
         "brave",
         "--continuation",
@@ -137,7 +133,7 @@ describe.concurrent("web CLI", () => {
     ).resolves.toEqual({
       code: 1,
       stdout: "",
-      stderr: "[error] Invalid search continuation token\n",
+      stderr: "Invalid search continuation token\n",
     });
   });
 });
@@ -146,6 +142,7 @@ interface Run {
   readonly code: number;
   readonly loaded: readonly string[];
   readonly stdout: string;
+  readonly stderr: string;
 }
 
 /**
@@ -168,7 +165,7 @@ async function run(...args: readonly string[]): Promise<Run> {
   );
   const report = /@loaded (\[.*\])/u.exec(stderr)?.[1];
   if (report === undefined) throw new Error(`the load hook reported nothing: ${stderr}`);
-  return { code, loaded: JSON.parse(report) as string[], stdout };
+  return { code, loaded: JSON.parse(report) as string[], stdout, stderr };
 }
 
 /**
@@ -185,19 +182,19 @@ function packageOf(url: string): string | undefined {
 
 describe.concurrent("web usage paths", () => {
   it.for([
-    { args: ["--help"], code: 0, usage: /USAGE.*web search\|search-image\|read\|providers\|mcp/u },
-    { args: ["-h"], code: 0, usage: /USAGE.*web search\|search-image\|read\|providers\|mcp/u },
-    { args: ["mcp", "--help"], code: 0, usage: /USAGE.*web mcp/u },
-    { args: [], code: 1, usage: /USAGE.*web search\|search-image\|read\|providers\|mcp/u },
+    { args: ["--help"], code: 0, usage: /USAGE web <command>[\s\S]*search-image/u },
+    { args: ["-h"], code: 0, usage: /USAGE web <command>[\s\S]*search-image/u },
+    { args: ["mcp", "--help"], code: 0, usage: /USAGE web mcp/u },
+    { args: [], code: 1, usage: /USAGE web <command>[\s\S]*search-image/u },
   ])(
     "web $args prints the usage without the server or a provider",
     async ({ args, code, usage }, { expect }) => {
-      const { code: exit, loaded, stdout } = await run(...args);
+      const { code: exit, loaded, stdout, stderr } = await run(...args);
       expect(exit).toBe(code);
-      expect(stdout).toMatch(usage);
+      expect(`${stdout}${stderr}`).toMatch(usage);
       const packages = new Set(loaded.map(packageOf));
-      expect(packages).toContain("citty");
-      expect(packages).not.toContain("@modelcontextprotocol/sdk");
+      expect(packages).toContain("@agntn/tools");
+      expect(packages).not.toContain("@modelcontextprotocol/server");
       expect(packages).not.toContain("typebox");
       expect(
         loaded.filter((url) => /\/src\/(providers\/|mcp\.ts|core\/client\.ts)/u.test(url)),
@@ -205,20 +202,20 @@ describe.concurrent("web usage paths", () => {
     },
   );
 
-  it("web mcp loads the server and the manifest once it runs", async ({ expect }) => {
+  it("web mcp loads the server and leaves the providers to the first call", async ({ expect }) => {
     const { code, loaded } = await run("mcp");
     expect(code).toBe(0);
     const packages = new Set(loaded.map(packageOf));
-    expect(packages).toContain("@modelcontextprotocol/sdk");
+    expect(packages).toContain("@modelcontextprotocol/server");
     expect(packages).not.toContain("string-width");
-    expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
+    expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(false);
     expect(providerModules(loaded)).toEqual([]);
   });
 
   it("web mcp ignores a stray flag from a client config", async ({ expect }) => {
     const { code, loaded } = await run("mcp", "--bogus");
     expect(code).toBe(0);
-    expect(new Set(loaded.map(packageOf))).toContain("@modelcontextprotocol/sdk");
+    expect(new Set(loaded.map(packageOf))).toContain("@modelcontextprotocol/server");
   });
 });
 
@@ -235,16 +232,16 @@ function providerModules(loaded: readonly string[]): string[] {
 }
 
 describe.concurrent("web data paths", () => {
-  it("web providers lists every adapter from the manifest without loading one", async ({
+  it("web providers lists every adapter from the manifest and loads only the one it probes", async ({
     expect,
   }) => {
     const { code, loaded, stdout } = await run("providers", "--json");
     expect(code).toBe(0);
-    expect((JSON.parse(stdout) as { name: string }[]).map((row) => row.name)).toEqual([
-      ...builtinProviders,
-    ]);
+    const { providers } = (JSON.parse(stdout) as { result: { providers: { name: string }[] } })
+      .result;
+    expect(providers.map((row) => row.name)).toEqual([...builtinProviders]);
     expect(loaded.some((url) => url.endsWith("/src/providers/index.ts"))).toBe(true);
-    expect(providerModules(loaded)).toEqual([]);
+    expect(providerModules(loaded)).toEqual(["searxng"]);
   });
 
   it("web search loads the one adapter the provider flag names", async ({ expect }) => {
@@ -279,8 +276,7 @@ async function closedPipe(
 ): Promise<Closed> {
   const child = spawn(process.execPath, ["src/cli.ts", ...args], {
     cwd: process.cwd(),
-    // consola keeps info lines quiet under NODE_ENV=test, and the listing has to reach the pipe.
-    env: { ...process.env, BRAVE_API_KEY: "", CONSOLA_LEVEL: "3", NODE_ENV: "test" },
+    env: { ...process.env, BRAVE_API_KEY: "", NODE_ENV: "test" },
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 10_000,
   });

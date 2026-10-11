@@ -16,6 +16,19 @@ export const builtinProviders = [
 
 export type WebSearchProviderName = (typeof builtinProviders)[number];
 
+/** Built-in providers that read a URL, in the order automatic reads try them. */
+export const readProviderNames = [
+  "jina",
+  "context",
+  "firecrawl",
+  "tinyfish",
+  "tavily",
+  "exa",
+] as const;
+
+/** Built-in providers that accept an image URL as a search input. */
+export const imageSearchProviderNames = ["serpapi"] as const;
+
 const providerApiKeyEnvVars = {
   brave: "BRAVE_API_KEY",
   context: "CONTEXT_DEV_API_KEY",

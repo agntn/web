@@ -1,5 +1,4 @@
 import type { ReadOptions, ReadResult } from "./types.ts";
-import { builtinProviders } from "./providers.ts";
 import { fingerprint, openContinuation, sealContinuation } from "./continuation.ts";
 import {
   EmptyUrlError,
@@ -33,21 +32,15 @@ import {
   MAX_SEARCH_CONTINUATION_LENGTH,
 } from "./search-continuation.ts";
 
-export const readProviderNames = [
-  "jina",
-  "context",
-  "firecrawl",
-  "tinyfish",
-  "tavily",
-  "exa",
-] as const;
+import {
+  DEFAULT_AGENT_READ_MAX_CHARS,
+  MAX_AGENT_READ_CHARS,
+  MAX_READ_CONTINUATION_LENGTH,
+} from "./limits.ts";
+import { builtinProviders, readProviderNames } from "./providers.ts";
+
+export { DEFAULT_AGENT_READ_MAX_CHARS, MAX_AGENT_READ_CHARS, readProviderNames };
 export type ReadProviderName = (typeof readProviderNames)[number];
-
-/** Default portable content limit used by agent surfaces. */
-export const DEFAULT_AGENT_READ_MAX_CHARS = 20_000;
-
-/** Largest portable content page accepted by agent surfaces. */
-export const MAX_AGENT_READ_CHARS = 200_000;
 
 /** Package guarantees that apply after every provider returns. */
 export const packageCapabilities = {
@@ -131,7 +124,6 @@ interface PageFields {
 }
 
 const DEFAULT_READ_PROVIDER: ReadProviderName = "jina";
-const MAX_CONTINUATION_LENGTH = 1_024;
 const READ_CONTINUATION = "@agntn/web/read-continuation/v2";
 
 /**
@@ -538,7 +530,7 @@ function encodeContinuation(payload: Readonly<ReadContinuationPayload>, request:
 
 function decodeContinuation(token: string, request: string): ReadContinuationPayload {
   const fields =
-    token.length <= MAX_CONTINUATION_LENGTH
+    token.length <= MAX_READ_CONTINUATION_LENGTH
       ? openContinuation(READ_CONTINUATION, token, 4, request)
       : undefined;
   const [provider, requestedProvider, offset, contentFingerprint] = fields ?? [];

@@ -142,8 +142,9 @@ describe("Pi extension", () => {
 
     const parameters = JSON.stringify(searchTool.parameters);
     for (const provider of builtinProviders) {
-      expect(parameters).toContain(`, ${provider}`);
+      expect(parameters).toContain(provider);
     }
+    expect(parameters).toContain(builtinProviders.join(", "));
     expect(parameters).toContain('"continuation"');
     const schema = searchTool.parameters as {
       readonly properties?: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
@@ -165,7 +166,9 @@ describe("Pi extension", () => {
         undefined,
         undefined,
       ]);
-      expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
+      expect(result).toMatchObject({
+        details: { result: { provider: "openai-codex", results: [{}, {}] } },
+      });
       if (typeof result !== "object" || result === null || !("content" in result))
         throw new Error("Missing model content");
       const content = JSON.stringify(result.content);
@@ -215,7 +218,9 @@ describe("Pi extension", () => {
       const request = new Request(...fetchMock.mock.calls[0]);
       expect(request.headers.get("authorization")).toBe(`Bearer ${accessToken}`);
       expect(request.headers.get("chatgpt-account-id")).toBe("native-test-account");
-      expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
+      expect(result).toMatchObject({
+        details: { result: { provider: "openai-codex", results: [{}, {}] } },
+      });
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
@@ -405,9 +410,9 @@ describe("Pi extension", () => {
         ],
       );
 
-      await expect(execution).resolves.toHaveProperty("details.provider", "serpapi");
+      await expect(execution).resolves.toHaveProperty("details.result.0.provider", "serpapi");
       await expect(execution).resolves.toHaveProperty(
-        "details.results.0.pageUrl",
+        "details.result.0.pageUrl",
         "https://example.com/page",
       );
       await expect(execution).resolves.toHaveProperty(
@@ -473,8 +478,7 @@ describe("Pi extension", () => {
         undefined,
       ]);
 
-      await expect(execution).resolves.toHaveProperty("details.options.highlights", false);
-      await expect(execution).resolves.toHaveProperty("details.metadata", {
+      await expect(execution).resolves.toHaveProperty("details.result.metadata", {
         id: "pi-request",
         warning: "Partial\u202Ecoverage",
         creditsUsed: 2,
@@ -545,13 +549,12 @@ describe("Pi extension", () => {
       "content.0.text",
       expect.not.stringContaining("Favicon"),
     );
-    await expect(lean).resolves.toHaveProperty("details.options", { favicon: false });
-    await expect(lean).resolves.not.toHaveProperty("details.results.0.favicon");
+    await expect(lean).resolves.not.toHaveProperty("details.result.results.0.favicon");
     await expect(requested).resolves.toHaveProperty(
       "content.0.text",
       expect.stringContaining(`Favicon: ${favicon}`),
     );
-    await expect(requested).resolves.toHaveProperty("details.results.0.favicon", favicon);
+    await expect(requested).resolves.toHaveProperty("details.result.results.0.favicon", favicon);
   });
 
   it("keeps rich search fields visible to the model without bloating the command selector", async () => {
@@ -641,7 +644,7 @@ describe("Pi extension", () => {
         "content.0.text",
         expect.not.stringContaining("bad"),
       );
-      await expect(execution).resolves.toHaveProperty("details.results.0.text", longText);
+      await expect(execution).resolves.toHaveProperty("details.result.results.0.text", longText);
 
       const select = vi.fn(async () => undefined);
       await Reflect.apply(command.handler, undefined, [
@@ -741,40 +744,32 @@ describe("Pi extension", () => {
     ]);
 
     await expect(searchResult).resolves.toMatchObject({
-      details: {
-        provider: providerName,
-        options: { summary: true, fullText: true },
-        results: [{ title: "Custom" }],
-      },
+      details: { result: { provider: providerName, results: [{ title: "Custom" }] } },
     });
     expect(receivedSearchOptions).toMatchObject({ summary: true, fullText: true });
     await expect(imageResult).resolves.toMatchObject({
-      details: { provider: providerName, results: [{ title: "Custom image" }] },
+      details: { result: [{ provider: providerName, title: "Custom image" }] },
     });
     await expect(readResult).resolves.toMatchObject({
       details: {
-        provider: providerName,
-        options: { maxChars: 20_000 },
-        result: { content: "Custom page", truncated: false },
+        result: { provider: providerName, result: { content: "Custom page", truncated: false } },
       },
     });
     const bounded = (await boundedReadResult) as {
       readonly content: readonly { readonly text: string }[];
       readonly details: {
-        readonly options: { readonly maxChars: number };
         readonly result: {
-          readonly content: string;
-          readonly truncated: boolean;
-          readonly continuation?: string;
+          readonly result: {
+            readonly content: string;
+            readonly truncated: boolean;
+            readonly continuation?: string;
+          };
         };
       };
     };
     expect(bounded.content[0]?.text).toMatch(/Cus[\s\S]*continuation=/u);
-    expect(bounded.details).toMatchObject({
-      options: { maxChars: 3 },
-      result: { content: "Cus", truncated: true },
-    });
-    expect(bounded.details.result.continuation).toBeTypeOf("string");
+    expect(bounded.details.result).toMatchObject({ result: { content: "Cus", truncated: true } });
+    expect(bounded.details.result.result.continuation).toBeTypeOf("string");
   });
 
   it("keeps links and images out of a read unless asked", async () => {
@@ -819,13 +814,12 @@ describe("Pi extension", () => {
       images: true,
     });
 
-    expect(bounded.details).toMatchObject({ result: { content: "Linked page" } });
-    expect(bounded.details.result).not.toHaveProperty("links");
-    expect(bounded.details.result).not.toHaveProperty("images");
+    expect(bounded.details).toMatchObject({ result: { result: { content: "Linked page" } } });
+    expect(bounded.details).not.toHaveProperty("result.result.links");
+    expect(bounded.details).not.toHaveProperty("result.result.images");
     expect(bounded.content[0]?.text).not.toContain("Links");
     expect(requested.details).toMatchObject({
-      options: { maxChars: 20_000, links: true, images: true },
-      result: { links: page.links, images: page.images },
+      result: { result: { links: page.links, images: page.images } },
     });
     expect(requested.content[0]?.text).toContain(
       "Linked page\n\nLinks (1):\n  https://example.com/a\n\nImages (1):\n  https://example.com/hero.png",
@@ -894,7 +888,7 @@ describe("Pi extension", () => {
         undefined,
       ]);
 
-      await expect(execution).resolves.toHaveProperty("details.successfulProviders", [
+      await expect(execution).resolves.toHaveProperty("details.result.successfulProviders", [
         "exa",
         "brave",
       ]);
@@ -902,12 +896,11 @@ describe("Pi extension", () => {
         "content.0.text",
         expect.stringContaining("via 2 provider(s) [exa, brave]"),
       );
-      await expect(execution).resolves.toHaveProperty("details.results.0.providers", [
+      await expect(execution).resolves.toHaveProperty("details.result.results.0.providers", [
         "exa",
         "brave",
       ]);
-      await expect(execution).resolves.toHaveProperty("details.results.0.evidence", [
-        expect.objectContaining({ provider: "exa", title: "Exa result" }),
+      await expect(execution).resolves.toHaveProperty("details.result.results.0.evidence", [
         expect.objectContaining({
           provider: "brave",
           title: "Brave result",
@@ -1013,9 +1006,9 @@ describe("Pi extension", () => {
         undefined,
       ]);
 
-      await expect(execution).resolves.toHaveProperty("details.provider", "brave");
+      await expect(execution).resolves.toHaveProperty("details.result.provider", "brave");
       await expect(execution).resolves.toHaveProperty(
-        "details.results.0.url",
+        "details.result.results.0.url",
         "https://brave.example.com",
       );
       await expect(execution).resolves.toHaveProperty(
@@ -1026,14 +1019,16 @@ describe("Pi extension", () => {
         "content.0.text",
         expect.stringContaining("[ignored=includeDomains]"),
       );
-      await expect(execution).resolves.toHaveProperty("details.ignoredFilters", ["includeDomains"]);
-      await expect(execution).resolves.toHaveProperty("details.attempts", ["exa", "brave"]);
-      await expect(execution).resolves.toHaveProperty("details.pagination.status", "next");
+      await expect(execution).resolves.toHaveProperty("details.result.ignoredFilters", [
+        "includeDomains",
+      ]);
+      await expect(execution).resolves.toHaveProperty("details.result.attempts", ["exa", "brave"]);
+      await expect(execution).resolves.toHaveProperty("details.result.pagination.status", "next");
       await expect(execution).resolves.toHaveProperty(
         "content.0.text",
         expect.stringContaining("Continuation (next):"),
       );
-      await expect(execution).resolves.toHaveProperty("details.failures.0", {
+      await expect(execution).resolves.toHaveProperty("details.result.failures.0", {
         provider: "exa",
         error: 'HTTP 402: https://api.exa.ai/search: {"error":"Payment required"}',
       });
@@ -1066,13 +1061,15 @@ describe("Pi extension", () => {
       const result = (await execution) as {
         readonly content: readonly { readonly text: string }[];
         readonly details: {
-          readonly runtime: { readonly buildId: string; readonly processStartedAt: string };
-          readonly packageCapabilities: Readonly<Record<string, unknown>>;
-          readonly providers: readonly ProviderStatus[];
+          readonly result: {
+            readonly runtime: { readonly buildId: string; readonly processStartedAt: string };
+            readonly packageCapabilities: Readonly<Record<string, unknown>>;
+            readonly providers: readonly ProviderStatus[];
+          };
         };
       };
-      expect(result.details.runtime.buildId).toMatch(/^[a-f0-9]{12}$/);
-      expect(result.details.runtime.processStartedAt).toBe(
+      expect(result.details.result.runtime.buildId).toMatch(/^[a-f0-9]{12}$/);
+      expect(result.details.result.runtime.processStartedAt).toBe(
         new Date(performance.timeOrigin).toISOString(),
       );
       expect(result.content[0]?.text).toMatch(/^web \S+ build [a-f0-9]{12}, started /);
@@ -1082,7 +1079,7 @@ describe("Pi extension", () => {
       expect(result.content[0]?.text).toContain(
         "jina (JINA_API_KEY) operations=search,read filters=includeDomains,category",
       );
-      expect(result.details.packageCapabilities).toMatchObject({
+      expect(result.details.result.packageCapabilities).toMatchObject({
         search: {
           continuation: {
             option: "continuation",
@@ -1098,7 +1095,7 @@ describe("Pi extension", () => {
         },
       });
 
-      const jina = result.details.providers.find((provider) => provider.name === "jina");
+      const jina = result.details.result.providers.find((provider) => provider.name === "jina");
       expect(jina).toMatchObject({
         searchFilters: ["includeDomains", "category"],
         searchCategories: ["web", "images", "news"],
@@ -1208,21 +1205,23 @@ describe("Pi extension", () => {
       await expect(execution).resolves.toMatchObject({
         content: [
           {
-            text: "[provider=context requested=auto] read https://example.com\n\nFallback result\n   https://example.com\n\nFallback content",
+            text: '[provider=context requested=auto] read https://example.com\nTried: jina, context\n  jina failed: HTTP 402: https://r.jina.ai/https%3A%2F%2Fexample.com: {"error":"Payment required"}\n\nFallback result\n   https://example.com\n\nFallback content',
           },
         ],
         details: {
-          provider: "auto",
-          effectiveProvider: "context",
-          attempts: ["jina", "context"],
-          failures: [
-            {
-              provider: "jina",
-              error:
-                'HTTP 402: https://r.jina.ai/https%3A%2F%2Fexample.com: {"error":"Payment required"}',
-            },
-          ],
-          result: { content: "Fallback content" },
+          result: {
+            requestedProvider: "auto",
+            provider: "context",
+            attempts: ["jina", "context"],
+            failures: [
+              {
+                provider: "jina",
+                error:
+                  'HTTP 402: https://r.jina.ai/https%3A%2F%2Fexample.com: {"error":"Payment required"}',
+              },
+            ],
+            result: { content: "Fallback content" },
+          },
         },
       });
 
@@ -1238,7 +1237,7 @@ describe("Pi extension", () => {
         expect.stringContaining("[1] https://example.com [provider=context requested=auto]"),
       );
       await expect(batchExecution).resolves.toMatchObject({
-        details: { outcomes: [{ attempts: ["context"], failures: [], skipped: ["jina"] }] },
+        details: { result: [{ attempts: ["context"], failures: [], skipped: ["jina"] }] },
       });
       expect(requestedUrls).toEqual([
         "https://r.jina.ai/https%3A%2F%2Fexample.com",
@@ -1299,8 +1298,8 @@ describe("Pi extension", () => {
       targetSelector: "",
     });
 
-    expect(search.details).toMatchObject({ mode: "batch" });
-    expect(read.details).toMatchObject({ mode: "batch" });
+    expect(Array.isArray(search.details.result)).toBe(true);
+    expect(Array.isArray(read.details.result)).toBe(true);
   });
 
   it("runs a JSON list sent as a string as a batch", async () => {
@@ -1350,14 +1349,15 @@ describe("Pi extension", () => {
     });
     const literal = await run(searchTool, { query: "[draft] notes", provider: providerName });
 
-    expect(search.details).toMatchObject({ mode: "batch", queries: tenQueries });
-    expect(search.details.outcomes).toHaveLength(10);
-    expect(read.details).toMatchObject({
-      mode: "batch",
-      urls: ["https://example.com/a", "https://example.com/b"],
-    });
+    expect(
+      (search.details.result as readonly { readonly query: string }[]).map(({ query }) => query),
+    ).toEqual(tenQueries);
+    expect(read.details.result).toEqual([
+      expect.objectContaining({ url: "https://example.com/a" }),
+      expect.objectContaining({ url: "https://example.com/b" }),
+    ]);
     expect(urls).toEqual(["https://example.com/a", "https://example.com/b"]);
-    expect(literal.details).toMatchObject({ mode: "single" });
+    expect(literal.details.result).toMatchObject({ provider: providerName });
     expect(queries).toHaveLength(11);
     expect(new Set(queries)).toEqual(new Set([...tenQueries, "[draft] notes"]));
   });

@@ -1,5 +1,5 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ToolInputError } from "@agntn/tools";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import {
   searchAllDetailed,
@@ -11,7 +11,8 @@ import { readUrlDetailed, type ReadUrlOptions } from "../../src/core/read.ts";
 import { searchByImage } from "../../src/core/image.ts";
 import { asSchema } from "ai";
 import { readTool, searchTool } from "../../src/ai.ts";
-import { createMcpServer, executeRead, executeSearch } from "../../src/mcp.ts";
+import { createMcpServer } from "../../src/mcp.ts";
+import { webTools } from "../../src/tools.ts";
 import { InvalidDateFilterError, InvalidSearchContinuationError } from "../../src/core/errors.ts";
 import { Provider } from "../../src/core/provider.ts";
 import { register } from "../../src/core/registry.ts";
@@ -136,6 +137,14 @@ beforeEach(() => {
 afterEach(() => {
   for (const cleanup of cleanups.splice(0).reverse()) cleanup();
 });
+
+const [searchDefinition, , readDefinition] = webTools();
+
+/* Executors without the schema; each answers the data under `result`. */
+const executeSearch = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+  (await searchDefinition.execute(args as never, {})).details.result;
+const executeRead = async (args: Readonly<Record<string, unknown>>): Promise<unknown> =>
+  (await readDefinition.execute(args as never, {})).details.result;
 
 describe("blank optional inputs", () => {
   it("searches a provider when optional filters arrive blank", async () => {
@@ -263,42 +272,54 @@ describe("blank optional MCP arguments", () => {
   });
 
   it("still rejects an unknown provider and an unknown format", async () => {
-    await expect(executeSearch({ query: "test", provider: "nope" })).rejects.toThrow(TypeError);
+    await expect(executeSearch({ query: "test", provider: "nope" })).rejects.toThrow(
+      ToolInputError,
+    );
     await expect(executeRead({ url: "https://example.com", format: "pdf" })).rejects.toThrow(
-      TypeError,
+      ToolInputError,
     );
   });
 });
 
+/**
+ * Runs an AI SDK tool as the SDK does and returns the data under `result`.
+ * @param tool - The AI SDK tool.
+ * @param input - Arguments as the model sent them.
+ * @returns {Promise<unknown>} What the tool answered with.
+ */
+async function run(
+  tool: Readonly<{ execute?: unknown }>,
+  input: Readonly<Record<string, unknown>>,
+): Promise<unknown> {
+  const call = tool.execute as (input: unknown, options: unknown) => Promise<{ result: unknown }>;
+  return (await call(input, { toolCallId: "blank", messages: [] })).result;
+}
+
 describe("blank optional AI SDK arguments", () => {
   it("batches queries when the continuation and provider arrive blank", async () => {
-    const outcomes = await searchTool.execute?.(
-      { query: ["first", "second"], provider: "", continuation: "", category: "" },
-      { toolCallId: "blank-search", messages: [] },
-    );
+    const outcomes = await run(searchTool, {
+      query: ["first", "second"],
+      provider: "",
+      continuation: "",
+      category: "",
+    });
 
     expect(outcomes).toHaveLength(2);
   });
 
   it("reads a batch when the continuation and provider arrive blank", async () => {
-    const outcomes = await readTool.execute?.(
-      {
-        url: ["https://example.com/a", "https://example.com/b"],
-        provider: "",
-        continuation: "",
-        targetSelector: "",
-      },
-      { toolCallId: "blank-read", messages: [] },
-    );
+    const outcomes = await run(readTool, {
+      url: ["https://example.com/a", "https://example.com/b"],
+      provider: "",
+      continuation: "",
+      targetSelector: "",
+    });
 
     expect(outcomes).toHaveLength(2);
   });
 
   it("searches one query when the provider arrives blank", async () => {
-    const response = await searchTool.execute?.(
-      { query: "test", provider: "" },
-      { toolCallId: "blank-single", messages: [] },
-    );
+    const response = await run(searchTool, { query: "test", provider: "" });
 
     expect(response).toMatchObject({ provider: "exa" });
   });
@@ -337,8 +358,8 @@ describe("blank optional arguments through schema validation", () => {
     const validate = asSchema(readTool.inputSchema).validate;
     if (!validate) throw new TypeError("Read schema has no validator");
 
-    await expect(
-      validate({ url: "https://example.com", provider: "", format: "  ", continuation: "" }),
-    ).resolves.toMatchObject({ success: true });
+    expect(
+      await validate({ url: "https://example.com", provider: "", format: "  ", continuation: "" }),
+    ).toMatchObject({ success: true });
   });
 });

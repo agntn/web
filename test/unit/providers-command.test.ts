@@ -1,14 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vite-plus/test";
 
-const mockLog = vi.fn<(message: unknown) => void>();
-
-vi.mock("consola", () => ({
-  consola: {
-    log: (message: unknown) => mockLog(message),
-  },
-}));
-
-import providersCommand from "../../src/commands/providers.ts";
+import { runWeb } from "../fixtures/cli.ts";
 import { builtinProviders, Provider, register } from "../../src/index.ts";
 import type { ProviderStatus } from "../../src/index.ts";
 import type { ProviderConfig } from "../../src/core/types.ts";
@@ -32,21 +24,13 @@ const envKeys = [
 describe("providers command", () => {
   const savedEnv: Record<string, string | undefined> = {};
   const customProviderCleanups: Array<() => void> = [];
-  let writes: string[];
-  let originalWrite: typeof process.stdout.write;
 
   beforeEach(() => {
-    mockLog.mockClear();
     for (const key of envKeys) {
       savedEnv[key] = process.env[key];
       delete process.env[key];
     }
-    writes = [];
-    originalWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = ((chunk) => {
-      writes.push(String(chunk));
-      return true;
-    }) as typeof process.stdout.write;
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("no SearXNG here")));
   });
 
   afterEach(() => {
@@ -58,14 +42,30 @@ describe("providers command", () => {
         delete process.env[key];
       }
     }
-    process.stdout.write = originalWrite;
+    vi.unstubAllGlobals();
   });
+
+  /**
+   * Runs `web providers` and returns the human text.
+   * @returns {Promise<string>} What it printed.
+   */
+  async function humanOutput(): Promise<string> {
+    return (await runWeb("providers")).stdout;
+  }
+
+  /**
+   * Runs `web providers --json` and returns the provider statuses it printed.
+   * @returns {Promise<readonly ProviderStatus[]>} One status per registered provider.
+   */
+  async function jsonProviders(): Promise<readonly ProviderStatus[]> {
+    const { stdout } = await runWeb("providers", "--json");
+    return (JSON.parse(stdout) as { readonly result: { readonly providers: ProviderStatus[] } })
+      .result.providers;
+  }
 
   describe("human output", () => {
     it("lists all built-in providers", async () => {
-      await providersCommand.run!({ args: { json: false } } as never);
-
-      const output = mockLog.mock.calls.map((c) => String(c[0])).join("\n");
+      const output = await humanOutput();
       for (const name of builtinProviders) {
         expect(output).toContain(name);
       }
@@ -74,33 +74,24 @@ describe("providers command", () => {
       );
     });
 
-    it("prints plain text when colors are off", async () => {
-      vi.stubEnv("FORCE_COLOR", undefined);
-      vi.stubEnv("NO_COLOR", "1");
+    it("prints plain text even when colors are forced", async () => {
+      vi.stubEnv("FORCE_COLOR", "1");
 
-      await providersCommand.run!({ args: { json: false } } as never);
-
-      const output = mockLog.mock.calls.map((c) => String(c[0])).join("\n");
-      expect(output).toContain("\u2717 exa  EXA_API_KEY not set  operations=search");
+      const output = await humanOutput();
+      expect(output).toContain("· exa (EXA_API_KEY) operations=search");
       expect(output).not.toContain("\x1B");
     });
 
-    it("colors the status marks when colors are forced", async () => {
-      vi.stubEnv("FORCE_COLOR", "1");
-
-      await providersCommand.run!({ args: { json: false } } as never);
-
-      const lines = mockLog.mock.calls.map((c) => String(c[0]));
-      const searxngLine = lines.find((l) => l.includes("searxng"));
-      expect(searxngLine?.startsWith("  \x1B[32m\u2713\x1B[39m searxng  \x1B[90m")).toBe(true);
+    it("starts with the running build and the package guarantees", async () => {
+      const [build, guarantees] = (await humanOutput()).split("\n");
+      expect(build).toMatch(/^web \S+ build [a-f0-9]{12}, started /u);
+      expect(guarantees).toContain("portable read content: maxChars defaults to 20000");
     });
 
     it("shows configured provider with checkmark when env var is set", async () => {
       process.env.EXA_API_KEY = "test-key";
 
-      await providersCommand.run!({ args: { json: false } } as never);
-
-      const output = mockLog.mock.calls.map((c) => String(c[0])).join("\n");
+      const output = await humanOutput();
       expect(output).toContain("\u2713");
       expect(output).toContain("exa");
       expect(output).toContain("operations=search");
@@ -114,31 +105,21 @@ describe("providers command", () => {
       );
     });
 
-    it("shows unconfigured provider with cross and env var hint", async () => {
-      await providersCommand.run!({ args: { json: false } } as never);
-
-      const output = mockLog.mock.calls.map((c) => String(c[0])).join("\n");
-      expect(output).toContain("\u2717");
-      expect(output).toContain("EXA_API_KEY not set");
+    it("shows an unconfigured provider with a dot and the variable it reads", async () => {
+      const output = await humanOutput();
+      expect(output).toContain("· exa (EXA_API_KEY)");
     });
 
-    it("shows searxng as configured without any env var", async () => {
-      await providersCommand.run!({ args: { json: false } } as never);
-
-      const lines = mockLog.mock.calls.map((c) => String(c[0]));
+    it("shows searxng as configured without any env var, and unreachable when it is down", async () => {
+      const lines = (await humanOutput()).split("\n");
       const searxngLine = lines.find((l) => l.includes("searxng"));
-      expect(searxngLine).toBeDefined();
-      expect(searxngLine).toContain("\u2713");
+      expect(searxngLine).toMatch(/^⚠ searxng - unreachable /u);
     });
   });
 
   describe("JSON output", () => {
     it("outputs array of provider status objects", async () => {
-      await providersCommand.run!({ args: { json: true } } as never);
-
-      expect(writes).toHaveLength(1);
-      const raw = writes[0] ?? "";
-      const parsed = JSON.parse(raw) as readonly ProviderStatus[];
+      const parsed = await jsonProviders();
 
       expect(Array.isArray(parsed)).toBe(true);
       expect(parsed).toHaveLength(builtinProviders.length);
@@ -147,9 +128,7 @@ describe("providers command", () => {
     it("includes name, envVar, and configured fields", async () => {
       process.env.BRAVE_API_KEY = "test-key";
 
-      await providersCommand.run!({ args: { json: true } } as never);
-
-      const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      const parsed = await jsonProviders();
       const brave = parsed.find((provider) => provider.name === "brave");
 
       expect(brave).toMatchObject({
@@ -161,9 +140,7 @@ describe("providers command", () => {
     });
 
     it("includes machine-readable operation details", async () => {
-      await providersCommand.run!({ args: { json: true } } as never);
-
-      const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      const parsed = await jsonProviders();
       const jina = parsed.find((provider) => provider.name === "jina");
 
       expect(jina?.capabilities).toMatchObject({
@@ -189,9 +166,7 @@ describe("providers command", () => {
     });
 
     it("marks unconfigured providers correctly", async () => {
-      await providersCommand.run!({ args: { json: true } } as never);
-
-      const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      const parsed = await jsonProviders();
       const exa = parsed.find((provider) => provider.name === "exa");
 
       expect(exa).toMatchObject({
@@ -209,30 +184,26 @@ describe("providers command", () => {
     });
 
     it("marks searxng as configured with null envVar", async () => {
-      await providersCommand.run!({ args: { json: true } } as never);
-
-      const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      const parsed = await jsonProviders();
       const searxng = parsed.find((provider) => provider.name === "searxng");
 
       expect(searxng).toMatchObject({
         name: "searxng",
         envVar: null,
         configured: true,
+        reachable: false,
         searchFilters: ["category"],
       });
     });
 
     it("reflects env var changes between calls", async () => {
-      await providersCommand.run!({ args: { json: true } } as never);
-      const before = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      const before = await jsonProviders();
       const tavBefore = before.find((provider) => provider.name === "tavily");
       expect(tavBefore?.configured).toBe(false);
 
-      writes.length = 0;
       process.env.TAVILY_API_KEY = "test-key";
 
-      await providersCommand.run!({ args: { json: true } } as never);
-      const after = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      const after = await jsonProviders();
       const tavAfter = after.find((provider) => provider.name === "tavily");
       expect(tavAfter?.configured).toBe(true);
     });
@@ -250,9 +221,7 @@ describe("providers command", () => {
       }
       customProviderCleanups.push(register(CommandProvider));
 
-      await providersCommand.run!({ args: { json: true } } as never);
-
-      const parsed = JSON.parse(writes[0] ?? "") as readonly ProviderStatus[];
+      const parsed = await jsonProviders();
       expect(parsed).toContainEqual({
         name: providerName,
         envVar: null,
