@@ -2,7 +2,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import * as ompTypebox from "@oh-my-pi/omptype/typebox";
+import type { TSchema } from "typebox";
+import { Value } from "typebox/value";
 import type { ExtensionAPI, Theme, ToolDefinition } from "@oh-my-pi/pi-coding-agent";
 import stringWidth from "string-width";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
@@ -25,6 +26,19 @@ type OmpTool = {
 };
 
 const theme = {} as unknown as Theme;
+
+/** OMP's `Text` as the adapter draws its own lines with it; the web renderers replace both. */
+class TextDouble {
+  readonly text: string;
+
+  constructor(text: string) {
+    this.text = text;
+  }
+
+  render(): string[] {
+    return [this.text];
+  }
+}
 const customProviderCleanups: Array<() => void> = [];
 
 async function initializeOmpExtension(): Promise<{
@@ -34,7 +48,8 @@ async function initializeOmpExtension(): Promise<{
   let label = "";
   const tools = new Map<string, OmpTool>();
   const host = {
-    typebox: ompTypebox,
+    typebox: { Type: { Unsafe: (schema: unknown) => schema } },
+    pi: { Text: TextDouble },
     setLabel(value: string) {
       label = value;
     },
@@ -218,7 +233,9 @@ describe("OMP extension", () => {
         undefined,
         undefined,
       ]);
-      expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
+      expect(result).toMatchObject({
+        details: { result: { provider: "openai-codex", results: [{}, {}] } },
+      });
       if (typeof result !== "object" || result === null || !("content" in result))
         throw new Error("Missing model content");
       const content = JSON.stringify(result.content);
@@ -269,7 +286,9 @@ describe("OMP extension", () => {
         ctx,
       ]);
       expect(resolutions).toBe(1);
-      expect(result).toMatchObject({ details: { provider: "openai-codex", count: 2 } });
+      expect(result).toMatchObject({
+        details: { result: { provider: "openai-codex", results: [{}, {}] } },
+      });
     } finally {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
@@ -279,19 +298,17 @@ describe("OMP extension", () => {
   it("rejects schema and executor boundary violations", async () => {
     const search = requiredTool(captureOmpExtension().tools, "web_search");
     const read = requiredTool(captureOmpExtension().tools, "web_read");
-    const searchSchema = search.parameters as unknown as ompTypebox.TSchema;
+    const searchSchema = search.parameters as unknown as TSchema;
 
-    expect(searchSchema.safeParse({ query: "valid", maxResults: 5 }).success).toBe(true);
-    expect(searchSchema.safeParse({ query: "valid", continuation: "opaque-token" }).success).toBe(
-      true,
-    );
-    expect(searchSchema.safeParse({ query: "valid", continuation: "x".repeat(4097) }).success).toBe(
+    expect(Value.Check(searchSchema, { query: "valid", maxResults: 5 })).toBe(true);
+    expect(Value.Check(searchSchema, { query: "valid", continuation: "opaque-token" })).toBe(true);
+    expect(Value.Check(searchSchema, { query: "valid", continuation: "x".repeat(4097) })).toBe(
       false,
     );
-    expect(searchSchema.safeParse({ query: "valid", maxResults: 5.5 }).success).toBe(false);
-    expect(
-      searchSchema.safeParse({ query: Array.from({ length: 11 }, () => "query") }).success,
-    ).toBe(false);
+    expect(Value.Check(searchSchema, { query: "valid", maxResults: 5.5 })).toBe(false);
+    expect(Value.Check(searchSchema, { query: Array.from({ length: 11 }, () => "query") })).toBe(
+      false,
+    );
 
     await expect(
       search.execute(
@@ -311,7 +328,7 @@ describe("OMP extension", () => {
         undefined,
         {} as never,
       ),
-    ).rejects.toThrow("Unknown read format: pdf");
+    ).rejects.toThrow("Invalid arguments at /format");
   });
 
   it("forwards the host cancellation signal through every network tool", async () => {
@@ -401,16 +418,16 @@ describe("OMP extension", () => {
     const tools = captureOmpExtension().tools;
     const search = requiredTool(tools, "web_search");
     const read = requiredTool(tools, "web_read");
-    const searchSchema = search.parameters as unknown as ompTypebox.TSchema;
-    const readSchema = read.parameters as unknown as ompTypebox.TSchema;
-    expect(searchSchema.safeParse({ query: "valid", timeoutSeconds: 30 }).success).toBe(true);
-    expect(searchSchema.safeParse({ query: "valid", timeoutSeconds: 0 }).success).toBe(false);
-    expect(
-      readSchema.safeParse({ url: "https://example.com", timeoutSeconds: 3_600 }).success,
-    ).toBe(true);
-    expect(
-      readSchema.safeParse({ url: "https://example.com", timeoutSeconds: 3_601 }).success,
-    ).toBe(false);
+    const searchSchema = search.parameters as unknown as TSchema;
+    const readSchema = read.parameters as unknown as TSchema;
+    expect(Value.Check(searchSchema, { query: "valid", timeoutSeconds: 30 })).toBe(true);
+    expect(Value.Check(searchSchema, { query: "valid", timeoutSeconds: 0 })).toBe(false);
+    expect(Value.Check(readSchema, { url: "https://example.com", timeoutSeconds: 3_600 })).toBe(
+      true,
+    );
+    expect(Value.Check(readSchema, { url: "https://example.com", timeoutSeconds: 3_601 })).toBe(
+      false,
+    );
 
     const pendingSearch = expect(
       search.execute(
@@ -467,16 +484,14 @@ describe("OMP extension", () => {
       );
 
       expect(result.details).toMatchObject({
-        mode: "single",
-        provider: "firecrawl",
-        metadata: { id: "omp-request", creditsUsed: 2 },
+        result: { provider: "firecrawl", metadata: { id: "omp-request", creditsUsed: 2 } },
       });
       expect(result.content[0]).toMatchObject({ type: "text" });
       expect(
         result.content[0]?.type === "text" && "text" in result.content[0]
           ? result.content[0].text
           : "",
-      ).toContain('"metadata":{"id":"omp-request","creditsUsed":2}');
+      ).toContain('Provider metadata: {"id":"omp-request","creditsUsed":2}');
     } finally {
       if (previousKey === undefined) delete process.env.FIRECRAWL_API_KEY;
       else process.env.FIRECRAWL_API_KEY = previousKey;
@@ -514,9 +529,13 @@ describe("OMP extension", () => {
         undefined,
         {} as never,
       );
-      const firstDetails = first.details as {
-        readonly pagination: { readonly status: string; readonly continuation?: string };
-      };
+      const firstDetails = (
+        first.details as {
+          readonly result: {
+            readonly pagination: { readonly status: string; readonly continuation?: string };
+          };
+        }
+      ).result;
       if (firstDetails.pagination.continuation === undefined) {
         throw new Error("missing continuation");
       }
@@ -535,7 +554,7 @@ describe("OMP extension", () => {
 
       expect(firstDetails.pagination.status).toBe("next");
       expect(new URL(requestedUrls[1]).searchParams.get("offset")).toBe("1");
-      expect(second.details).toMatchObject({ pagination: { status: "end" } });
+      expect(second.details).toMatchObject({ result: { pagination: { status: "end" } } });
     } finally {
       if (previousKey === undefined) delete process.env.BRAVE_API_KEY;
       else process.env.BRAVE_API_KEY = previousKey;
@@ -601,18 +620,14 @@ describe("OMP extension", () => {
     );
 
     expect(searchResult.details).toMatchObject({
-      provider: providerName,
-      results: [{ title: "Custom" }],
+      result: { provider: providerName, results: [{ title: "Custom" }] },
     });
     expect(receivedSearchOptions).toMatchObject({ summary: true, fullText: true });
     expect(imageResult.details).toMatchObject({
-      provider: providerName,
-      results: [{ title: "Custom image" }],
+      result: [{ provider: providerName, title: "Custom image" }],
     });
     expect(readResult.details).toMatchObject({
-      provider: providerName,
-      options: { maxChars: 20_000 },
-      result: { content: "Custom page", truncated: false },
+      result: { provider: providerName, result: { content: "Custom page", truncated: false } },
     });
   });
 
@@ -649,10 +664,12 @@ describe("OMP extension", () => {
       {} as never,
     );
 
-    expect(lean.details).toMatchObject({ provider: providerName, results: [{ title: "Plain" }] });
-    expect(lean.details).not.toHaveProperty("results.0.favicon");
+    expect(lean.details).toMatchObject({
+      result: { provider: providerName, results: [{ title: "Plain" }] },
+    });
+    expect(lean.details).not.toHaveProperty("result.results.0.favicon");
     expect(JSON.stringify(lean.content)).not.toContain("favicon");
-    expect(requested.details).toMatchObject({ results: [{ favicon }] });
+    expect(requested.details).toMatchObject({ result: { results: [{ favicon }] } });
   });
 
   it("sends each fanout provider record to the model once", async () => {
@@ -711,18 +728,15 @@ describe("OMP extension", () => {
     const brave = { provider: "brave", title: "Brave result", snippet: "duplicate" };
     const text = (result: Readonly<{ content: readonly unknown[] }>): string =>
       (result.content[0] as { text: string }).text;
-    expect(single.details).toHaveProperty("results.0.evidence", [
-      expect.objectContaining({ provider: "exa", title: "Exa result" }),
-      expect.objectContaining(brave),
-    ]);
-    expect(JSON.parse(text(single))).toMatchObject({
-      mode: "all",
-      results: [{ provider: "exa", providers: ["exa", "brave"], evidence: [brave] }],
+    expect(single.details).toMatchObject({
+      result: { results: [{ provider: "exa", providers: ["exa", "brave"], evidence: [brave] }] },
     });
-    expect(JSON.parse(text(batch))).toMatchObject({
-      mode: "batch",
-      outcomes: [{ results: [{ provider: "exa", evidence: [brave] }] }],
+    expect(batch.details).toMatchObject({
+      result: [{ results: [{ provider: "exa", evidence: [brave] }] }],
     });
+    for (const result of [single, batch]) {
+      expect(text(result)).toMatch(/Providers: exa, brave[\s\S]*Evidence:\n1\. Brave result/u);
+    }
     for (const result of [single, batch]) {
       expect(text(result).match(/Exa result/gu)).toHaveLength(1);
     }
@@ -765,12 +779,11 @@ describe("OMP extension", () => {
       {} as never,
     );
 
-    expect(bounded.details).toMatchObject({ result: { content: "Linked page" } });
-    expect(bounded.details).not.toHaveProperty("result.links");
-    expect(bounded.details).not.toHaveProperty("result.images");
+    expect(bounded.details).toMatchObject({ result: { result: { content: "Linked page" } } });
+    expect(bounded.details).not.toHaveProperty("result.result.links");
+    expect(bounded.details).not.toHaveProperty("result.result.images");
     expect(requested.details).toMatchObject({
-      options: { maxChars: 20_000, links: true, images: true },
-      result: { links: page.links, images: page.images },
+      result: { result: { links: page.links, images: page.images } },
     });
   });
 
@@ -779,11 +792,15 @@ describe("OMP extension", () => {
     const providers = requiredTool(captureOmpExtension().tools, "web_providers");
 
     const result = await providers.execute("call-1", {}, undefined, undefined, {} as never);
-    const details = result.details as {
-      runtime: { buildId: string };
-      packageCapabilities: Readonly<Record<string, unknown>>;
-      providers: ProviderStatus[];
-    };
+    const details = (
+      result.details as {
+        result: {
+          runtime: { buildId: string };
+          packageCapabilities: Readonly<Record<string, unknown>>;
+          providers: ProviderStatus[];
+        };
+      }
+    ).result;
 
     expect(details.runtime.buildId).toMatch(/^[a-f0-9]{12}$/u);
     expect(details.packageCapabilities).toMatchObject({
@@ -810,7 +827,7 @@ describe("OMP extension", () => {
     const rendered = renderedText(
       providers.renderResult(result, { expanded: true, isPartial: false }, theme),
     );
-    expect(rendered).toContain("jina ·");
+    expect(rendered).toMatch(/[✓⚠·] jina /u);
     expect(rendered).not.toContain('{"runtime"');
   });
   it("takes blank optional strings as unset", async () => {
@@ -861,7 +878,7 @@ describe("OMP extension", () => {
       {} as never,
     );
 
-    expect(search.details).toMatchObject({ mode: "batch" });
-    expect(read.details).toMatchObject({ mode: "batch" });
+    expect(search.details).toMatchObject({ result: [{}, {}] });
+    expect(read.details).toMatchObject({ result: [{}, {}] });
   });
 });

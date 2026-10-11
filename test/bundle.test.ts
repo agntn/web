@@ -76,7 +76,7 @@ describe("package manifest", () => {
     expect(hostProvidedPackages.filter((name) => name in (manifest.dependencies ?? {}))).toEqual(
       [],
     );
-    expect(manifest.peerDependencies?.typebox).toBe("*");
+    expect(manifest.peerDependencies).not.toHaveProperty("typebox");
   });
 });
 
@@ -105,8 +105,8 @@ describe("bundled package", () => {
     if (packageDir) rmSync(packageDir, { recursive: true, force: true });
   });
 
-  /** typebox is only an optional peer, so the CLI, the MCP server and their types have to carry their own copy. */
-  it("bundles typebox instead of importing it from dist/", () => {
+  /** `@agntn/tools` bundles its own TypeBox, so nothing in dist/ imports one. */
+  it("imports no typebox from dist/", () => {
     const importers = readdirSync(join(packageDir, "dist"), { recursive: true, encoding: "utf8" })
       .filter((file) => file.endsWith(".mjs") || file.endsWith(".d.mts"))
       .filter((file) =>
@@ -116,13 +116,6 @@ describe("bundled package", () => {
       );
 
     expect(importers).toEqual([]);
-  });
-
-  /** A bundled typebox still owes its MIT notice, and obuild writes it here on its own. */
-  it("ships the typebox license beside the bundle", () => {
-    const licenses = readFileSync(join(packageDir, "dist/THIRD-PARTY-LICENSES.md"), "utf8");
-
-    expect(licenses).toMatch(/^## typebox$[\s\S]*?Copyright \(c\) .* Haydn Paterson/mu);
   });
 
   it("keeps every built-in provider listed after a consumer bundles dist/", async () => {
@@ -169,6 +162,7 @@ describe("bundled package", () => {
     const ompTools: string[] = [];
     await ompExtension({
       typebox: ompTypebox,
+      pi: { Text: class {} },
       setLabel() {},
       registerTool: (tool: { readonly name: string }) => ompTools.push(tool.name),
     });

@@ -1,4 +1,5 @@
 import { EmptyQueryError, EmptyUrlError, validateMaxResults } from "./errors.ts";
+import { MAX_BATCH_ITEMS } from "./limits.ts";
 import {
   prepareSearchWithFallback,
   searchAllDetailed,
@@ -24,8 +25,7 @@ import type {
   SearchResult,
 } from "./types.ts";
 
-/** Maximum number of network operations accepted by one agent-tool batch. */
-export const MAX_BATCH_ITEMS = 10;
+export { MAX_BATCH_ITEMS };
 
 /**
  * Turns a batch that a tool host serialized into the string branch back into a list.

@@ -16,10 +16,15 @@ Keep URL-based image search here while it returns web matches through lightweigh
 src/
 ├── core/                 # Registry, shared types/errors, searchAll, readUrl
 ├── providers/            # Provider adapters; integrations may support search and/or read
-├── commands/             # citty CLI subcommands (`search`, `read`, `providers`, `mcp`)
+├── commands/mcp.ts       # Serves the MCP server over stdio
 ├── index.ts              # Public API barrel
-├── ai.ts                 # Vercel AI SDK tools
-├── mcp.ts                # MCP server surface (createMcpServer, executors)
+├── tools.ts              # One `defineTool` per tool, plus the CLI-only `search` and `read` commands
+├── tool-schemas.ts       # Input and output schemas, built with `Type` from `@agntn/tools`
+├── tool-operations.ts    # Executors, loaded on the first call
+├── tool-text.ts          # The text every host hands the model
+├── ai.ts                 # Vercel AI SDK tools (`toAiTool`)
+├── mcp.ts                # MCP server (`createMcpServer` from `@agntn/tools/mcp`)
+├── cli-run.ts            # `runCli` options for the `web` command
 └── cli.ts                # CLI entry point; serves `mcp` from src/ in a checkout
 packages/
 ├── omp/extensions/web.ts # OMP tool surface
@@ -34,26 +39,26 @@ test/unit/                # Public behavior and provider contract tests
 
 ## WHERE TO LOOK
 
-| Task                 | Location                                                                | Notes                                                                                                                                                             |
-| -------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Add public exports   | `src/index.ts`                                                          | Keep the public surface small and explicit                                                                                                                        |
-| Add/extend providers | `src/providers/`                                                        | Keep provider response shapes inside the adapter                                                                                                                  |
-| Add search behavior  | `src/core/all.ts` + provider adapter                                    | Preserve query → results semantics                                                                                                                                |
-| Add image search     | `src/core/image.ts` + provider adapter + `src/commands/search-image.ts` | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                               |
-| Add read behavior    | `src/core/read.ts` + provider adapter + `src/commands/read.ts`          | Preserve URL → content semantics                                                                                                                                  |
-| Extend CLI           | `src/commands/` + `src/cli.ts`                                          | Add subcommands with `citty`; keep text and JSON output stable                                                                                                    |
-| Extend agent tools   | `src/ai.ts`, `packages/{pi,omp}/extensions/web.ts`, `src/mcp.ts`        | Static descriptions advertise built in names; execution validates strings against the live registry capability functions                                          |
-| Change TUI rendering | `src/tui.ts` + both extension adapters                                  | Keep collapsed rows compact, expanded previews bounded, and every interpolated value safe for terminals                                                           |
-| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                                    | The low level SDK `Server` uses TypeBox schemas; every error branch goes through `errorResult`; executor guards check boundaries again when hosts skip validation |
-| Add tests            | `test/`                                                                 | Mirror public behavior, not implementation details                                                                                                                |
-| Change build outputs | `build.config.ts` + `package.json`                                      | Keep the obuild inputs and `exports` aligned                                                                                                                      |
-| Change CI flow       | `.github/workflows/test.yml`                                            | Order stays `check -> build -> test`                                                                                                                              |
-| Change release flow  | `.github/workflows/publish.yml`                                         | Publish through npm OIDC only from `v*` tags                                                                                                                      |
+| Task                 | Location                                                         | Notes                                                                                                                                                    |
+| -------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add public exports   | `src/index.ts`                                                   | Keep the public surface small and explicit                                                                                                               |
+| Add/extend providers | `src/providers/`                                                 | Keep provider response shapes inside the adapter                                                                                                         |
+| Add search behavior  | `src/core/all.ts` + provider adapter                             | Preserve query → results semantics                                                                                                                       |
+| Add image search     | `src/core/image.ts` + provider adapter + `src/tools.ts`          | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                      |
+| Add read behavior    | `src/core/read.ts` + provider adapter + `src/tools.ts`           | Preserve URL → content semantics                                                                                                                         |
+| Extend CLI           | `src/tools.ts` (`cli` hints, `webCommands()`) + `src/cli-run.ts` | Commands come from the tool definitions through `runCli`; a CLI-only shape is a definition in `webCommands()` over the same executor                     |
+| Extend agent tools   | `src/tools.ts`, `src/tool-schemas.ts`, `src/tool-operations.ts`  | One definition reaches MCP, Pi, OMP, the AI SDK and the CLI; static descriptions advertise built in names, execution validates against the live registry |
+| Change TUI rendering | `src/tui.ts` + both extension adapters                           | Keep collapsed rows compact, expanded previews bounded, and every interpolated value safe for terminals                                                  |
+| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                             | `@agntn/tools/mcp` validates, sanitizes errors and sends `details` as `structuredContent`; executor guards cover a direct `definition.execute` call      |
+| Add tests            | `test/`                                                          | Mirror public behavior, not implementation details                                                                                                       |
+| Change build outputs | `build.config.ts` + `package.json`                               | Keep the obuild inputs and `exports` aligned                                                                                                             |
+| Change CI flow       | `.github/workflows/test.yml`                                     | Order stays `check -> build -> test`                                                                                                                     |
+| Change release flow  | `.github/workflows/publish.yml`                                  | Publish through npm OIDC only from `v*` tags                                                                                                             |
 
 ## CONVENTIONS
 
 - ESM-only package, no CommonJS output
-- Vite+ owns checks and tests; obuild emits the library from `build.config.ts` (`vp run build`), with typebox bundled through its `rolldownConfig` hook and the third party notices in `dist/THIRD-PARTY-LICENSES.md`. Chunks land in `dist/_chunks/` under names obuild picks, so never look one up by name
+- Vite+ owns checks and tests; obuild emits the library from `build.config.ts` (`vp run build`). Chunks land in `dist/_chunks/` under names obuild picks, so never look one up by name
 - Public API stays export-barrel-driven from `src/index.ts`
 - CLI should be thin and call reusable functions from `src/index.ts`
 - Prefer normalized models over provider-shaped raw objects
@@ -64,7 +69,8 @@ test/unit/                # Public behavior and provider contract tests
 - Keep provider names and capability flags as literal unions where possible
 - Built in capability lists are the source for static descriptions; `searchProviders()`, `searchImageProviders()`, and `readProviders()` are the live execution contract
 - Providers load on the first `create()` for their name, so `create()` and its capability variants return a `Promise<Provider>`: `src/providers/index.ts` is a manifest of metadata plus a literal `import()` per provider, the registry seeds its table from it on first use, and every listing or capability lookup answers from the manifest without loading a module. `package.json` says `sideEffects: false`, and `test/bundle.test.ts` packs the current source into a temporary directory, never the checkout's `dist/`, and proves a consumer bundle keeps the registry and drops the adapters it never asks for
-- Command modules keep the registry, the providers and the MCP server behind `import()` inside `run()`; citty resolves every subcommand to print `web --help`, so a static import there loads on the usage path
+- The extensions load `@agntn/web/tools` in the package; `packages/tsconfig.json` extends `tsconfig.extensions.json`, whose `paths` map it to `src/tools.ts`, so `vp check` types it before any `dist/` exists
+- `src/tools.ts` and `src/tool-schemas.ts` import only the core modules that import nothing themselves (`limits.ts`, `providers.ts`, `types.ts`); executors load on the first call, so `web --help` and a Pi or OMP registration load no executor, provider, registry or HTTP client
 - The local MCP server runs `src/`: inside a checkout, the built `dist/cli.mjs` loads the `mcp` command from `src/commands/mcp.ts`, like the Pi and OMP extensions, so a change needs a server restart, not a build. The npm package ships no `src/commands` and runs the bundle, and so does a copy under `node_modules`, where Node strips no types. `WEB_DIST=1` forces the bundle. A change to `src/cli.ts` itself still needs a build for the live server; `test/bin.test.ts` packs the current source and runs `mcp` in each of these layouts, so it needs no `dist/` and never trusts an old one
 - Default to minimal dependencies; browser rendering/crawling belongs in a future read package unless explicitly decided otherwise
 
@@ -75,9 +81,9 @@ Seven files must be updated. Missing any causes a bug (test failure, missing fro
 1. `src/providers/<name>.ts` - export the provider class; support search, read, or both. Nothing runs at module scope: no `register()`, no static capability metadata
 2. `src/providers/index.ts` - add a manifest entry with the capabilities the class implements (`search`, `searchImage`, `read`, `pagination`, `availability`) and `load: () => import("./<name>.ts").then((m) => m.<Name>Provider)`; a cap or category list the adapter also clamps to lives in `src/core/providers.ts` so the two never drift
 3. `src/core/providers.ts` - add to `builtinProviders` and `providerApiKeyEnvVars` (null when self-hosted like searxng), and to `providerDetectionOrder` when automatic selection may pick it
-4. `src/core/read.ts` - add to `readProviderNames` if provider supports read/scrape; `src/core/image.ts` - `imageSearchProviderNames` for reverse image search
+4. `src/core/providers.ts` - add to `readProviderNames` if provider supports read/scrape, `imageSearchProviderNames` for reverse image search
 5. `build.config.ts` - nothing: it reads `src/providers/` and makes every file there a bundle input, so `dist/providers/<name>.mjs` and the `./providers/*` export exist as soon as the file does
-6. `packages/pi/extensions/web.ts` and `packages/omp/extensions/web.ts` - update provider descriptions and tool schemas; execution validates against live registries
+6. `src/tools.ts` - name the provider in the `web_search` or `web_read` description; the schema hints list built in names from `src/core/providers.ts` on their own, and execution validates against live registries
 7. `test/unit/<name>.ts` + `test/index.test.ts` - add provider tests + update hardcoded expected list; `test/unit/providers-manifest.test.ts` fails when the entry and the class disagree, and `test/unit/lazy-loading.test.ts` mocks every provider module, so add the new one there; `test/unit/docs-counts.test.ts` fails until the provider counts in `README.md` and the docs prose it lists match the new total
 
 After: `vp check && vp test && vp run build`

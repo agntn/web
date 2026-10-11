@@ -1,5 +1,5 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { ToolInputError } from "@agntn/tools";
+import { Client, InMemoryTransport } from "@modelcontextprotocol/client";
 import { type TSchema } from "typebox";
 import { Value } from "typebox/value";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -30,7 +30,8 @@ vi.mock("../src/core/client.ts", () => ({
   })),
 }));
 
-import { createMcpServer, executeImageSearch, executeRead, executeSearch } from "../src/mcp.ts";
+import { createMcpServer } from "../src/mcp.ts";
+import { webTools } from "../src/tools.ts";
 import { version } from "../src/version.ts";
 import {
   EmptyImageUrlError,
@@ -43,6 +44,27 @@ import {
 import { Provider } from "../src/core/provider.ts";
 import { register } from "../src/core/registry.ts";
 import type { ProviderConfig, SearchResult } from "../src/core/types.ts";
+
+const [searchDefinition, imageSearchDefinition, readDefinition] = webTools();
+
+type Args = Readonly<Record<string, unknown>>;
+type Signal = Readonly<AbortSignal> | undefined;
+
+/* Executors without the schema, as `definition.execute` runs; each answers `result`. */
+const executeSearch = async (args: Args, signal?: Signal) =>
+  dataOf((await searchDefinition.execute(args as never, signal ? { signal } : {})).details);
+const executeImageSearch = async (args: Args, signal?: Signal) =>
+  dataOf((await imageSearchDefinition.execute(args as never, signal ? { signal } : {})).details);
+const executeRead = async (args: Args, signal?: Signal) =>
+  dataOf((await readDefinition.execute(args as never, signal ? { signal } : {})).details);
+
+/**
+ * @param details - Details a web tool answered with.
+ * @returns {unknown} What sits under `result`.
+ */
+function dataOf(details: Readonly<{ result: unknown }>): unknown {
+  return details.result;
+}
 
 const openConnections: Array<{ close(): Promise<void> }> = [];
 const customProviderCleanups: Array<() => void> = [];
@@ -114,7 +136,6 @@ describe("web MCP server", () => {
 
     const pending = client.callTool(
       { name: "web_search", arguments: { query: "test", provider: providerName } },
-      undefined,
       { signal: controller.signal },
     );
     await started;
@@ -247,7 +268,7 @@ describe("web MCP server", () => {
     ).toBe(false);
   });
 
-  it("returns provider results as JSON text for web_search", async () => {
+  it("answers web_search with the model text and the results as structured data", async () => {
     vi.stubEnv("JINA_API_KEY", "test-key");
     mockGetJSON.mockReset();
     mockGetJSON.mockResolvedValue({
@@ -270,9 +291,9 @@ describe("web MCP server", () => {
     });
 
     expect(response.isError).toBeUndefined();
-    const payload = JSON.parse(
-      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
-    ) as Readonly<Record<string, unknown>>;
+    const payload = (response.structuredContent as { result: unknown }).result as Readonly<
+      Record<string, unknown>
+    >;
     expect(payload).toEqual({
       provider: "jina",
       ignoredFilters: ["startPublishedDate"],
@@ -284,7 +305,13 @@ describe("web MCP server", () => {
     });
     expect(response.structuredContent).toEqual({ result: payload });
     expect((response.content as Array<{ type: string; text: string }>)[0]?.text).toBe(
-      JSON.stringify(payload),
+      [
+        '[provider=jina] 1 result(s) for "test query" [ignored=startPublishedDate]',
+        "",
+        "1. Test Result",
+        "   https://example.com",
+        "   Snippet: A test description",
+      ].join("\n"),
     );
   });
 
@@ -433,7 +460,7 @@ describe("web MCP server", () => {
     });
   });
 
-  it("returns detailed search metadata as JSON text", async () => {
+  it("returns detailed search metadata as structured data", async () => {
     vi.stubEnv("FIRECRAWL_API_KEY", "test-key");
     mockPostJSON.mockReset();
     mockPostJSON.mockResolvedValue({
@@ -451,9 +478,9 @@ describe("web MCP server", () => {
     });
 
     expect(response.isError).toBeUndefined();
-    const payload = JSON.parse(
-      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
-    ) as Readonly<Record<string, unknown>>;
+    const payload = (response.structuredContent as { result: unknown }).result as Readonly<
+      Record<string, unknown>
+    >;
     expect(payload).toMatchObject({
       provider: "firecrawl",
       metadata: { id: "mcp-request", warning: "Partial coverage", creditsUsed: 2 },
@@ -538,7 +565,8 @@ describe("web MCP server", () => {
     expect(response.structuredContent).not.toHaveProperty("result.results.0.evidence.1");
     const text = (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "";
     expect(text.match(/Exa result/gu)).toHaveLength(1);
-    expect(JSON.parse(text)).toEqual((response.structuredContent as { result: unknown }).result);
+    expect(text).toContain("Providers: exa, brave");
+    expect(text.match(/Brave result/gu)).toHaveLength(1);
   });
 
   it("returns provider provenance in structured fanout batches", async () => {
@@ -575,7 +603,7 @@ describe("web MCP server", () => {
     expect(response.structuredContent).not.toHaveProperty("result.0.results.0.evidence");
   });
 
-  it("returns reverse image matches as JSON text", async () => {
+  it("returns reverse image matches as structured data", async () => {
     vi.stubEnv("SERPAPI_API_KEY", "test-key");
     mockGetJSON.mockReset();
     mockGetJSON.mockResolvedValue({
@@ -597,9 +625,8 @@ describe("web MCP server", () => {
     });
 
     expect(response.isError).toBeUndefined();
-    const payload = JSON.parse(
-      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
-    ) as readonly unknown[];
+    const payload = (response.structuredContent as { result: unknown })
+      .result as readonly unknown[];
     expect(payload).toEqual([
       expect.objectContaining({
         pageUrl: "https://example.com/page",
@@ -628,9 +655,8 @@ describe("web MCP server", () => {
     });
 
     expect(response.isError).toBeUndefined();
-    const payload = JSON.parse(
-      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
-    ) as readonly unknown[];
+    const payload = (response.structuredContent as { result: unknown })
+      .result as readonly unknown[];
     expect(payload).toEqual([
       {
         query: "first query",
@@ -668,6 +694,27 @@ describe("web MCP server", () => {
         failures: [],
       },
     });
+  });
+
+  it("keeps terminal escapes from a page out of the text and in the data", async () => {
+    const hostile = "Za\u001B[31mżółć\r\n\tline\u202E two\u2028three 👩\u200D💻 می\u200Cروم";
+    mockGetJSON.mockReset();
+    mockGetJSON.mockResolvedValue({
+      code: 200,
+      status: 20000,
+      data: { url: "https://example.com", content: hostile },
+    });
+    const client = await connectTestClient();
+
+    const response = await client.callTool({
+      name: "web_read",
+      arguments: { url: "https://example.com", provider: "jina" },
+    });
+
+    const text = (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "";
+    expect(text).toContain("Zażółć\n\tline two three 👩\u200D💻 می\u200Cروم");
+    for (const unsafe of ["\u001B", "\u202E", "\u2028"]) expect(text).not.toContain(unsafe);
+    expect(response.structuredContent).toMatchObject({ result: { result: { content: hostile } } });
   });
 
   it("reports a Jina-only maxTokens left out of the fallback read", async () => {
@@ -803,9 +850,8 @@ describe("web MCP server", () => {
     });
 
     expect(response.isError).toBeUndefined();
-    const payload = JSON.parse(
-      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
-    ) as readonly unknown[];
+    const payload = (response.structuredContent as { result: unknown })
+      .result as readonly unknown[];
     expect(payload).toEqual([
       {
         url: "https://example.com/one",
@@ -827,9 +873,7 @@ describe("web MCP server", () => {
     const response = await client.callTool({ name: "web_providers", arguments: {} });
 
     expect(response.isError).toBeUndefined();
-    const payload = JSON.parse(
-      (response.content as Array<{ type: string; text: string }>)[0]?.text ?? "",
-    ) as {
+    const payload = (response.structuredContent as { result: unknown }).result as {
       readonly runtime: {
         readonly version: string;
         readonly buildId: string;
@@ -1061,7 +1105,7 @@ describe("web MCP executors", () => {
     });
     await expect(
       executeSearch({ query: "test", provider: "exa", summary: "true" }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
   });
 
   it("forwards MCP cancellation through every executor", async () => {
@@ -1190,7 +1234,7 @@ describe("web MCP executors", () => {
   it("rejects a time budget outside the schema when a host skips validation", async () => {
     await expect(
       executeSearch({ query: "test", provider: "exa", timeoutSeconds: 0 }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
     await expect(
       executeRead({ url: "https://example.com", provider: "jina", timeoutSeconds: 3_601 }),
     ).rejects.toBeInstanceOf(RangeError);
@@ -1207,10 +1251,10 @@ describe("web MCP executors", () => {
     await expect(executeImageSearch({ url: "" })).rejects.toBeInstanceOf(EmptyImageUrlError);
     await expect(
       executeImageSearch({ url: "https://example.com/input.jpg", provider: "brave" }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
     await expect(
       executeImageSearch({ url: "https://example.com/input.jpg", maxResults: 21 }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
     expect(mockGetJSON).not.toHaveBeenCalled();
   });
 
@@ -1252,7 +1296,7 @@ describe("web MCP executors", () => {
     vi.stubEnv("JINA_API_KEY", "test-key");
     await expect(
       executeSearch({ query: "test", provider: "jina", includeDomains: "github.com" }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
 
     await executeSearch({
       query: "test",
@@ -1280,26 +1324,26 @@ describe("web MCP executors", () => {
     });
     await expect(
       executeSearch({ query: "test", provider: "firecrawl", sources: "news" }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
   });
 
   it("rejects fractional maxTokens and a non-boolean noCache at the boundary", async () => {
     await expect(
       executeRead({ url: "https://example.com", maxTokens: 10.5 }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
     await expect(
       executeRead({ url: "https://example.com", maxChars: 200_001 }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
     await expect(
       executeRead({ url: "https://example.com", noCache: "yes" }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
   });
 
   it("rejects malformed maxResults instead of silently changing the request", async () => {
     for (const maxResults of ["5", Number.NaN, 10.9, 21]) {
       await expect(
         executeSearch({ query: "test", provider: "jina", maxResults }),
-      ).rejects.toBeInstanceOf(TypeError);
+      ).rejects.toBeInstanceOf(ToolInputError);
     }
   });
 
@@ -1315,7 +1359,7 @@ describe("web MCP executors", () => {
     ).resolves.toMatchObject({ requestedProvider: "auto", provider: "jina" });
     await expect(
       executeRead({ url: "https://example.com", provider: "nope" }),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toBeInstanceOf(ToolInputError);
   });
 
   it("takes schema-valid empty optional values as unset", async () => {

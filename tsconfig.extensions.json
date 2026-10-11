@@ -3,7 +3,8 @@
   "compilerOptions": {
     "rootDir": ".",
     "paths": {
-      "@agntn/web": ["./src/index.ts"]
+      "@agntn/web": ["./src/index.ts"],
+      "@agntn/web/tools": ["./src/tools.ts"]
     },
     "outDir": "./dist-extensions",
     "noEmit": true,

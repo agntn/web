@@ -31,10 +31,10 @@ Docs and a live explorer: [web.agntn.dev](https://web.agntn.dev).
 pnpm add @agntn/web
 ```
 
-Node.js 26 or newer. The AI SDK tools on `@agntn/web/ai` want `ai` and `zod` next to them, the main entry never touches either:
+Node.js 26 or newer. The AI SDK tools on `@agntn/web/ai` want `ai` 7 next to them. The main entry never touches it:
 
 ```bash
-pnpm add ai zod
+pnpm add ai
 ```
 
 ## 🚀 First call
@@ -85,7 +85,7 @@ A handful more, keys permitting:
 web search "typescript 7" "node.js 26" --provider all --json
 web search "rust 2027 edition" --provider brave --max-results 3
 web search "typescript 7" --provider exa --summary --full-text
-web search "typescript 7" --include-domains github.com --start-published-date 2026-01-01
+web search "typescript 7" --include-domains '["github.com"]' --start-published-date 2026-01-01
 web read https://example.com --format markdown --max-chars 20000 --json
 web search-image https://example.com/image.jpg --max-results 5
 web providers
@@ -102,7 +102,7 @@ web providers
 | `web providers`          | Who is configured and what each one can do    | `web providers`                                  |
 | `web mcp`                | The MCP server on stdio                       | `web mcp`                                        |
 
-`--provider` and `--max-results` work on every search. Domain, source, category and date filters go to the providers that understand them and get reported as ignored on the ones that don't. `--json` gives you the same envelope the library and the agent tools return. The full flag list is in the [CLI guide](https://web.agntn.dev/guide/cli).
+`--provider` and `--max-results` work on every search. Domain, source, category and date filters go to the providers that understand them and get reported as ignored on the ones that don't. Lists are JSON arrays. Without `--json` you read what a model reads, and `--json` prints the data under `result`, the same object MCP sends. The full flag list is in the [CLI guide](https://web.agntn.dev/guide/cli).
 
 ## 🧠 Library
 
@@ -161,7 +161,7 @@ omp install @agntn/web
 }
 ```
 
-Four tools, `web_search`, `web_image_search`, `web_read` and `web_providers`, the same four on the AI SDK (`@agntn/web/ai`), MCP, Pi and OMP. Reads stop at 20 000 characters unless the model asks for more, and the page's link list and the favicon URLs on search results stay out unless it asks for those too, so nobody stuffs a whole site into a context window by accident. Pi also gets `/web` and `/web-providers`. Schemas and envelopes for each host: [Agents guide](https://web.agntn.dev/guide/agents).
+Four tools, `web_search`, `web_image_search`, `web_read` and `web_providers`, one definition each, the same four on the AI SDK (`@agntn/web/ai`), MCP, Pi, OMP and the CLI. Reads stop at 20 000 characters unless the model asks for more, and the page's link list and the favicon URLs on search results stay out unless it asks for those too, so nobody stuffs a whole site into a context window by accident. Pi also gets `/web` and `/web-providers`. Schemas and envelopes for each host: [Agents guide](https://web.agntn.dev/guide/agents).
 
 ## 🚫 What this does not do
 

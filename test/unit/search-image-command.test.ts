@@ -1,40 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { MockInstance } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-const { mockError, mockInfo, mockLog, mockSearchByImage } = vi.hoisted(() => ({
-  mockError: vi.fn(),
-  mockInfo: vi.fn(),
-  mockLog: vi.fn(),
-  mockSearchByImage: vi.fn(),
-}));
+const { mockSearchByImage } = vi.hoisted(() => ({ mockSearchByImage: vi.fn() }));
 
-vi.mock("consola", () => ({
-  consola: {
-    log: mockLog,
-    info: mockInfo,
-    error: mockError,
-  },
-}));
-
-vi.mock("../../src/core/image.ts", () => ({
-  imageSearchProviderNames: ["serpapi"],
+vi.mock("../../src/core/image.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../src/core/image.ts")>()),
   searchByImage: mockSearchByImage,
 }));
 
-import searchImageCommand from "../../src/commands/search-image.ts";
 import { InvalidImageUrlError } from "../../src/core/errors.ts";
-
-type CommandRunInput = Parameters<NonNullable<typeof searchImageCommand.run>>[0];
+import { runWeb } from "../fixtures/cli.ts";
 
 describe("search-image command", () => {
-  let exitSpy: MockInstance<typeof process.exit>;
-  let stdoutSpy: MockInstance<typeof process.stdout.write>;
-
   beforeEach(() => {
     mockSearchByImage.mockReset();
-    mockError.mockReset();
-    mockInfo.mockReset();
-    mockLog.mockReset();
     mockSearchByImage.mockResolvedValue([
       {
         pageUrl: "https://example.com/page",
@@ -43,34 +21,33 @@ describe("search-image command", () => {
         provider: "serpapi",
       },
     ]);
-    exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
-      throw new Error("__EXIT__");
-    }) as never);
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-  });
-
-  afterEach(() => {
-    exitSpy.mockRestore();
-    stdoutSpy.mockRestore();
   });
 
   it("passes the URL and options to reverse image search", async () => {
-    await runCommand({
-      url: "https://example.com/input.jpg",
-      provider: "serpapi",
-      "max-results": "5",
-      json: true,
-    });
+    const { stdout } = await runWeb(
+      "search-image",
+      "https://example.com/input.jpg",
+      "--provider",
+      "serpapi",
+      "--max-results",
+      "5",
+      "--json",
+    );
 
     expect(mockSearchByImage).toHaveBeenCalledWith("https://example.com/input.jpg", {
       provider: "serpapi",
       maxResults: 5,
     });
-    expect(stdoutSpy).toHaveBeenCalledWith(expect.stringContaining('"pageUrl"'));
+    expect(stdout).toContain('"pageUrl"');
+  });
+
+  it("answers to image-search too", async () => {
+    await runWeb("image-search", "https://example.com/input.jpg");
+
+    expect(mockSearchByImage).toHaveBeenCalledWith("https://example.com/input.jpg", {});
   });
 
   it("removes terminal controls from human-readable matches", async () => {
-    vi.stubEnv("FORCE_COLOR", "1");
     const escape = String.fromCodePoint(0x1b);
     const bell = String.fromCodePoint(0x07);
     const controlSequence = String.fromCodePoint(0x9b);
@@ -85,60 +62,39 @@ describe("search-image command", () => {
       },
     ]);
 
-    await runCommand({
-      url: "https://example.com/input.jpg",
-      "max-results": "5",
-      json: false,
-    });
+    const { stdout } = await runWeb("search-image", "https://example.com/input.jpg");
 
-    expect(mockLog.mock.calls.map(([message]) => String(message))).toEqual([
-      `${escape}[1m${escape}[36mMatch link${escape}[39m${escape}[22m`,
-      "  https://example.com/page forged",
-      `  ${escape}[90mhttps://example.com/image.jpg forged${escape}[39m`,
-      "",
-    ]);
+    expect(stdout).toBe(
+      [
+        "[provider=serpapi] 1 image match(es) for https://example.com/input.jpg",
+        "",
+        "1. Match link",
+        "   https://example.com/page forged",
+        "   https://example.com/image.jpg forged",
+        "",
+      ].join("\n"),
+    );
   });
 
   it("reports invalid image URLs without a stack trace", async () => {
     mockSearchByImage.mockRejectedValueOnce(new InvalidImageUrlError());
 
-    await expect(
-      runCommand({
-        url: "file:///tmp/image.jpg",
-        "max-results": "5",
-        json: false,
-      }),
-    ).rejects.toThrow("__EXIT__");
+    const { stderr, code } = await runWeb("search-image", "file:///tmp/image.jpg");
 
-    expect(mockError).toHaveBeenCalledWith("Image URL must be an absolute HTTP or HTTPS URL");
+    expect(stderr).toBe("Image URL must be an absolute HTTP or HTTPS URL\n");
+    expect(code).toBe(1);
   });
 
   it("rejects an invalid result limit before provider calls", async () => {
-    await expect(
-      runCommand({
-        url: "https://example.com/input.jpg",
-        "max-results": "0",
-        json: false,
-      }),
-    ).rejects.toThrow("__EXIT__");
+    const { stderr, code } = await runWeb(
+      "search-image",
+      "https://example.com/input.jpg",
+      "--max-results",
+      "0",
+    );
 
     expect(mockSearchByImage).not.toHaveBeenCalled();
-    expect(mockError).toHaveBeenCalledWith(
-      "Invalid --max-results value. Expected a positive integer.",
-    );
+    expect(stderr).toBe("Invalid arguments at --max-results: must be >= 1\n");
+    expect(code).toBe(1);
   });
 });
-
-function runCommand(args: {
-  readonly url: string;
-  readonly provider?: string;
-  readonly "max-results": string;
-  readonly json: boolean;
-}): Promise<unknown> {
-  const input = {
-    args: { _: [], ...args },
-    rawArgs: [],
-    cmd: searchImageCommand,
-  } as CommandRunInput;
-  return Promise.resolve(searchImageCommand.run!(input) as unknown);
-}

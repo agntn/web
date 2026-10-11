@@ -1,10 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { MockInstance } from "vite-plus/test";
-import { HTTPError, SearchNotSupportedError, UnknownProviderError } from "../../src/core/errors.ts";
-
-const mockLog = vi.fn<(message: unknown) => void>();
-const mockInfo = vi.fn<(message: unknown) => void>();
-const mockError = vi.fn<(message: unknown) => void>();
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { HTTPError } from "../../src/core/errors.ts";
+import { runWeb } from "../fixtures/cli.ts";
 
 const mockSearch = vi.fn();
 const mockSearchDetailed = vi.fn();
@@ -17,20 +13,13 @@ const mockCreate = vi.fn((name: string, config: Readonly<Record<string, unknown>
 const mockDetectAvailableProviders = vi.fn(() => ["exa", "brave"]);
 const mockDetectAvailableProvidersAsync = vi.fn(async () => ["exa", "brave"]);
 
-vi.mock("consola", () => ({
-  consola: {
-    log: (message: unknown) => mockLog(message),
-    info: (message: unknown) => mockInfo(message),
-    error: (message: unknown) => mockError(message),
-  },
-}));
-
 vi.mock("../../src/core/registry.ts", () => ({
   createSearchProvider: (name: string, config: Readonly<Record<string, unknown>> = {}) =>
     mockCreate(name, config),
   getSearchFilterCapabilities: vi.fn(() => undefined),
   has: vi.fn(() => true),
-  providers: vi.fn(() => ["brave", "exa"]),
+  providers: vi.fn(() => ["brave", "exa", "firecrawl"]),
+  searchProviders: vi.fn(() => ["brave", "exa", "firecrawl"]),
 }));
 
 vi.mock("../../src/core/resolve.ts", () => ({
@@ -41,52 +30,17 @@ vi.mock("../../src/core/resolve.ts", () => ({
 
 vi.mock("../../src/providers/index.ts", () => ({}));
 
-import searchCommand from "../../src/commands/search.ts";
-
-type SearchRunInput = Parameters<NonNullable<typeof searchCommand.run>>[0];
-type SearchRunArgs = {
-  readonly _: readonly string[];
-  readonly query: string;
-  readonly provider?: string;
-  readonly "max-results": string;
-  readonly highlights: boolean;
-  readonly summary: boolean;
-  readonly "full-text": boolean;
-  readonly json: boolean;
-  [key: string]: string | number | boolean | readonly string[] | undefined;
-};
-
-const defaultArgs: SearchRunArgs = {
-  _: [],
-  query: "test query",
-  "max-results": "10",
-  highlights: true,
-  summary: false,
-  "full-text": false,
-  json: false,
-};
-
-function makeArgs(overrides: Readonly<Partial<SearchRunArgs>> = {}): SearchRunArgs {
-  return { ...defaultArgs, ...overrides };
-}
-
-function runSearch(overrides: Readonly<Partial<SearchRunArgs>> = {}) {
-  const context = {
-    args: makeArgs(overrides),
-    rawArgs: [],
-    cmd: searchCommand,
-  } as unknown as SearchRunInput;
-  return Promise.resolve(searchCommand.run!(context) as unknown);
+/**
+ * The details `web search --json` printed.
+ * @param stdout - Everything the command wrote to stdout.
+ * @returns {unknown} The data under `result`.
+ */
+function jsonResult(stdout: string): unknown {
+  return (JSON.parse(stdout) as { readonly result: unknown }).result;
 }
 
 describe("search command", () => {
-  let exitSpy: MockInstance<typeof process.exit>;
-  let stdoutSpy: MockInstance<typeof process.stdout.write> | undefined;
-
   beforeEach(() => {
-    mockLog.mockReset();
-    mockInfo.mockReset();
-    mockError.mockReset();
     mockSearch.mockReset();
     mockSearchDetailed.mockReset();
     mockCreate.mockClear();
@@ -97,28 +51,31 @@ describe("search command", () => {
       results: [],
       metadata: { id: "job-1", creditsUsed: 1 },
     });
-    exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
-      throw new Error("__EXIT__");
-    }) as never);
   });
 
-  afterEach(() => {
-    exitSpy.mockRestore();
-    stdoutSpy?.mockRestore();
-    stdoutSpy = undefined;
-  });
+  it("exposes an opaque continuation argument", async () => {
+    const { stdout } = await runWeb("search", "--help");
 
-  it("exposes an opaque continuation argument", () => {
-    expect(searchCommand.args).toMatchObject({ continuation: { type: "string" } });
+    expect(stdout).toContain("--continuation=<continuation>");
   });
 
   it("selects providers automatically when the provider argument is blank", async () => {
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-
-    await runSearch({ provider: "   " });
+    await runWeb("search", "test query", "--provider", "   ");
 
     expect(mockDetectAvailableProvidersAsync).toHaveBeenCalled();
     expect(mockCreate).toHaveBeenCalledWith("exa", expect.anything());
+  });
+
+  it("searches when the first word names no command", async () => {
+    await runWeb("test query", "--provider", "exa");
+
+    expect(mockSearch).toHaveBeenCalledWith("test query", expect.anything());
+  });
+
+  it("searches when the line opens with a search flag", async () => {
+    await runWeb("--provider", "exa", "test query");
+
+    expect(mockSearch).toHaveBeenCalledWith("test query", expect.anything());
   });
 
   it("falls through automatic providers after HTTP 402", async () => {
@@ -126,44 +83,36 @@ describe("search command", () => {
     mockSearch
       .mockRejectedValueOnce(new HTTPError(402, "https://api.exa.ai/search", "Payment required"))
       .mockResolvedValueOnce(results);
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-    await runSearch({ provider: undefined, json: true });
+    const { stdout } = await runWeb("search", "test query", "--json");
 
     expect(mockCreate.mock.calls.map(([name]) => name)).toEqual(["exa", "brave"]);
-    expect(stdoutSpy).toHaveBeenCalledWith(
-      `${JSON.stringify(
-        {
-          provider: "brave",
-          ignoredFilters: [],
-          undeclaredFilters: [],
-          results,
-          pagination: { status: "unsupported" },
-          attempts: ["exa", "brave"],
-          failures: [
-            {
-              provider: "exa",
-              error: "HTTP 402: https://api.exa.ai/search: Payment required",
-            },
-          ],
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    expect(jsonResult(stdout)).toEqual({
+      provider: "brave",
+      ignoredFilters: [],
+      undeclaredFilters: [],
+      results,
+      pagination: { status: "unsupported" },
+      attempts: ["exa", "brave"],
+      failures: [
+        { provider: "exa", error: "HTTP 402: https://api.exa.ai/search: Payment required" },
+      ],
+    });
   });
 
   it("keeps HTTP 402 visible for an explicit provider", async () => {
-    const failure = new HTTPError(402, "https://api.exa.ai/search", "Payment required");
-    mockSearch.mockRejectedValueOnce(failure);
+    mockSearch.mockRejectedValueOnce(
+      new HTTPError(402, "https://api.exa.ai/search", "Payment required"),
+    );
 
-    await expect(runSearch({ provider: "exa" })).rejects.toBe(failure);
+    const { stderr, code } = await runWeb("search", "test query", "--provider", "exa");
 
     expect(mockCreate.mock.calls.map(([name]) => name)).toEqual(["exa"]);
+    expect(stderr).toBe("HTTP 402: https://api.exa.ai/search: Payment required\n");
+    expect(code).toBe(1);
   });
 
   it("removes terminal controls from human-readable results", async () => {
-    vi.stubEnv("FORCE_COLOR", "1");
     const escape = String.fromCodePoint(0x1b);
     const bell = String.fromCodePoint(0x07);
     const controlSequence = String.fromCodePoint(0x9b);
@@ -177,153 +126,127 @@ describe("search command", () => {
       },
     ]);
 
-    await runSearch({ provider: "exa" });
+    const { stdout } = await runWeb("search", "test query", "--provider", "exa");
 
-    expect(mockLog.mock.calls.map(([message]) => message)).toEqual([
-      `${escape}[1m${escape}[36mResult link${escape}[39m${escape}[22m`,
-      "  https://example.com/ spoofed",
-      `  ${escape}[90msafe text${escape}[39m`,
-      "",
-    ]);
+    expect(stdout).toBe(
+      [
+        '[provider=exa] 1 result(s) for "test query"',
+        "",
+        "1. Result link",
+        "   https://example.com/ spoofed",
+        "   Snippet: safe text",
+        "",
+      ].join("\n"),
+    );
   });
 
   it("prints detailed provider metadata in JSON output", async () => {
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
+    const { stdout } = await runWeb("search", "test query", "--provider", "firecrawl", "--json");
 
-    await runSearch({ provider: "firecrawl", json: true });
-
-    expect(mockSearchDetailed).toHaveBeenCalledWith("test query", {
-      maxResults: 10,
-      highlights: true,
-    });
+    expect(mockSearchDetailed).toHaveBeenCalledWith("test query", {});
     expect(mockSearch).not.toHaveBeenCalled();
-    expect(stdoutSpy).toHaveBeenCalledWith(
-      `${JSON.stringify(
-        {
-          provider: "firecrawl",
-          ignoredFilters: [],
-          undeclaredFilters: [],
-          results: [],
-          pagination: { status: "unsupported" },
-          metadata: { id: "job-1", creditsUsed: 1 },
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    expect(jsonResult(stdout)).toEqual({
+      provider: "firecrawl",
+      ignoredFilters: [],
+      undeclaredFilters: [],
+      results: [],
+      pagination: { status: "unsupported" },
+      metadata: { id: "job-1", creditsUsed: 1 },
+    });
   });
 
   it("prints the shared detailed envelope for providers without response metadata", async () => {
     const results = [{ url: "https://example.com", title: "Example", snippet: "Result" }];
     mockSearch.mockResolvedValueOnce(results);
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-    await runSearch({ provider: "exa", json: true });
+    const { stdout } = await runWeb("search", "test query", "--provider", "exa", "--json");
 
-    expect(mockSearch).toHaveBeenCalledWith("test query", {
-      maxResults: 10,
-      highlights: true,
-    });
+    expect(mockSearch).toHaveBeenCalledWith("test query", {});
     expect(mockSearchDetailed).not.toHaveBeenCalled();
-    expect(stdoutSpy).toHaveBeenCalledWith(
-      `${JSON.stringify(
-        {
-          provider: "exa",
-          ignoredFilters: [],
-          undeclaredFilters: [],
-          results,
-          pagination: { status: "unsupported" },
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    expect(jsonResult(stdout)).toEqual({
+      provider: "exa",
+      ignoredFilters: [],
+      undeclaredFilters: [],
+      results,
+      pagination: { status: "unsupported" },
+    });
   });
 
   it("fans out through every configured provider and keeps partial errors", async () => {
     const results = [{ url: "https://example.com", title: "Example", snippet: "Result" }];
     mockSearch.mockResolvedValueOnce(results).mockRejectedValueOnce(new Error("Brave unavailable"));
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-    await runSearch({ provider: "all", json: true });
+    const { stdout } = await runWeb("search", "test query", "--provider", "all", "--json");
 
     expect(mockCreate.mock.calls.map(([name]) => name)).toEqual(["exa", "brave"]);
-    expect(stdoutSpy).toHaveBeenCalledWith(
-      `${JSON.stringify(
-        {
-          results: [
-            {
-              ...results[0],
-              provider: "exa",
-              providers: ["exa"],
-              evidence: [{ ...results[0], provider: "exa" }],
-            },
-          ],
-          successfulProviders: ["exa"],
-          errors: [{ provider: "brave", error: "Brave unavailable" }],
-          filterReports: [],
-          providerPagination: [{ provider: "exa", pagination: { status: "unsupported" } }],
-        },
-        null,
-        2,
-      )}\n`,
-    );
+    expect(jsonResult(stdout)).toEqual({
+      results: [{ ...results[0], provider: "exa", providers: ["exa"] }],
+      successfulProviders: ["exa"],
+      errors: [{ provider: "brave", error: "Brave unavailable" }],
+      filterReports: [],
+      providerPagination: [{ provider: "exa", pagination: { status: "unsupported" } }],
+    });
   });
 
   it("runs extra positional queries as one ordered batch", async () => {
     mockSearch
       .mockResolvedValueOnce([{ url: "https://one.example", title: "One", snippet: "First" }])
       .mockResolvedValueOnce([{ url: "https://two.example", title: "Two", snippet: "Second" }]);
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
 
-    await runSearch({ _: ["first query", "second query"], provider: "exa", json: true });
+    const { stdout } = await runWeb(
+      "search",
+      "first query",
+      "second query",
+      "--provider",
+      "exa",
+      "--json",
+    );
 
     expect(mockSearch.mock.calls.map(([query]) => String(query))).toEqual([
       "first query",
       "second query",
     ]);
-    expect(stdoutSpy).toHaveBeenCalledWith(
-      `${JSON.stringify(
-        [
-          {
-            query: "first query",
-            provider: "exa",
-            results: [{ url: "https://one.example", title: "One", snippet: "First" }],
-            filterReports: [],
-            pagination: { status: "unsupported" },
-          },
-          {
-            query: "second query",
-            provider: "exa",
-            results: [{ url: "https://two.example", title: "Two", snippet: "Second" }],
-            filterReports: [],
-            pagination: { status: "unsupported" },
-          },
-        ],
-        null,
-        2,
-      )}\n`,
-    );
+    expect(jsonResult(stdout)).toEqual([
+      {
+        query: "first query",
+        provider: "exa",
+        results: [{ url: "https://one.example", title: "One", snippet: "First" }],
+        filterReports: [],
+        pagination: { status: "unsupported" },
+      },
+      {
+        query: "second query",
+        provider: "exa",
+        results: [{ url: "https://two.example", title: "Two", snippet: "Second" }],
+        filterReports: [],
+        pagination: { status: "unsupported" },
+      },
+    ]);
   });
 
-  it("parses search filters into the shared option shape", async () => {
-    stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation(() => true);
-
-    await runSearch({
-      provider: "firecrawl",
-      json: true,
-      "include-domains": "github.com, example.com",
-      "exclude-domains": "spam.example",
-      sources: "web,news",
-      categories: "research,developer",
-      category: "news",
-      "start-published-date": "2024-01-01",
-      "end-published-date": "2024-12-31",
-    });
+  it("passes search filters through in the shared option shape", async () => {
+    await runWeb(
+      "search",
+      "test query",
+      "--provider",
+      "firecrawl",
+      "--include-domains",
+      '["github.com", "example.com"]',
+      "--exclude-domains",
+      '["spam.example"]',
+      "--sources",
+      '["web", "news"]',
+      "--categories",
+      '["research", "developer"]',
+      "--category",
+      "news",
+      "--start-published-date",
+      "2024-01-01",
+      "--end-published-date",
+      "2024-12-31",
+    );
 
     expect(mockSearchDetailed).toHaveBeenCalledWith("test query", {
-      maxResults: 10,
-      highlights: true,
       includeDomains: ["github.com", "example.com"],
       excludeDomains: ["spam.example"],
       sources: ["web", "news"],
@@ -335,15 +258,20 @@ describe("search command", () => {
   });
 
   it("passes explicit content preferences to the provider", async () => {
-    await runSearch({
-      provider: "firecrawl",
-      highlights: false,
-      summary: true,
-      "full-text": true,
-    });
+    await runWeb(
+      "search",
+      "test query",
+      "--provider",
+      "firecrawl",
+      "--max-results",
+      "5",
+      "--no-highlights",
+      "--summary",
+      "--full-text",
+    );
 
     expect(mockSearchDetailed).toHaveBeenCalledWith("test query", {
-      maxResults: 10,
+      maxResults: 5,
       highlights: false,
       summary: true,
       fullText: true,
@@ -351,92 +279,58 @@ describe("search command", () => {
   });
 
   it("treats empty string provider as omitted", async () => {
-    await runSearch({ provider: "" });
+    await runWeb("search", "test query", "--provider", "");
 
     expect(mockCreate).toHaveBeenCalledWith("exa", {});
   });
 
-  it("exits with a helpful message for non-numeric --max-results", async () => {
-    await expect(runSearch({ "max-results": "abc" })).rejects.toThrow("__EXIT__");
+  it.each([
+    ["abc", "must be integer"],
+    ["0", "must be >= 1"],
+    ["-1", "must be >= 1"],
+  ])("refuses --max-results %s before searching", async (value, problem) => {
+    const { stderr, code } = await runWeb("search", "test query", "--max-results", value);
 
-    expect(mockError).toHaveBeenCalledWith(
-      "Invalid --max-results value. Expected a positive integer.",
-    );
+    expect(stderr).toBe(`Invalid arguments at --max-results: ${problem}\n`);
     expect(mockSearch).not.toHaveBeenCalled();
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(code).toBe(1);
   });
 
-  it("exits with a helpful message for zero --max-results", async () => {
-    await expect(runSearch({ "max-results": "0" })).rejects.toThrow("__EXIT__");
+  it("names the providers a search can use when the one asked for is unknown", async () => {
+    const { stderr, code } = await runWeb("search", "test query", "--provider", "reader");
 
-    expect(mockError).toHaveBeenCalledWith(
-      "Invalid --max-results value. Expected a positive integer.",
-    );
-    expect(mockSearch).not.toHaveBeenCalled();
-    expect(exitSpy).toHaveBeenCalledWith(1);
-  });
-
-  it("exits with a helpful message for negative --max-results", async () => {
-    await expect(runSearch({ "max-results": "-1" })).rejects.toThrow("__EXIT__");
-
-    expect(mockError).toHaveBeenCalledWith(
-      "Invalid --max-results value. Expected a positive integer.",
-    );
-    expect(mockSearch).not.toHaveBeenCalled();
-    expect(exitSpy).toHaveBeenCalledWith(1);
-  });
-
-  it("reports an unknown explicit provider by name", async () => {
-    mockCreate.mockImplementationOnce(() => {
-      throw new UnknownProviderError("brave");
-    });
-
-    await expect(runSearch({ provider: "brave" })).rejects.toThrow("__EXIT__");
-
-    expect(mockError).toHaveBeenCalledWith("Unknown provider: brave");
-    expect(exitSpy).toHaveBeenCalledWith(1);
-  });
-
-  it("reports providers without search capability", async () => {
-    mockCreate.mockImplementationOnce(() => {
-      throw new SearchNotSupportedError("reader");
-    });
-
-    await expect(runSearch({ provider: "reader" })).rejects.toThrow("__EXIT__");
-
-    expect(mockError).toHaveBeenCalledWith('Provider "reader" does not support web search.');
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(stderr).toBe("provider must be one of: auto, all, brave, exa, firecrawl\n");
+    expect(mockCreate).not.toHaveBeenCalled();
+    expect(code).toBe(1);
   });
 
   it("exits with error for empty query", async () => {
-    await expect(runSearch({ query: "" })).rejects.toThrow("__EXIT__");
+    const { stderr, code } = await runWeb("search", "");
 
-    expect(mockError).toHaveBeenCalledWith("Search query cannot be empty.");
+    expect(stderr).toBe(
+      "Invalid arguments at word 1 of <QUERIES...>: must not have fewer than 1 characters\n",
+    );
     expect(mockSearch).not.toHaveBeenCalled();
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(code).toBe(1);
   });
 
   it("exits with error for whitespace-only query", async () => {
-    await expect(runSearch({ query: "   " })).rejects.toThrow("__EXIT__");
+    const { stderr, code } = await runWeb("search", "   ");
 
-    expect(mockError).toHaveBeenCalledWith("Search query cannot be empty.");
+    expect(stderr).toBe("Search query cannot be empty\n");
     expect(mockSearch).not.toHaveBeenCalled();
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(code).toBe(1);
   });
 
-  it("shows a helpful message when no provider is configured", async () => {
+  it("says so in one line when no provider is configured", async () => {
     mockDetectAvailableProvidersAsync.mockResolvedValueOnce([]);
     mockDetectAvailableProviders.mockReturnValueOnce([]);
 
-    await expect(runSearch({ provider: undefined })).rejects.toThrow("__EXIT__");
+    const { stderr, code } = await runWeb("search", "test query");
 
-    expect(mockError).toHaveBeenCalledWith(
-      "No web search provider configured. Set an API key env var or register a provider.",
+    expect(stderr).toBe(
+      "No web search provider configured. Set an API key env var or register a provider.\n",
     );
-    expect(mockInfo).toHaveBeenCalledWith("Registered providers: brave, exa");
-    expect(mockInfo).toHaveBeenCalledWith(
-      "Set one provider API key env var or pass --provider explicitly.",
-    );
-    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(code).toBe(1);
   });
 });

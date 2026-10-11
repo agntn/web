@@ -103,7 +103,7 @@ const adaptersTitle = `${total[0]!.toUpperCase()}${total.slice(1)} adapters, one
     >
       <code class="web-code">searchTool</code> from the <code class="web-code">/ai</code> subpath is
       a Vercel AI SDK tool, <code class="web-code">web mcp</code> serves the same four over stdio.
-      The model gets the normalized answer with the provider diagnostics attached, not prose.
+      The model reads a short header and numbered results, your code gets the data underneath.
       <template #visual>
         <LandingToolCall :sample="current" />
       </template>

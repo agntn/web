@@ -39,6 +39,25 @@ import type { ProviderStatus } from "../../src/core/resolve.ts";
 import type { ProviderConfig, ReadResult, SearchResult } from "../../src/core/types.ts";
 import { runtimeInfo } from "../../src/version.ts";
 
+/**
+ * Runs a tool the way the AI SDK does and returns the data under `result`, which these tests read.
+ * @param tool - The AI SDK tool.
+ * @param input - Arguments as the model sent them.
+ * @param options - Call options, with the abort signal when a test needs one.
+ * @returns {Promise<unknown>} The data the tool answered with.
+ */
+async function run(
+  tool: Readonly<{ execute?: unknown }>,
+  input: Readonly<Record<string, unknown>>,
+  options: Readonly<Record<string, unknown>>,
+): Promise<unknown> {
+  const execute = tool.execute as (
+    input: unknown,
+    options: unknown,
+  ) => Promise<{ result: unknown }>;
+  return (await execute(input, options)).result;
+}
+
 const customProviderCleanups: Array<() => void> = [];
 afterEach(() => {
   vi.useRealTimers();
@@ -149,10 +168,10 @@ describe("searchTool", () => {
     const validate = asSchema(searchTool.inputSchema).validate;
     if (!validate) throw new TypeError("Search schema has no validator");
 
-    await expect(validate({ query: "test", maxResults: 5 })).resolves.toMatchObject({
+    expect(await validate({ query: "test", maxResults: 5 })).toMatchObject({
       success: true,
     });
-    await expect(validate({ query: "test", maxResults: 5.5 })).resolves.toMatchObject({
+    expect(await validate({ query: "test", maxResults: 5.5 })).toMatchObject({
       success: false,
     });
   });
@@ -161,12 +180,10 @@ describe("searchTool", () => {
     const validate = asSchema(searchTool.inputSchema).validate;
     if (!validate) throw new TypeError("Search schema has no validator");
 
-    await expect(validate({ query: "test", continuation: "opaque-token" })).resolves.toMatchObject({
+    expect(await validate({ query: "test", continuation: "opaque-token" })).toMatchObject({
       success: true,
     });
-    await expect(
-      validate({ query: "test", continuation: "x".repeat(4097) }),
-    ).resolves.toMatchObject({
+    expect(await validate({ query: "test", continuation: "x".repeat(4097) })).toMatchObject({
       success: false,
     });
   });
@@ -175,7 +192,8 @@ describe("searchTool", () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
-    const response = await searchTool.execute!(
+    const response = await run(
+      searchTool,
       { query: "test query", provider: "exa" },
       { toolCallId: "call-1", messages: [] },
     );
@@ -201,12 +219,13 @@ describe("searchTool", () => {
     const abortSignal = new AbortController().signal;
     const context = { toolCallId: "call-cancel", messages: [], abortSignal };
 
-    await searchTool.execute!({ query: "test query", provider: "exa" }, context);
-    await searchImageTool.execute!(
+    await run(searchTool, { query: "test query", provider: "exa" }, context);
+    await run(
+      searchImageTool,
       { url: "https://example.com/image.jpg", provider: "serpapi" },
       context,
     );
-    await readTool.execute!({ url: "https://example.com", provider: "jina" }, context);
+    await run(readTool, { url: "https://example.com", provider: "jina" }, context);
 
     expect(mockPostJSON.mock.calls[0]?.[3]).toBe(abortSignal);
     expect(mockGetJSON.mock.calls.map((call) => call[2])).toEqual([abortSignal, abortSignal]);
@@ -249,10 +268,11 @@ describe("searchTool", () => {
     const context = { toolCallId: "call-timeout", messages: [] };
 
     const search = expect(
-      searchTool.execute!({ query: "test", provider: providerName, timeoutSeconds: 1 }, context),
+      run(searchTool, { query: "test", provider: providerName, timeoutSeconds: 1 }, context),
     ).rejects.toMatchObject({ name: "TimeoutError" });
     const read = expect(
-      readTool.execute!(
+      run(
+        readTool,
         { url: "https://example.com", provider: providerName, timeoutSeconds: 1 },
         context,
       ),
@@ -300,30 +320,33 @@ describe("searchTool", () => {
     if (!searchValidate || !imageValidate || !readValidate) {
       throw new TypeError("Tool schema has no validator");
     }
-    await expect(
-      searchValidate({ query: "custom query", provider: providerName }),
-    ).resolves.toMatchObject({ success: true });
-    await expect(
-      imageValidate({ url: "https://example.com/input.jpg", provider: providerName }),
-    ).resolves.toMatchObject({ success: true });
-    await expect(
-      readValidate({ url: "https://example.com", provider: providerName }),
-    ).resolves.toMatchObject({ success: true });
+    expect(await searchValidate({ query: "custom query", provider: providerName })).toMatchObject({
+      success: true,
+    });
+    expect(
+      await imageValidate({ url: "https://example.com/input.jpg", provider: providerName }),
+    ).toMatchObject({ success: true });
+    expect(
+      await readValidate({ url: "https://example.com", provider: providerName }),
+    ).toMatchObject({ success: true });
 
     await expect(
-      searchTool.execute!(
+      run(
+        searchTool,
         { query: "custom query", provider: providerName },
         { toolCallId: "custom-search", messages: [] },
       ),
     ).resolves.toMatchObject({ provider: providerName, results: [{ title: "Custom" }] });
     await expect(
-      searchImageTool.execute!(
+      run(
+        searchImageTool,
         { url: "https://example.com/input.jpg", provider: providerName },
         { toolCallId: "custom-image", messages: [] },
       ),
     ).resolves.toMatchObject([{ provider: providerName, title: "Custom image" }]);
     await expect(
-      readTool.execute!(
+      run(
+        readTool,
         { url: "https://example.com", provider: providerName },
         { toolCallId: "custom-read", messages: [] },
       ),
@@ -334,7 +357,8 @@ describe("searchTool", () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
-    await searchTool.execute!(
+    await run(
+      searchTool,
       {
         query: "test query",
         provider: "exa",
@@ -353,11 +377,13 @@ describe("searchTool", () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
-    const lean = await searchTool.execute!(
+    const lean = await run(
+      searchTool,
       { query: "test query", provider: "exa" },
       { toolCallId: "call-favicon-default", messages: [] },
     );
-    const requested = await searchTool.execute!(
+    const requested = await run(
+      searchTool,
       { query: "test query", provider: "exa", favicon: true },
       { toolCallId: "call-favicon-requested", messages: [] },
     );
@@ -377,12 +403,14 @@ describe("searchTool", () => {
       .mockResolvedValueOnce({ ...braveResponse, query: { more_results_available: true } })
       .mockResolvedValueOnce({ ...braveResponse, query: { more_results_available: false } });
 
-    const first = (await searchTool.execute!(
+    const first = (await run(
+      searchTool,
       { query: "test query", provider: "brave", maxResults: 1 },
       { toolCallId: "call-page-one", messages: [] },
     )) as { readonly pagination: { readonly status: string; readonly continuation?: string } };
     if (first.pagination.continuation === undefined) throw new Error("missing continuation");
-    const second = await searchTool.execute!(
+    const second = await run(
+      searchTool,
       {
         query: "test query",
         provider: "brave",
@@ -403,7 +431,8 @@ describe("searchTool", () => {
       .mockResolvedValueOnce(exaResponse)
       .mockRejectedValueOnce(new Error("second query failed"));
 
-    const outcomes = await searchTool.execute!(
+    const outcomes = await run(
+      searchTool,
       { query: ["first query", "second query"], provider: "exa" },
       { toolCallId: "call-batch", messages: [] },
     );
@@ -429,7 +458,8 @@ describe("searchTool", () => {
       data: { web: [] },
     });
 
-    const outcomes = await searchTool.execute!(
+    const outcomes = await run(
+      searchTool,
       { query: ["first query", "second query"], provider: "firecrawl" },
       { toolCallId: "call-batch-metadata", messages: [] },
     );
@@ -467,7 +497,8 @@ describe("searchTool", () => {
       data: { web: [] },
     });
 
-    const outcomes = await searchTool.execute!(
+    const outcomes = await run(
+      searchTool,
       { query: ["fanout query"], provider: "all" },
       { toolCallId: "call-fanout-batch-metadata", messages: [] },
     );
@@ -500,7 +531,8 @@ describe("searchTool", () => {
     );
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const outcomes = await searchTool.execute!(
+    const outcomes = await run(
+      searchTool,
       { query: ["first query", "second query"], includeDomains: ["example.com"] },
       { toolCallId: "call-batch-fallback", messages: [] },
     );
@@ -555,11 +587,12 @@ describe("searchTool", () => {
     const queries = Array.from({ length: 11 }, (_, index) => `query ${index}`);
 
     await expect(
-      searchTool.execute!(
+      run(
+        searchTool,
         { query: queries, provider: "exa" },
         { toolCallId: "call-large-batch", messages: [] },
       ),
-    ).rejects.toThrow("Batch cannot contain more than 10 items");
+    ).rejects.toThrow("must not have more than 10 items");
     expect(mockPostJSON).not.toHaveBeenCalled();
   });
 
@@ -567,7 +600,8 @@ describe("searchTool", () => {
     process.env.BRAVE_API_KEY = "test-brave-key";
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const response = await searchTool.execute!(
+    const response = await run(
+      searchTool,
       { query: "test query" },
       { toolCallId: "call-2", messages: [] },
     );
@@ -587,7 +621,8 @@ describe("searchTool", () => {
     );
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const response = await searchTool.execute!(
+    const response = await run(
+      searchTool,
       { query: "test query" },
       { toolCallId: "call-fallback", messages: [] },
     );
@@ -606,7 +641,8 @@ describe("searchTool", () => {
     mockGetJSON.mockResolvedValue(braveResponse);
 
     await expect(
-      searchTool.execute!(
+      run(
+        searchTool,
         { query: "test query", provider: "exa" },
         { toolCallId: "call-explicit-402", messages: [] },
       ),
@@ -618,7 +654,8 @@ describe("searchTool", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
     mockGetJSON.mockResolvedValue(searxngResponse);
 
-    const response = await searchTool.execute!(
+    const response = await run(
+      searchTool,
       { query: "test query" },
       { toolCallId: "call-3", messages: [] },
     );
@@ -634,7 +671,8 @@ describe("searchTool", () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
-    await searchTool.execute!(
+    await run(
+      searchTool,
       { query: "test query", provider: "exa", maxResults: 5 },
       { toolCallId: "call-4", messages: [] },
     );
@@ -647,7 +685,8 @@ describe("searchTool", () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
-    await searchTool.execute!(
+    await run(
+      searchTool,
       { query: "test", provider: "exa", includeDomains: ["github.com"] },
       { toolCallId: "call-domains", messages: [] },
     );
@@ -660,7 +699,8 @@ describe("searchTool", () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
-    await searchTool.execute!(
+    await run(
+      searchTool,
       { query: "test", provider: "exa", excludeDomains: ["reddit.com"] },
       { toolCallId: "call-exclude", messages: [] },
     );
@@ -673,7 +713,8 @@ describe("searchTool", () => {
     process.env.FIRECRAWL_API_KEY = "test-firecrawl-key";
     mockPostJSON.mockResolvedValue({ success: true, data: { web: [] } });
 
-    await searchTool.execute!(
+    await run(
+      searchTool,
       {
         query: "test",
         provider: "firecrawl",
@@ -694,7 +735,8 @@ describe("searchTool", () => {
     process.env.EXA_API_KEY = "test-exa-key";
     mockPostJSON.mockResolvedValue(exaResponse);
 
-    await searchTool.execute!(
+    await run(
+      searchTool,
       {
         query: "test",
         provider: "exa",
@@ -713,7 +755,8 @@ describe("searchTool", () => {
     process.env.BRAVE_API_KEY = "test-brave-key";
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const response = await searchTool.execute!(
+    const response = await run(
+      searchTool,
       { query: "test", provider: "brave", includeDomains: ["example.com"] },
       { toolCallId: "call-ignored-domain", messages: [] },
     );
@@ -732,7 +775,8 @@ describe("searchTool", () => {
     mockPostJSON.mockResolvedValue(exaResponse);
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const response = await searchTool.execute!(
+    const response = await run(
+      searchTool,
       {
         query: "test",
         provider: "all",
@@ -767,11 +811,8 @@ describe("searchTool", () => {
 
   it("rejects empty query", async () => {
     await expect(
-      searchTool.execute!(
-        { query: "", provider: "exa" },
-        { toolCallId: "call-empty", messages: [] },
-      ),
-    ).rejects.toThrow(EmptyQueryError);
+      run(searchTool, { query: "", provider: "exa" }, { toolCallId: "call-empty", messages: [] }),
+    ).rejects.toThrow("Invalid arguments at /query: must not have fewer than 1 characters");
 
     expect(mockPostJSON).not.toHaveBeenCalled();
     expect(mockGetJSON).not.toHaveBeenCalled();
@@ -779,10 +820,7 @@ describe("searchTool", () => {
 
   it("rejects whitespace-only query", async () => {
     await expect(
-      searchTool.execute!(
-        { query: "   ", provider: "exa" },
-        { toolCallId: "call-ws", messages: [] },
-      ),
+      run(searchTool, { query: "   ", provider: "exa" }, { toolCallId: "call-ws", messages: [] }),
     ).rejects.toThrow(EmptyQueryError);
 
     expect(mockPostJSON).not.toHaveBeenCalled();
@@ -796,7 +834,8 @@ describe("searchTool", () => {
     mockPostJSON.mockResolvedValue(exaResponse);
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const response = await searchTool.execute!(
+    const response = await run(
+      searchTool,
       { query: "test", provider: "all" },
       { toolCallId: "call-5", messages: [] },
     );
@@ -817,7 +856,8 @@ describe("searchTool", () => {
     mockPostJSON.mockRejectedValue(new Error("Exa unavailable"));
     mockGetJSON.mockResolvedValue(braveResponse);
 
-    const response = await searchTool.execute!(
+    const response = await run(
+      searchTool,
       { query: "test", provider: "all" },
       { toolCallId: "call-all-partial", messages: [] },
     );
@@ -833,7 +873,8 @@ describe("searchTool", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("SearXNG unavailable")));
     mockPostJSON.mockRejectedValue(new Error("Exa unavailable"));
 
-    const outcomes = await searchTool.execute!(
+    const outcomes = await run(
+      searchTool,
       { query: ["test"], provider: "all" },
       { toolCallId: "call-all-batch-failure", messages: [] },
     );
@@ -872,7 +913,8 @@ describe("searchImageTool", () => {
       ],
     });
 
-    const result = await searchImageTool.execute!(
+    const result = await run(
+      searchImageTool,
       { url: "https://example.com/input.jpg", maxResults: 5 },
       { toolCallId: "search-image-call", messages: [] },
     );
@@ -893,7 +935,8 @@ describe("searchImageTool", () => {
 
 describe("providersTool", () => {
   it("returns the loaded runtime identity with provider status", async () => {
-    const result = (await providersTool.execute!(
+    const result = (await run(
+      providersTool,
       {},
       { toolCallId: "providers-call", messages: [] },
     )) as {
@@ -981,22 +1024,22 @@ describe("readTool", () => {
     const validate = asSchema(readTool.inputSchema).validate;
     if (!validate) throw new TypeError("Read schema has no validator");
 
-    await expect(validate({ url: "https://example.com", maxTokens: 500 })).resolves.toMatchObject({
+    expect(await validate({ url: "https://example.com", maxTokens: 500 })).toMatchObject({
       success: true,
     });
-    await expect(validate({ url: "https://example.com", maxTokens: 500.5 })).resolves.toMatchObject(
-      { success: false },
-    );
-    await expect(
-      validate({ url: "https://example.com", maxChars: 200_000 }),
-    ).resolves.toMatchObject({ success: true });
-    await expect(
-      validate({ url: "https://example.com", maxChars: 200_001 }),
-    ).resolves.toMatchObject({ success: false });
-    await expect(validate({ url: "https://example.com", timeout: 30 })).resolves.toMatchObject({
+    expect(await validate({ url: "https://example.com", maxTokens: 500.5 })).toMatchObject({
+      success: false,
+    });
+    expect(await validate({ url: "https://example.com", maxChars: 200_000 })).toMatchObject({
       success: true,
     });
-    await expect(validate({ url: "https://example.com", timeout: 30.5 })).resolves.toMatchObject({
+    expect(await validate({ url: "https://example.com", maxChars: 200_001 })).toMatchObject({
+      success: false,
+    });
+    expect(await validate({ url: "https://example.com", timeout: 30 })).toMatchObject({
+      success: true,
+    });
+    expect(await validate({ url: "https://example.com", timeout: 30.5 })).toMatchObject({
       success: false,
     });
   });
@@ -1012,7 +1055,8 @@ describe("readTool", () => {
       },
     });
 
-    const response = await readTool.execute!(
+    const response = await run(
+      readTool,
       { url: "https://example.com", maxChars: 3 },
       { toolCallId: "read-bounded", messages: [] },
     );
@@ -1037,11 +1081,13 @@ describe("readTool", () => {
     };
     mockGetJSON.mockResolvedValue({ code: 200, status: 20000, data: page });
 
-    const bounded = await readTool.execute!(
+    const bounded = await run(
+      readTool,
       { url: "https://example.com" },
       { toolCallId: "read-links-default", messages: [] },
     );
-    const requested = await readTool.execute!(
+    const requested = await run(
+      readTool,
       { url: "https://example.com", links: true, images: true },
       { toolCallId: "read-links-requested", messages: [] },
     );
@@ -1063,7 +1109,8 @@ describe("readTool", () => {
       },
     });
 
-    const response = await readTool.execute!(
+    const response = await run(
+      readTool,
       { url: "https://example.com", format: "markdown" },
       { toolCallId: "read-call-1", messages: [] },
     );
@@ -1090,11 +1137,13 @@ describe("readTool", () => {
       data: { url: "https://example.com/", content: "Read content" },
     });
 
-    const scalar = await readTool.execute!(
+    const scalar = await run(
+      readTool,
       { url: "https://example.com", provider: "auto" },
       { toolCallId: "read-auto-scalar", messages: [] },
     );
-    const batch = await readTool.execute!(
+    const batch = await run(
+      readTool,
       { url: ["https://example.com"], provider: "auto" },
       { toolCallId: "read-auto-batch", messages: [] },
     );
@@ -1116,7 +1165,8 @@ describe("readTool", () => {
       },
     });
 
-    const response = await readTool.execute!(
+    const response = await run(
+      readTool,
       { url: "https://example.com" },
       { toolCallId: "read-fallback", messages: [] },
     );
@@ -1147,7 +1197,8 @@ describe("readTool", () => {
       })
       .mockRejectedValueOnce(new Error("second read failed"));
 
-    const outcomes = await readTool.execute!(
+    const outcomes = await run(
+      readTool,
       { url: ["https://example.com/one", "https://example.com/two"] },
       { toolCallId: "read-batch", messages: [] },
     );
@@ -1168,14 +1219,14 @@ describe("readTool", () => {
     const urls = Array.from({ length: 11 }, (_, index) => `https://example.com/${index}`);
 
     await expect(
-      readTool.execute!({ url: urls }, { toolCallId: "read-large-batch", messages: [] }),
-    ).rejects.toThrow("Batch cannot contain more than 10 items");
+      run(readTool, { url: urls }, { toolCallId: "read-large-batch", messages: [] }),
+    ).rejects.toThrow("must not have more than 10 items");
     expect(mockGetJSON).not.toHaveBeenCalled();
   });
 
   it("rejects empty URL", async () => {
     await expect(
-      readTool.execute!({ url: "   " }, { toolCallId: "read-empty", messages: [] }),
+      run(readTool, { url: "   " }, { toolCallId: "read-empty", messages: [] }),
     ).rejects.toThrow(EmptyUrlError);
 
     expect(mockGetJSON).not.toHaveBeenCalled();

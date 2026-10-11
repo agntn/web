@@ -1,5 +1,6 @@
 import { openContinuation, sealContinuation } from "./continuation.ts";
 import { InvalidSearchContinuationError } from "./errors.ts";
+import { MAX_SEARCH_CONTINUATION_LENGTH } from "./limits.ts";
 import type { SearchRequestOptions } from "./types.ts";
 
 interface SearchContinuationPayload {
@@ -9,7 +10,7 @@ interface SearchContinuationPayload {
 
 const SEARCH_CONTINUATION = "@agntn/web/search-continuation/v2";
 
-export const MAX_SEARCH_CONTINUATION_LENGTH = 4_096;
+export { MAX_SEARCH_CONTINUATION_LENGTH };
 export const MAX_PROVIDER_SEARCH_CONTINUATION_LENGTH = 2_048;
 
 export function encodeSearchContinuation(

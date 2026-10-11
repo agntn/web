@@ -1,4 +1,4 @@
-import { builtinProviders } from "./providers.ts";
+import { builtinProviders, imageSearchProviderNames } from "./providers.ts";
 import {
   EmptyImageUrlError,
   ImageSearchNotSupportedError,
@@ -10,8 +10,7 @@ import { providerRequestOptions, throwIfAborted, withExecutionBudget } from "./e
 import { optionalText } from "./options.ts";
 import type { ImageSearchOptions, ImageSearchResult } from "./types.ts";
 
-/** Built-in providers that accept an image URL as a search input. */
-export const imageSearchProviderNames = ["serpapi"] as const;
+export { imageSearchProviderNames };
 
 /** Name of a built-in reverse image search provider. */
 export type ImageSearchProviderName = (typeof imageSearchProviderNames)[number];

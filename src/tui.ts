@@ -405,14 +405,21 @@ function structuredPreview(name: WebToolName, details: unknown): string | undefi
   return providersPreview(details);
 }
 
-function previewText(
-  name: WebToolName,
-  result: Readonly<RenderedToolResult>,
-  text: string,
-): string {
+function previewText(name: WebToolName, details: unknown, text: string): string {
   const trimmed = text.trimStart();
   const serialized = trimmed.startsWith("{") || trimmed.startsWith("[");
-  return serialized ? (structuredPreview(name, result.details) ?? text) : text;
+  return serialized ? (structuredPreview(name, details) ?? text) : text;
+}
+
+/**
+ * The data a web tool answered with, which every surface carries under `result` alone. Details a
+ * session stored before that, with `result` beside other fields, pass through as they are.
+ * @param details - Tool details as the host stored them.
+ * @returns {unknown} What sits under `result`, or the details themselves.
+ */
+function toolData(details: unknown): unknown {
+  const only = isRecord(details) ? Object.keys(details) : [];
+  return isRecord(details) && only.length === 1 && only[0] === "result" ? details.result : details;
 }
 
 function failedItems(items: readonly unknown[]): number {
@@ -611,11 +618,12 @@ export function renderWebToolResult(
   }
   if (options.isPartial === true) return renderPartial(name, options, theme);
   const text = resultText(result);
-  const meta = resultMeta(name, result.details);
+  const details = toolData(result.details);
+  const meta = resultMeta(name, details);
   const header = renderSummary(name, meta, options, theme);
   const body =
     options.expanded === true && text
-      ? previewBody(previewText(name, result, text), theme, viewportWidth(options))
+      ? previewBody(previewText(name, details, text), theme, viewportWidth(options))
       : [];
   return body.length > 0 ? [header, ...body].join("\n") : header;
 }
