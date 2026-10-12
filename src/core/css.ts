@@ -38,6 +38,8 @@ export interface Color {
 const COMPOUND_SELECTOR = /^(?<tag>[a-z][\w-]*|\*)?(?<rest>(?:[.#][\w-]+)*)$/iu;
 const SELECTOR_PART = /[.#][\w-]+/gu;
 const COLOR_TOKEN = /#[\da-f]{3,8}\b|rgba?\([^)]{0,64}\)|\b[a-z]+\b/giu;
+/** A function that is not a color, like \`url()\` or a gradient, whose words name no background. */
+const IMAGE_FUNCTION = /\b(?!rgba?\()[a-z-]+\([^)]{0,512}\)/giu;
 /** A background value longer than this holds no color worth reading, only cost. */
 const BACKGROUND_SCAN = 200;
 /** The properties that hide an element or color its text; a rule with none of them is dropped. */
@@ -129,7 +131,8 @@ export function parseDeclarations(text: string, source?: string): Record<string,
  * @returns {string} The color as written, or `transparent`.
  */
 function shorthandColor(value: string): string {
-  for (const [token] of value.slice(0, BACKGROUND_SCAN).matchAll(COLOR_TOKEN)) {
+  const colors = value.slice(0, BACKGROUND_SCAN).replaceAll(IMAGE_FUNCTION, " ");
+  for (const [token] of colors.matchAll(COLOR_TOKEN)) {
     if (parseColor(token) !== undefined) return token;
   }
   return "transparent";

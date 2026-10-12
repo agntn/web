@@ -399,7 +399,8 @@ class HiddenScanner {
 
   private prepareTag(tag: HtmlStartTag): void {
     const rel = attribute(tag, "rel")?.toLowerCase().split(/\s+/u) ?? [];
-    if (tag.name === "link" && rel.includes("stylesheet")) this.assumeDefaults = false;
+    const linksStyles = tag.name === "link" && rel.includes("stylesheet");
+    if (linksStyles && forScreen(attribute(tag, "media"))) this.assumeDefaults = false;
     const href = attribute(tag, "href");
     if (tag.name !== "base" || href === undefined || this.baseFromPage) return;
     this.base = resolve(href, this.base);
@@ -423,6 +424,7 @@ class HiddenScanner {
 
   /**
    * SVG and MathML follow XML rules: no HTML attributes to judge, and `/>` closes an element.
+   * CDATA sections and `foreignObject` going back to HTML are not modeled.
    * @param name - The tag about to open.
    * @returns {boolean} Whether it opens inside, or as, foreign content.
    */

@@ -266,6 +266,16 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(earlier), "camouflage")).toEqual([]);
   });
 
+  it("keeps the default page under a print stylesheet and ignores words inside url()", () => {
+    const print = "<link rel=stylesheet media=print href=p.css><span style='color:#fff'>x</span>";
+    const image = "<span style='background:url(red.png);color:red'>y</span>";
+
+    expect(ofKind(revealHtml(print), "camouflage")).toEqual([
+      expect.objectContaining({ value: "x" }),
+    ]);
+    expect(ofKind(revealHtml(image), "camouflage")).toEqual([]);
+  });
+
   it("assumes no default colors once a stylesheet is linked", () => {
     const html = "<link rel=stylesheet href=a.css><span style='color:#fff'>maybe dark</span>";
 
@@ -618,6 +628,16 @@ describe("revealUrl", () => {
       expect(result.findings.map(({ kind }) => kind)).toEqual(["invisible"]);
     },
   );
+
+  it("reads an untyped body that opens with an element as HTML", async () => {
+    routes.set("/untyped", [{ status: 200, body: "<div hidden>secret</div>" }]);
+
+    const result = await revealUrl(`${base}/untyped`, { allowPrivateNetwork: true });
+
+    expect(ofKind(result.findings, "hidden")).toEqual([
+      expect.objectContaining({ value: "secret" }),
+    ]);
+  });
 
   it("looks for invisible characters in a text file without parsing it as HTML", async () => {
     routes.set("/notes.txt", [

@@ -44,7 +44,8 @@ const MARKUP_TYPE = /^text\/html$/u;
 const TEXT_TYPE =
   /^(?:text\/[\w.+-]+|application\/(?:json|javascript|ecmascript|xml|[\w.+-]+\+json)|[\w.+-]+\/[\w.+-]+\+xml)$/u;
 const CHARSET = /charset\s*=\s*["']?(?<label>[\w.:-]+)/iu;
-const MARKUP_START = /^\s*<(?:!doctype\s+html|html|head|body|!--)/iu;
+/** An untyped body is HTML when it opens like markup: a doctype, a comment or an element. */
+const MARKUP_START = /^\s*<(?:!doctype\s+html|!--|[a-z][\w-]*[\s/>])/iu;
 const TITLE = /<title[^>]*>(?<title>[^<]*)</iu;
 const ACCEPT = "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8";
 
