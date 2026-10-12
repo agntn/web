@@ -160,6 +160,7 @@ export function parseStylesheet(css: string, firstOrder = 0): StyleRule[] {
 
 /**
  * The cascade for one element: matching rules by specificity, then its `style` attribute.
+ * Values aren't validated per property, so a later invalid one still wins; that's out of scope.
  * @param rulesFor - The page's rules filed under one key, from {@link ruleKey}.
  * @param element - Tag, id and classes of the element.
  * @param inline - Declarations of its `style` attribute.

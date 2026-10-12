@@ -326,7 +326,7 @@ export function revealHtml(html: string, options?: Readonly<RevealHtmlOptions>):
  */
 export function invisibleCharacters(text: string): HiddenFinding[] {
   const starts = lineStarts(text);
-  return invisibleRuns(text).map(({ index, run }) =>
+  return invisibleRuns(text, true).map(({ index, run }) =>
     invisibleFinding(text, index, run, lineAt(starts, index)),
   );
 }
@@ -586,7 +586,7 @@ class HiddenScanner {
     if (this.rawText(token.text, line)) return;
     const top = this.stack.at(-1);
     const text = decodeCharacterReferences(token.text);
-    this.characters(text, line, top?.label);
+    this.characters(text, line, top?.label, token.start === 0);
     (top?.hidden ?? top?.camouflage)?.add(text);
   }
 
@@ -688,8 +688,13 @@ class HiddenScanner {
     else this.findings.push(finding);
   }
 
-  private characters(text: string, line: number, element: string | undefined): void {
-    for (const { index, run } of invisibleRuns(text)) {
+  private characters(
+    text: string,
+    line: number,
+    element: string | undefined,
+    documentStart = false,
+  ): void {
+    for (const { index, run } of invisibleRuns(text, documentStart)) {
       const finding = invisibleFinding(
         text,
         index,
@@ -767,6 +772,7 @@ function overridesHiding(reason: string, declarations: Declarations): boolean {
  */
 function structuralReason(tag: HtmlStartTag, declarations: Declarations): string | undefined {
   if (tag.name === "template") return "template content";
+  if (attribute(tag, "popover") !== undefined) return "popover";
   const opens = tag.name === "dialog" || tag.name === "details";
   if (opens && attribute(tag, "open") === undefined) return `closed ${tag.name}`;
   const hidden = attribute(tag, "hidden") !== undefined && declarations.display === undefined;
@@ -982,13 +988,14 @@ function invisiblePattern(): RegExp {
 /**
  * Runs of invisible characters, minus an opening byte order mark and joiners text needs.
  * @param text - Text to scan.
+ * @param documentStart - Whether the text opens the source, where a byte order mark belongs.
  * @returns {{ index: number; run: string }[]} Each run with its offset.
  */
-function invisibleRuns(text: string): { index: number; run: string }[] {
+function invisibleRuns(text: string, documentStart: boolean): { index: number; run: string }[] {
   if (!ONE_INVISIBLE.test(text)) return [];
   const runs: { index: number; run: string }[] = [];
   for (const match of text.matchAll(invisiblePattern())) {
-    const run = match[0] === "\uFEFF" && match.index === 0 ? "" : match[0];
+    const run = match[0] === "\uFEFF" && match.index === 0 && documentStart ? "" : match[0];
     if (run !== "" && !joinsText(text, match.index, run)) runs.push({ index: match.index, run });
   }
   return runs;

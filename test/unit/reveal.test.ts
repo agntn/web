@@ -128,6 +128,7 @@ describe("revealHtml", () => {
     ],
     ["template", "<template><p>x</p></template>", "template content"],
     ["closed dialog", "<dialog><p>x</p></dialog>", "closed dialog"],
+    ["popover", "<div popover>x</div>", "popover"],
     ["closed details", "<details><summary>Hint</summary>x</details>", "closed details"],
     [
       "a rule after a quoted comment",
@@ -314,6 +315,12 @@ describe("revealHtml", () => {
     );
 
     expect(invisible.map(({ codePoints }) => codePoints?.[0])).toEqual(["U+200B", "U+200B"]);
+  });
+
+  it("reports a byte order mark anywhere but the opening of the source", () => {
+    const invisible = ofKind(revealHtml(`<p>x</p><p>${BOM}secret</p>`), "invisible");
+
+    expect(invisible.map(({ codePoints }) => codePoints?.[0])).toEqual(["U+FEFF"]);
   });
 
   it("leaves the joiners text needs and an opening byte order mark alone", () => {
