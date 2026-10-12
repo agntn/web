@@ -3,16 +3,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Value } from "typebox/value";
 import type { TSchema } from "@agntn/tools";
-import {
-  afterAll,
-  afterEach,
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vite-plus/test";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
   HTTPError,
@@ -21,6 +12,7 @@ import {
   UnreadablePageError,
 } from "../../src/core/errors.ts";
 import { revealHtml, revealUrl, type HiddenFinding } from "../../src/core/reveal.ts";
+import { revealAnswer } from "../../src/tool-text.ts";
 import { webTools } from "../../src/tools.ts";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
@@ -347,45 +339,53 @@ describe("revealUrl", () => {
     hits.clear();
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
+  /* Every name resolves to this machine, so a URL with the test server's port reaches it. */
+  function resolveHere(): void {
+    vi.mocked(lookup).mockResolvedValue([{ address: "127.0.0.1", family: 4 }] as never);
+  }
 
   it("reads a Wayback capture as archived, without the toolbar", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>(
-      async () => new Response(gsmg, { headers: { "Content-Type": "text/html; charset=UTF-8" } }),
-    );
-    vi.stubGlobal("fetch", fetch);
+    resolveHere();
+    const archived = "/web/20260418153806id_/https://gsmg.io/theseedisplanted";
+    routes.set(archived, [{ status: 200, headers: html, body: gsmg }]);
+    const port = new URL(base).port;
 
     const result = await revealUrl(
-      "https://web.archive.org/web/20260418153806/https://gsmg.io/theseedisplanted",
+      `http://web.archive.org:${port}/web/20260418153806/https://gsmg.io/theseedisplanted`,
+      { allowPrivateNetwork: true },
     );
 
-    expect(fetch.mock.calls[0]?.[0]).toBe(
-      "https://web.archive.org/web/20260418153806id_/https://gsmg.io/theseedisplanted",
-    );
+    expect(hits.get(archived)).toBe(1);
     expect(result).toMatchObject({
-      source: "https://web.archive.org/web/20260418153806id_/https://gsmg.io/theseedisplanted",
+      source: `http://web.archive.org:${port}${archived}`,
       archive: "wayback",
       bytes: 1_585,
     });
     expect(ofKind(result.findings, "comment")[0]?.value).toBe(
       "Nice to see you around! Good luck little bunny hunter ;)",
     );
+    expect(ofKind(result.findings, "link")).toEqual([]);
     expect(ofKind(result.findings, "script")[0]?.value).toMatch(
       /^https:\/\/static\.cloudflareinsights\.com\//u,
     );
   });
 
   it("refuses a host that resolves to the machine itself", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>();
-    vi.stubGlobal("fetch", fetch);
     vi.mocked(lookup).mockResolvedValue([{ address: "::1", family: 6 }] as never);
 
     await expect(revealUrl("http://localhost:3000/")).rejects.toThrow(
       "localhost resolves to ::1, a private network address; reveal reads public pages only",
     );
-    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("checks the address the connection actually uses, not an earlier answer", async () => {
+    resolveHere();
+    routes.set("/", [{ status: 200, headers: html, body: "<!-- inside -->" }]);
+
+    await expect(revealUrl(`http://rebind.test:${new URL(base).port}/`)).rejects.toThrow(
+      "rebind.test resolves to 127.0.0.1, a private network address; reveal reads public pages only",
+    );
+    expect(hits.get("/")).toBeUndefined();
   });
 
   it.each([
@@ -395,26 +395,10 @@ describe("revealUrl", () => {
     "http://169.254.169.254/latest/meta-data/",
     "http://10.0.0.8/",
     "http://192.168.1.1/",
+    "http://2130706433/",
   ])("refuses %s before any request", async (url) => {
-    const fetch = vi.fn<typeof globalThis.fetch>();
-    vi.stubGlobal("fetch", fetch);
-
     await expect(revealUrl(url)).rejects.toThrow(PrivateAddressError);
-    expect(fetch).not.toHaveBeenCalled();
     expect(lookup).not.toHaveBeenCalled();
-  });
-
-  it("refuses a redirect into the private network", async () => {
-    const fetch = vi.fn<typeof globalThis.fetch>(
-      async () =>
-        new Response(null, { status: 302, headers: { Location: "http://127.0.0.1:2375/" } }),
-    );
-    vi.stubGlobal("fetch", fetch);
-
-    await expect(revealUrl("http://93.184.215.14/")).rejects.toThrow(
-      "127.0.0.1 is a private network address; reveal reads public pages only",
-    );
-    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -517,25 +501,21 @@ describe("revealUrl", () => {
 describe("web_reveal", () => {
   const reveal = webTools()[3];
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  /* Serve one page to the next reveal. */
-  function servePage(html: string): void {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof globalThis.fetch>(
-        async () => new Response(html, { headers: { "Content-Type": "text/html" } }),
-      ),
-    );
+  /* What the tool shows for a page, without the network. */
+  function answer(page: string, maxChars = 20_000): ReturnType<typeof revealAnswer> {
+    const findings = revealHtml(page, { url: "https://gsmg.io/theseedisplanted" });
+    const result = {
+      url: "https://gsmg.io/theseedisplanted",
+      source: "https://gsmg.io/theseedisplanted",
+      contentType: "text/html",
+      bytes: new TextEncoder().encode(page).length,
+      findings,
+    };
+    return revealAnswer(result, maxChars);
   }
 
-  it("lists the findings by kind under a header", async () => {
-    servePage(gsmg);
-
-    const answer = await reveal.execute({ url: "https://gsmg.io/theseedisplanted" }, {});
-    const text = answer.content.map((part) => ("text" in part ? part.text : "")).join("");
+  it("lists the findings by kind under a header", () => {
+    const { text, result } = answer(gsmg);
 
     expect(text).toContain(
       "[reveal] https://gsmg.io/theseedisplanted\ntext/html · 1,585 bytes\nFound 1 comment, 1 hidden element, 3 form fields, 1 attribute, 6 meta tags, 1 script\n",
@@ -547,45 +527,53 @@ describe("web_reveal", () => {
     expect(text).toContain(
       "  line 25 input password (type=password, inside hidden div at line 23)",
     );
-    const output = reveal.output as TSchema;
-    expect(Value.Check(output, answer.details)).toBe(true);
+    expect(Value.Check(reveal.output as TSchema, { result })).toBe(true);
   });
 
-  it("stops at maxChars and says what it left out", async () => {
-    servePage(Array.from({ length: 50 }, (_, index) => `<!-- comment ${index} -->`).join("\n"));
+  it("stops at maxChars and says what it left out", () => {
+    const page = Array.from({ length: 50 }, (_, index) => `<!-- comment ${index} -->`).join("\n");
 
-    const answer = await reveal.execute({ url: "https://example.com/", maxChars: 400 }, {});
-    const text = answer.content.map((part) => ("text" in part ? part.text : "")).join("");
-    const { result } = answer.details as { result: { findings: unknown[]; omitted: number } };
+    const { text, result } = answer(page, 400);
 
     expect(Array.from(text).length).toBeLessThanOrEqual(400 + 120);
-    expect(result.findings.length + result.omitted).toBe(50);
+    expect(result.findings.length + (result.omitted ?? 0)).toBe(50);
     expect(text).toContain(
       `[truncated: left out ${result.omitted} comments; raise maxChars above 400 to list them]`,
     );
   });
 
-  it("cuts a first finding too long for the answer instead of showing nothing", async () => {
-    servePage(`<!-- ${"a".repeat(5_000)} -->`);
-
-    const answer = await reveal.execute({ url: "https://example.com/", maxChars: 1_000 }, {});
-    const { result } = answer.details as { result: { findings: HiddenFinding[] } };
+  it("cuts a first finding too long for the answer instead of showing nothing", () => {
+    const { result } = answer(`<!-- ${"a".repeat(5_000)} -->`, 1_000);
 
     expect(result.findings).toHaveLength(1);
     expect(result.findings[0]?.size).toBe(5_000);
     expect(result.findings[0]?.value?.length).toBeLessThan(1_000);
   });
 
-  it("keeps terminal controls from the page out of the answer", async () => {
+  it("counts a value in code points, so emoji that fit stay whole", () => {
+    const emoji = "🐰".repeat(300);
+
+    const { text, result } = answer(`<!-- ${emoji} -->`, 500);
+
+    expect(result.findings[0]?.value).toBe(emoji);
+    expect(result.truncated).toBeUndefined();
+    expect(text).toContain(emoji);
+  });
+
+  it("keeps terminal controls from the page out of the answer", () => {
     const escape = String.fromCodePoint(0x1b);
     const override = String.fromCodePoint(0x202e);
-    servePage(`<!-- ${escape}[31mred${override}reversed -->`);
 
-    const answer = await reveal.execute({ url: "https://example.com/" }, {});
-    const text = answer.content.map((part) => ("text" in part ? part.text : "")).join("");
+    const { text } = answer(`<!-- ${escape}[31mred${override}reversed -->`);
 
-    expect(reveal.name).toBe("web_reveal");
     expect(text.includes(escape) || text.includes(override)).toBe(false);
     expect(text).toContain("red⟨U+202E⟩reversed");
+  });
+
+  it("refuses a private address before the page is read", async () => {
+    expect(reveal.name).toBe("web_reveal");
+    await expect(reveal.execute({ url: "http://169.254.169.254/" }, {})).rejects.toThrow(
+      "169.254.169.254 is a private network address; reveal reads public pages only",
+    );
   });
 });

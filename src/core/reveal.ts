@@ -1,4 +1,5 @@
-import type { BlockList } from "node:net";
+import type { IncomingMessage } from "node:http";
+import type { BlockList, LookupFunction } from "node:net";
 
 import {
   HTTPError,
@@ -31,6 +32,8 @@ const MAX_REDIRECTS = 5;
 /** Waits before the second and third try when the server says it is briefly down. */
 const RETRY_DELAYS_MS = [500, 1_500];
 const RETRY_STATUSES = new Set([502, 503, 504]);
+/** Connection errors worth one more try; a refused or unknown host is not one of them. */
+const RETRY_CODES = new Set(["ECONNRESET", "EPIPE", "EAI_AGAIN", "ETIMEDOUT", "UND_ERR_SOCKET"]);
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const ERROR_BODY_BYTES = 16_384;
 const SNIFF_BYTES = 1_024;
@@ -115,6 +118,11 @@ interface Received {
   readonly contentType: string;
   readonly read: () => Promise<Chunk>;
   readonly cancel: () => Promise<void>;
+}
+
+/** What one request answers, before the redirect decision. */
+interface Answer extends Omit<Received, "url"> {
+  readonly location: string | undefined;
 }
 
 /** One read from a body stream. */
@@ -238,40 +246,86 @@ async function fetchPage(url: string, request: PageRequest): Promise<Page> {
 async function fetchOnce(url: string, request: PageRequest): Promise<Page> {
   let current = url;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
-    const response = await send(current, request);
-    const location = REDIRECT_STATUSES.has(response.status)
-      ? response.headers.get("location")
-      : null;
-    const reader = response.body?.getReader();
-    if (location === null) {
-      return readPage(
-        {
-          status: response.status,
-          url: current,
-          contentType: response.headers.get("content-type")?.trim() ?? "",
-          read: async () => (reader === undefined ? { done: true } : reader.read()),
-          cancel: async () => reader?.cancel(),
-        },
-        request,
-      );
-    }
-    await reader?.cancel();
+    const answer = await send(current, request);
+    const location = REDIRECT_STATUSES.has(answer.status) ? answer.location : undefined;
+    if (location === undefined) return readPage({ ...answer, url: current }, request);
+    await answer.cancel();
     current = nextHop(location, current);
   }
   throw new UnreadablePageError(`${sanitizeUrl(url)} redirects more than ${MAX_REDIRECTS} times`);
 }
 
-async function send(url: string, request: PageRequest): Promise<Response> {
+/**
+ * One GET whose connection only opens to an address the policy allows, checked when it connects.
+ * @param url - What to fetch.
+ * @param request - Signal and network policy.
+ * @returns {Promise<Answer>} Status, headers and the body as chunks, decompressed.
+ */
+async function send(url: string, request: PageRequest): Promise<Answer> {
   const { hostname, protocol } = new URL(url);
-  await assertPublic(protocol, hostname, request.allowPrivateNetwork);
+  if (protocol !== "http:" && protocol !== "https:") throw new InvalidPageUrlError();
+  const lookup = await lookupFor(hostname, request.allowPrivateNetwork);
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const signal =
     request.signal === undefined ? timeout : AbortSignal.any([request.signal, timeout]);
-  return fetch(url, {
-    redirect: "manual",
-    headers: { Accept: ACCEPT, "User-Agent": `agntn-web/${version}` },
-    signal,
+  const { response, chunks } = await connect(url, lookup, signal);
+  return {
+    status: response.statusCode ?? 0,
+    location: response.headers.location,
+    contentType: response.headers["content-type"]?.trim() ?? "",
+    read: async () => {
+      const next = await chunks.next();
+      if (next.done === true) return { done: true };
+      const value: unknown = next.value;
+      if (value instanceof Uint8Array) return { done: false, value };
+      return { done: false, value: new TextEncoder().encode(String(value)) };
+    },
+    cancel: async () => {
+      response.destroy();
+    },
+  };
+}
+
+/**
+ * Open the request and the body stream, gunzipped or unbrotlied when the server compressed it.
+ * @param url - What to fetch.
+ * @param lookup - The lookup that vets each address.
+ * @param signal - Caller cancellation and the timeout.
+ * @returns {Promise<{ response: IncomingMessage; chunks: AsyncIterator<unknown> }>} The response
+ * and its decoded body.
+ */
+async function connect(
+  url: string,
+  lookup: LookupFunction,
+  signal: Readonly<AbortSignal>,
+): Promise<{ response: IncomingMessage; chunks: AsyncIterator<unknown> }> {
+  const [http, https, { pipeline }, zlib] = await Promise.all([
+    import("node:http"),
+    import("node:https"),
+    import("node:stream"),
+    import("node:zlib"),
+  ]);
+  const get = url.startsWith("https:") ? https.request : http.request;
+  const headers = {
+    Accept: ACCEPT,
+    "Accept-Encoding": "gzip, deflate, br",
+    "User-Agent": `agntn-web/${version}`,
+  };
+  const response = await new Promise<IncomingMessage>((resolve, reject) => {
+    const outgoing = get(url, { headers, lookup, signal }, resolve);
+    outgoing.once("error", reject);
+    outgoing.end();
   });
+  const decoders: Readonly<Record<string, () => NodeJS.ReadWriteStream>> = {
+    gzip: () => zlib.createGunzip(),
+    "x-gzip": () => zlib.createGunzip(),
+    deflate: () => zlib.createInflate(),
+    br: () => zlib.createBrotliDecompress(),
+  };
+  const encoding = response.headers["content-encoding"]?.trim().toLowerCase() ?? "";
+  const decoder = Object.hasOwn(decoders, encoding) ? decoders[encoding] : undefined;
+  const body = decoder === undefined ? response : pipeline(response, decoder(), () => {});
+  return { response, chunks: body[Symbol.asyncIterator]() };
 }
 
 function nextHop(location: string, current: string): string {
@@ -392,27 +446,39 @@ function errorSummary(body: string): string {
 }
 
 /**
- * Refuse a host on a private or reserved address, so a model can't aim at the local network.
- * @param protocol - The URL's scheme with its colon.
+ * A lookup that refuses private addresses as the request connects, so DNS rebinding gets nowhere.
+ * Node never looks up an IP literal, so that one is checked here.
  * @param hostname - The URL's host, IPv6 in brackets.
  * @param allowPrivateNetwork - Skip the address check.
+ * @returns {Promise<LookupFunction>} The lookup to pass to the request.
  */
-async function assertPublic(
-  protocol: string,
-  hostname: string,
-  allowPrivateNetwork: boolean,
-): Promise<void> {
-  if (protocol !== "http:" && protocol !== "https:") throw new InvalidPageUrlError();
-  if (allowPrivateNetwork) return;
-  const host = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
-  const { isIP } = await import("node:net");
-  const ranges = await privateRanges();
-  const addresses = isIP(host) === 0 ? await lookupAll(host) : [host];
-  for (const address of addresses) {
-    if (ranges.check(address, isIP(address) === 6 ? "ipv6" : "ipv4")) {
-      throw new PrivateAddressError(hostname, address);
-    }
-  }
+async function lookupFor(hostname: string, allowPrivateNetwork: boolean): Promise<LookupFunction> {
+  const [{ isIP }, { lookup }, ranges] = await Promise.all([
+    import("node:net"),
+    import("node:dns/promises"),
+    privateRanges(),
+  ]);
+  const literal = hostname.startsWith("[") ? hostname.slice(1, -1) : hostname;
+  const isPrivate = (address: string) =>
+    !allowPrivateNetwork && ranges.check(address, isIP(address) === 6 ? "ipv6" : "ipv4");
+  if (isIP(literal) !== 0 && isPrivate(literal)) throw new PrivateAddressError(hostname, literal);
+  return (name, options, callback) => {
+    lookup(name, { family: options.family, hints: options.hints, all: true, verbatim: true }).then(
+      (addresses) => {
+        const refused = addresses.find(({ address }) => isPrivate(address));
+        if (refused !== undefined) {
+          callback(new PrivateAddressError(name, refused.address), "", 0);
+        } else if (options.all === true) {
+          callback(null, addresses);
+        } else {
+          callback(null, addresses[0]?.address ?? "", addresses[0]?.family ?? 4);
+        }
+      },
+      (error: unknown) => {
+        callback(error instanceof Error ? error : new Error(String(error)), "", 0);
+      },
+    );
+  };
 }
 
 /**
@@ -426,16 +492,6 @@ async function privateRanges(): Promise<BlockList> {
   for (const [network, prefix, family] of PRIVATE_RANGES) ranges.addSubnet(network, prefix, family);
   privateNetworks = ranges;
   return ranges;
-}
-
-async function lookupAll(host: string): Promise<string[]> {
-  const { lookup } = await import("node:dns/promises");
-  try {
-    return (await lookup(host, { all: true, verbatim: true })).map(({ address }) => address);
-  } catch (error) {
-    const code = error instanceof Error && "code" in error ? String(error.code) : "lookup failed";
-    throw new UnreadablePageError(`Cannot resolve ${host}: ${code}`);
-  }
 }
 
 /**
@@ -459,7 +515,7 @@ function transportError(error: unknown, url: string): Error {
  */
 function retryable(error: unknown): boolean {
   if (error instanceof HTTPError) return RETRY_STATUSES.has(error.statusCode);
-  return error instanceof TypeError;
+  return error instanceof Error && "code" in error && RETRY_CODES.has(String(error.code));
 }
 
 function abortableDelay(

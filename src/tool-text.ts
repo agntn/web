@@ -449,8 +449,26 @@ function codeText(finding: HiddenFinding): string {
  */
 function withinRoom(finding: HiddenFinding, room: number): HiddenFinding {
   const value = finding.value;
-  if (value === undefined || value.length <= room) return finding;
-  return { ...finding, value: value.slice(0, Math.max(0, room) + 1) };
+  if (value === undefined) return finding;
+  const head = firstCodePoints(value, Math.max(0, room) + 1);
+  return head.length === value.length ? finding : { ...finding, value: head };
+}
+
+/**
+ * The start of a text, stopping after `count` code points without walking the rest.
+ * @param text - The text.
+ * @param count - How many code points to keep.
+ * @returns {string} The text itself when it is no longer.
+ */
+function firstCodePoints(text: string, count: number): string {
+  let end = 0;
+  let taken = 0;
+  for (const character of text) {
+    if (taken === count) break;
+    end += character.length;
+    taken += 1;
+  }
+  return text.slice(0, end);
 }
 
 /**
