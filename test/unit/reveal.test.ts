@@ -122,6 +122,12 @@ describe("revealHtml", () => {
     ],
     ["template", "<template><p>x</p></template>", "template content"],
     ["closed dialog", "<dialog><p>x</p></dialog>", "closed dialog"],
+    ["closed details", "<details><summary>Hint</summary>x</details>", "closed details"],
+    [
+      "a rule after a quoted brace",
+      '<style>.a{content:"}"} .s{display:none}</style><p class=s>x</p>',
+      "display: none via .s",
+    ],
     ["framework class", "<p class='d-none'>x</p>", "class d-none, a framework's hidden class"],
   ])("hides an element by %s", (_label, html, reason) => {
     expect(ofKind(revealHtml(html), "hidden")).toEqual([
@@ -138,6 +144,7 @@ describe("revealHtml", () => {
     ],
     ["half opacity", "<p style='opacity:.5'>x</p>"],
     ["an open dialog", "<dialog open>x</dialog>"],
+    ["an open details", "<details open><summary>s</summary>x</details>"],
     ["a small negative margin", "<p style='text-indent:-2em'>x</p>"],
   ])("leaves %s in sight", (_label, html) => {
     expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
@@ -200,6 +207,12 @@ describe("revealHtml", () => {
     expect(invisible[0]?.value).toBe("zero⟨U+200B⟩width");
     expect(invisible[1]?.reason).toBe('tag characters spell "hi there"');
     expect(invisible[2]?.reason).toBe('variation selectors carry "key"');
+  });
+
+  it("decodes a numeric reference without its semicolon, as browsers do", () => {
+    const invisible = ofKind(revealHtml("<p>key&#8203word and &#x200Cmore</p>"), "invisible");
+
+    expect(invisible.map(({ codePoints }) => codePoints?.[0])).toEqual(["U+200B", "U+200C"]);
   });
 
   it("leaves the joiners text needs and an opening byte order mark alone", () => {

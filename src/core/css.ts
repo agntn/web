@@ -295,15 +295,31 @@ function quoteAfter(quote: string, character: string): string {
   return character === '"' || character === "'" ? character : "";
 }
 
+/**
+ * The brace that closes the block opened at `open`, skipping braces inside quoted strings.
+ * @param text - Stylesheet text without comments.
+ * @param open - Offset of the `{`.
+ * @returns {number} Offset of its `}`, or the text length when it never closes.
+ */
 function matchingBrace(text: string, open: number): number {
   let depth = 0;
+  let quote = "";
   for (let index = open; index < text.length; index += 1) {
-    if (text[index] === "{") depth += 1;
-    else if (text[index] === "}") depth -= 1;
+    const character = text[index] ?? "";
+    if (quote !== "" && character === "\\") {
+      index += 1;
+      continue;
+    }
+    const quoted = quote !== "";
+    quote = quoteAfter(quote, character);
+    if (!quoted && quote === "") depth += BRACES[character] ?? 0;
     if (depth === 0) return index;
   }
   return text.length;
 }
+
+/** How braces move the nesting depth outside quotes. */
+const BRACES: Readonly<Record<string, number>> = { "{": 1, "}": -1 };
 
 function selectorRules(prelude: string, body: string, order: number): StyleRule[] {
   if (body.includes("{")) return [];

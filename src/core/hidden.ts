@@ -437,10 +437,22 @@ class HiddenScanner {
     declarations: Declarations,
   ): HiddenText | undefined {
     const inherited = this.stack.at(-1)?.hidden;
-    if (inherited !== undefined) return inherited;
+    if (inherited !== undefined) return this.isSummaryOfClosed(tag.name) ? undefined : inherited;
     const reason = hiddenBy(tag, declarations);
     if (reason === undefined) return undefined;
     return new HiddenText("hidden", place.line, place.label, reason, fallbackOf(tag));
+  }
+
+  /**
+   * A closed `<details>` still shows its `<summary>`.
+   * @param name - The tag about to open.
+   * @returns {boolean} Whether it is the summary of the closed details element it opens in.
+   */
+  private isSummaryOfClosed(name: string): boolean {
+    const parent = this.stack.at(-1);
+    const record = parent?.hidden;
+    if (name !== "summary" || parent?.name !== "details" || record === undefined) return false;
+    return record.reason === "closed details" && parent.owned.includes(record);
   }
 
   private paintsOf(
@@ -695,7 +707,8 @@ function hiddenBy(tag: HtmlStartTag, declarations: Declarations): string | undef
  */
 function structuralReason(tag: HtmlStartTag, declarations: Declarations): string | undefined {
   if (tag.name === "template") return "template content";
-  if (tag.name === "dialog" && attribute(tag, "open") === undefined) return "closed dialog";
+  const opens = tag.name === "dialog" || tag.name === "details";
+  if (opens && attribute(tag, "open") === undefined) return `closed ${tag.name}`;
   const hidden = attribute(tag, "hidden") !== undefined && declarations.display === undefined;
   return hidden ? "hidden attribute" : undefined;
 }
