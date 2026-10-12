@@ -234,6 +234,21 @@ function callIcon(
     : { glyph: "·", color: "muted" };
 }
 
+/** Tools that take one URL, and what their call row says before the URL arrives. */
+const URL_SUBJECTS: Readonly<Partial<Record<WebToolName, string>>> = {
+  web_image_search: "Image",
+  web_reveal: "Page",
+};
+
+/** Kinds a reveal's summary counts, the ones a reader never sees. */
+const REVEAL_SUMMARY: readonly (readonly [string, string, string])[] = [
+  ["comment", "comment", "comments"],
+  ["hidden", "hidden element", "hidden elements"],
+  ["field", "field", "fields"],
+  ["camouflage", "camouflaged", "camouflaged"],
+  ["invisible", "invisible run", "invisible runs"],
+];
+
 function inputSubject(name: WebToolName, record: Readonly<Record<string, unknown>>): string {
   if (name === "web_search") {
     const query = record.query;
@@ -245,7 +260,8 @@ function inputSubject(name: WebToolName, record: Readonly<Record<string, unknown
     const url = record.url;
     return Array.isArray(url) ? `${url.length} pages` : sanitizeTerminalText(url ?? "Page");
   }
-  if (name === "web_image_search") return sanitizeTerminalText(record.url ?? "Image");
+  const urlSubject = URL_SUBJECTS[name];
+  if (urlSubject !== undefined) return sanitizeTerminalText(record.url ?? urlSubject);
   return "Provider registry";
 }
 
@@ -399,9 +415,23 @@ function providersPreview(details: unknown): string | undefined {
   return lines.join("\n") || undefined;
 }
 
+function revealPreview(details: unknown): string | undefined {
+  if (!isRecord(details) || !Array.isArray(details.findings)) return undefined;
+  const lines = details.findings.slice(0, PREVIEW_LINES).flatMap((finding) => {
+    if (!isRecord(finding)) return [];
+    const kind = detailText(finding, "kind") ?? "finding";
+    const line = scalar(finding, "line") ?? "?";
+    return [
+      `${kind} line ${line}: ${detailText(finding, "value") ?? detailText(finding, "reason") ?? ""}`,
+    ];
+  });
+  return lines.join("\n") || undefined;
+}
+
 function structuredPreview(name: WebToolName, details: unknown): string | undefined {
   if (name === "web_search" || name === "web_image_search") return searchPreview(details);
   if (name === "web_read") return readPreview(details);
+  if (name === "web_reveal") return revealPreview(details);
   return providersPreview(details);
 }
 
@@ -490,6 +520,23 @@ function readMeta(details: unknown): string[] {
   return Array.isArray(outcomes) ? batchMeta(outcomes, "pages") : scalarReadMeta(details);
 }
 
+/**
+ * What a reveal found that no reader sees, counted, or how many findings it has otherwise.
+ * @param details - The reveal result.
+ * @returns {string[]} Counts such as `2 comments`, and `truncated` when the answer left some out.
+ */
+function revealMeta(details: unknown): string[] {
+  if (!isRecord(details)) return [];
+  const counts = isRecord(details.counts) ? details.counts : {};
+  const hidden = REVEAL_SUMMARY.flatMap(([kind, one, many]) => {
+    const count = counts[kind];
+    return typeof count === "number" ? [`${count} ${count === 1 ? one : many}`] : [];
+  });
+  const findings = listLength(details, "findings") ?? 0;
+  const meta = hidden.length > 0 ? hidden : [`${findings} finding${findings === 1 ? "" : "s"}`];
+  return details.truncated === true ? [...meta.slice(0, 3), "truncated"] : meta;
+}
+
 function providersMeta(details: unknown): string[] {
   const record = isRecord(details) ? details : {};
   const providers = Array.isArray(record.providers) ? record.providers : [];
@@ -510,6 +557,7 @@ function resultMeta(name: WebToolName, details: unknown): string[] {
   if (name === "web_search") return searchMeta(details).slice(0, 4);
   if (name === "web_image_search") return imageMeta(details).slice(0, 4);
   if (name === "web_read") return readMeta(details).slice(0, 4);
+  if (name === "web_reveal") return revealMeta(details).slice(0, 4);
   return providersMeta(details).slice(0, 4);
 }
 
@@ -549,6 +597,7 @@ function activityLabel(name: WebToolName): string {
   if (name === "web_search") return "Searching";
   if (name === "web_image_search") return "Matching image";
   if (name === "web_read") return "Reading";
+  if (name === "web_reveal") return "Revealing";
   return "Checking providers";
 }
 
@@ -567,6 +616,7 @@ function resultVerb(name: WebToolName): string {
   if (name === "web_search") return "found";
   if (name === "web_image_search") return "matched";
   if (name === "web_read") return "read";
+  if (name === "web_reveal") return "revealed";
   return "checked";
 }
 

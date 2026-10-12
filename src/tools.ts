@@ -20,8 +20,8 @@ let tools: ReturnType<typeof defineTools> | undefined;
 let commands: readonly ToolDefinition[] | undefined;
 
 /**
- * The four web tools every surface gets: MCP, Pi, OMP, the AI SDK and the CLI.
- * @returns {readonly ToolDefinition[]} Search, image search, read and providers, built once.
+ * The web tools every surface gets: MCP, Pi, OMP, the AI SDK and the CLI.
+ * @returns {readonly ToolDefinition[]} Every tool from search to providers, built once.
  */
 export function webTools(): ReturnType<typeof defineTools> {
   tools ??= defineTools();
@@ -102,6 +102,28 @@ function defineTools() {
       output: output.read,
       cli: { positional: ["url"] },
       execute: async (args, { signal }) => (await loadOperations()).read(args, signal),
+    }),
+    defineTool({
+      name: "web_reveal",
+      title: webToolTitle("web_reveal"),
+      description:
+        "List what a page hides from its reader: HTML comments, hidden elements with their text and form fields, text in its background's color, invisible Unicode, data-* and nonstandard attributes, meta and link tags, scripts and styles. Reads the page's own HTML, with no provider in between; a Wayback Machine capture is read as archived, without the toolbar.",
+      snippet:
+        "Reveal what a page hides, such as source comments and hidden form fields, with web_reveal.",
+      guidelines: [
+        "Use web_reveal when a page may hold more than its text shows: a puzzle, a CTF, a clue left in the source. Use web_read for the text itself.",
+        "web_reveal reads public HTTP and HTTPS pages only and refuses loopback and private network addresses.",
+      ],
+      ...reading,
+      input: input.reveal,
+      output: output.reveal,
+      cli: {
+        description:
+          "List what a page hides from its reader: comments, hidden elements, invisible text",
+        positional: ["url"],
+        plain: ["url"],
+      },
+      execute: async (args, { signal }) => (await loadOperations()).reveal(args, signal),
     }),
     defineTool({
       name: "web_providers",

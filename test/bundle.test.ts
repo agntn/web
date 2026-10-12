@@ -43,7 +43,7 @@ const hostProvidedPackages = [
  * @param name - The export the consumer re-exports.
  * @returns {Promise<string>} The output directory, removed when the test finishes.
  */
-async function bundleConsumer(name: "providers" | "version"): Promise<string> {
+async function bundleConsumer(name: "providers" | "readUrl" | "version"): Promise<string> {
   const consumerDir = mkdtempSync(join(root, "node_modules/.cache/web-consumer-"));
   onTestFinished(() => rmSync(consumerDir, { recursive: true, force: true }));
   const entry = join(consumerDir, "consumer.mjs");
@@ -143,6 +143,19 @@ describe("bundled package", () => {
     expect(files).toEqual(["consumer.mjs"]);
   });
 
+  /** The reveal scanner weighs 35 kB that a consumer of `readUrl` never asked for. */
+  it("leaves the reveal scanner out of a consumer that only reads pages", async () => {
+    const outDir = await bundleConsumer("readUrl");
+    const code = readdirSync(outDir, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".mjs"))
+      .map((file) => readFileSync(join(outDir, file), "utf8"))
+      .join("\n");
+
+    expect(code).toContain("readUrl");
+    expect(code).not.toContain("writingsuggestions");
+    expect(code).not.toContain("reveal reads public pages only");
+  });
+
   /** Pi and OMP load the extension source from the installed package, so every file it imports has to ship. */
   it("loads the Pi and OMP extensions from the published files", async () => {
     const jiti = createJiti(import.meta.url, { moduleCache: false, tryNative: false });
@@ -168,6 +181,8 @@ describe("bundled package", () => {
     });
 
     expect(piTools).toContain("web_search");
+    expect(piTools).toContain("web_reveal");
     expect(ompTools).toContain("web_search");
+    expect(ompTools).toContain("web_reveal");
   });
 });

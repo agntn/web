@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 import { builtinProviders } from "../../src/core/providers.ts";
+import { webTools } from "../../src/tools.ts";
 
 /**
  * Text that speaks for the whole catalog and cannot compute its counts. The landing and the OG
@@ -93,5 +94,28 @@ describe.each(CATALOG_PROSE)("%s", (file) => {
     expect(
       lists.filter(({ named, rest }) => rest !== spellOut(total - named)).map(({ list }) => list),
     ).toEqual([]);
+  });
+});
+
+/** Text naming the agent tools; it can't call `webTools()`, so it names all and counts none. */
+const TOOL_PROSE = [
+  "README.md",
+  "docs/content/1.guide/6.cli.md",
+  "docs/content/1.guide/7.agents.md",
+  "docs/app/components/content/LandingHome.vue",
+  "docs/app/components/OgImage/Docs.takumi.vue",
+];
+
+describe.each(TOOL_PROSE)("%s", (file) => {
+  const text = readFileSync(new URL(`../../${file}`, import.meta.url), "utf8");
+
+  it("names every agent tool and puts no number on them", () => {
+    const names = webTools().map((tool) => tool.name);
+    const counts = [...text.matchAll(/\b([A-Za-z]+|\d{1,2}) (?:agent )?tools\b/gu)]
+      .map((match) => asCount(match[1]!))
+      .filter((count) => count !== null);
+
+    expect(names.filter((name) => !text.includes(name))).toEqual([]);
+    expect(counts).toEqual([]);
   });
 });

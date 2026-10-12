@@ -6,9 +6,12 @@ import type {
   SearchBatchAgentItem,
 } from "./core/evidence.ts";
 import type { ProviderFailure } from "./core/fallback.ts";
-import { MAX_SEARCH_CONTINUATION_LENGTH } from "./core/limits.ts";
+import { hiddenKinds, type HiddenKind } from "./core/hidden-kinds.ts";
+import type { HiddenFinding } from "./core/hidden.ts";
+import { MAX_AGENT_READ_CHARS, MAX_SEARCH_CONTINUATION_LENGTH } from "./core/limits.ts";
 import type { ReadUrlDetailedResult } from "./core/read.ts";
 import type { ProviderStatus } from "./core/resolve.ts";
+import type { RevealResult } from "./core/reveal.ts";
 import type { SearchFilterReport } from "./core/search-filters.ts";
 import type {
   ImageSearchResult,
@@ -228,6 +231,252 @@ export function providersText(answer: Readonly<ProvidersAnswer>): string {
       ? answer.providers.map(providerLine)
       : ["No providers registered."]),
   ].join("\n");
+}
+
+/** A reveal cut to what one answer shows, with how many of each kind the page holds. */
+export interface RevealAnswer {
+  readonly text: string;
+  readonly result: RevealResult & {
+    readonly counts: Readonly<Partial<Record<HiddenKind, number>>>;
+    readonly truncated?: true;
+    readonly omitted?: number;
+  };
+}
+
+/** The heading each kind of finding is listed under. */
+const REVEAL_HEADINGS: Readonly<Record<HiddenKind, string>> = {
+  comment: "Comments",
+  hidden: "Hidden elements",
+  field: "Form fields",
+  camouflage: "Text in its background's color",
+  invisible: "Invisible characters",
+  attribute: "Data and nonstandard attributes",
+  meta: "Meta tags",
+  link: "Links",
+  script: "Scripts",
+  style: "Styles",
+};
+
+/** Singular and plural for the count line. */
+const REVEAL_NOUNS: Readonly<Record<HiddenKind, readonly [string, string]>> = {
+  comment: ["comment", "comments"],
+  hidden: ["hidden element", "hidden elements"],
+  field: ["form field", "form fields"],
+  camouflage: ["text in its background's color", "texts in their background's color"],
+  invisible: ["run of invisible characters", "runs of invisible characters"],
+  attribute: ["attribute", "attributes"],
+  meta: ["meta tag", "meta tags"],
+  link: ["link", "links"],
+  script: ["script", "scripts"],
+  style: ["style", "styles"],
+};
+
+/** Below this many characters left, a first finding too long to fit is left out, not cut. */
+const SMALLEST_CUT = 200;
+
+/** One line per finding, by kind. */
+const FINDING_LINES: Readonly<Record<HiddenKind, (finding: HiddenFinding) => string>> = {
+  comment: (finding) =>
+    `line ${finding.line} in ${line(finding.element ?? "document", 80)}: ${commentText(finding.value)}`,
+  hidden: (finding) => `line ${finding.line} ${elementText(finding)}${valueText(finding, ": ")}`,
+  field: (finding) =>
+    `line ${finding.line} ${line(finding.element ?? "field", 80)} ${line(finding.name ?? "(no name)", 200)}${valueText(finding, " = ")} (${line(finding.reason ?? "", 200)})`,
+  camouflage: (finding) =>
+    `line ${finding.line} ${elementText(finding)}${valueText(finding, ": ")}`,
+  invisible: (finding) =>
+    `line ${finding.line}${finding.element === undefined ? "" : ` in ${line(finding.element, 80)}`}: ${codePointsText(finding)} around "${line(finding.value ?? "", 300)}"`,
+  attribute: (finding) =>
+    `line ${finding.line} ${line(finding.element ?? "", 80)} ${line(finding.name ?? "", 200)}${valueText(finding, "=")}${finding.reason === undefined ? "" : ` (${line(finding.reason, 80)})`}${finding.count === undefined ? "" : ` on ${finding.count} elements`}`,
+  meta: (finding) =>
+    `line ${finding.line} ${line(finding.name ?? "meta", 200)}${valueText(finding, ": ")}`,
+  link: (finding) =>
+    `line ${finding.line} ${line(finding.name ?? "link", 80)}${valueText(finding, " ")}`,
+  script: (finding) => codeText(finding),
+  style: (finding) => codeText(finding),
+};
+
+/**
+ * The model's view of a reveal: a header with counts, then findings by kind while they fit.
+ * @param result - What `revealUrl` found.
+ * @param maxChars - Most characters the answer may take.
+ * @returns {RevealAnswer} The text, and the result cut to the findings the text shows.
+ */
+export function revealAnswer(result: Readonly<RevealResult>, maxChars: number): RevealAnswer {
+  const counts = kindCounts(result.findings);
+  const header = revealHeader(result, counts);
+  const writer = new RevealWriter(maxChars - codePoints(header));
+  for (const finding of result.findings) {
+    if (!writer.add(finding)) break;
+  }
+  const omitted = result.findings.length - writer.shown.length;
+  const body = writer.lines.length > 0 ? writer.lines : ["", "Nothing found."];
+  const note =
+    omitted > 0 ? ["", truncationNote(result.findings.slice(writer.shown.length), maxChars)] : [];
+  return {
+    text: [header, ...body, ...note].join("\n"),
+    result: {
+      ...result,
+      counts,
+      findings: writer.shown,
+      ...(omitted > 0 ? { truncated: true as const, omitted } : {}),
+    },
+  };
+}
+
+/** Writes findings under their headings while the budget lasts. */
+class RevealWriter {
+  readonly lines: string[] = [];
+  readonly shown: HiddenFinding[] = [];
+  private kind: HiddenKind | undefined;
+  private left: number;
+
+  constructor(budget: number) {
+    this.left = budget;
+  }
+
+  /**
+   * @param finding - The next finding.
+   * @returns {boolean} False once the budget is spent.
+   */
+  add(finding: HiddenFinding): boolean {
+    const heading = finding.kind === this.kind ? [] : ["", REVEAL_HEADINGS[finding.kind]];
+    const room = this.left - codePoints([...heading, ""].join("\n")) - 1;
+    const shown = withinRoom(finding, room);
+    const text = `  ${FINDING_LINES[finding.kind](shown)}`;
+    const length = codePoints(text);
+    if (shown === finding && length <= room) {
+      return this.write(finding, heading, text, this.left - room + length);
+    }
+    if (this.shown.length > 0 || room < SMALLEST_CUT || shown.value === undefined) return false;
+    const cut = cutFinding(finding, codePoints(shown.value) - (length - room));
+    return this.write(cut, heading, clipText(text, room), this.left);
+  }
+
+  private write(
+    finding: HiddenFinding,
+    heading: readonly string[],
+    text: string,
+    cost: number,
+  ): boolean {
+    this.lines.push(...heading, text);
+    this.shown.push(finding);
+    this.kind = finding.kind;
+    this.left -= cost;
+    return true;
+  }
+}
+
+function revealHeader(
+  result: Readonly<RevealResult>,
+  counts: Readonly<Partial<Record<HiddenKind, number>>>,
+): string {
+  const source =
+    result.archive === "wayback"
+      ? `Read ${line(result.source, 500)}, the Wayback capture as archived, without its toolbar`
+      : result.source === result.url
+        ? undefined
+        : `Read ${line(result.source, 500)}`;
+  const size = `${result.bytes.toLocaleString("en")} bytes${result.partial === true ? ", the start of a longer page" : ""}`;
+  const found = hiddenKinds.flatMap((kind) => {
+    const count = counts[kind];
+    return count === undefined ? [] : [`${count} ${REVEAL_NOUNS[kind][count === 1 ? 0 : 1]}`];
+  });
+  return [
+    `[reveal] ${line(result.url, 500)}`,
+    ...(source === undefined ? [] : [source]),
+    [line(result.contentType ?? "unknown type", 120), size].join(" · "),
+    ...(found.length === 0 ? [] : [`Found ${found.join(", ")}`]),
+  ].join("\n");
+}
+
+function kindCounts(findings: readonly HiddenFinding[]): Partial<Record<HiddenKind, number>> {
+  const counts: Partial<Record<HiddenKind, number>> = {};
+  for (const { kind } of findings) counts[kind] = (counts[kind] ?? 0) + 1;
+  return counts;
+}
+
+function truncationNote(left: readonly HiddenFinding[], maxChars: number): string {
+  const counts = kindCounts(left);
+  const kinds = hiddenKinds.flatMap((kind) => {
+    const count = counts[kind];
+    return count === undefined ? [] : [`${count} ${REVEAL_NOUNS[kind][count === 1 ? 0 : 1]}`];
+  });
+  const next =
+    maxChars < MAX_AGENT_READ_CHARS
+      ? `raise maxChars above ${maxChars} to list them`
+      : "the page holds more than one answer shows";
+  return `[truncated: left out ${kinds.join(", ")}; ${next}]`;
+}
+
+function elementText(finding: HiddenFinding): string {
+  return `${line(finding.element ?? "element", 80)} (${line(finding.reason ?? "", 300)})`;
+}
+
+/**
+ * A finding's value after a separator, or `(no text)` for a hidden element that has none.
+ * @param finding - The finding.
+ * @param separator - What goes between the label and the value.
+ * @returns {string} The separator and the value with its full size when it was cut, or nothing.
+ */
+function valueText(finding: HiddenFinding, separator: string): string {
+  if (finding.value === undefined) return finding.kind === "hidden" ? ": (no text)" : "";
+  const size = finding.size === undefined ? "" : ` [cut from ${finding.size} characters]`;
+  return `${separator}${line(finding.value, 1_200)}${size}`;
+}
+
+function commentText(value: string | undefined): string {
+  return sanitizeTerminalContent(value ?? "").replaceAll("\n", "\n    ");
+}
+
+function codePointsText(finding: HiddenFinding): string {
+  const points = (finding.codePoints ?? []).join(" ");
+  const more = finding.size === undefined ? "" : ` and more, ${finding.size} in all`;
+  const spelled = finding.reason === undefined ? "" : `, ${line(finding.reason, 600)}`;
+  return `${points}${more}${spelled}`;
+}
+
+function codeText(finding: HiddenFinding): string {
+  const reason = finding.reason === undefined ? "" : ` (${line(finding.reason, 120)})`;
+  const size = finding.size === undefined ? "" : ` [${finding.size} characters]`;
+  return `line ${finding.line} ${line(finding.value ?? "", 600)}${reason}${size}`;
+}
+
+/**
+ * A finding whose value is no longer than the room left, so a huge one is never sanitized whole.
+ * @param finding - The finding.
+ * @param room - Characters left in the answer.
+ * @returns {HiddenFinding} The finding itself when it fits, otherwise a copy with a shorter value.
+ */
+function withinRoom(finding: HiddenFinding, room: number): HiddenFinding {
+  const value = finding.value;
+  if (value === undefined || value.length <= room) return finding;
+  return { ...finding, value: value.slice(0, Math.max(0, room) + 1) };
+}
+
+/**
+ * A finding whose value is cut to fit the space left.
+ * @param finding - The finding.
+ * @param length - How many characters of its value fit.
+ * @returns {HiddenFinding} The finding with the value cut and its full size kept.
+ */
+function cutFinding(finding: HiddenFinding, length: number): HiddenFinding {
+  const value = finding.value ?? "";
+  return {
+    ...finding,
+    value: clipText(value, Math.max(1, length)),
+    size: finding.size ?? codePoints(value),
+  };
+}
+
+function clipText(text: string, max: number): string {
+  const characters = Array.from(text);
+  return characters.length <= max ? text : `${characters.slice(0, Math.max(0, max - 1)).join("")}…`;
+}
+
+function codePoints(text: string): number {
+  let count = 0;
+  for (const _character of text) count += 1;
+  return count;
 }
 
 /**

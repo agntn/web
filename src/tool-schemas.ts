@@ -9,6 +9,7 @@ import {
   MAX_READ_CONTINUATION_LENGTH,
   MAX_SEARCH_CONTINUATION_LENGTH,
 } from "./core/limits.ts";
+import { hiddenKinds } from "./core/hidden-kinds.ts";
 import { builtinProviders, imageSearchProviderNames, readProviderNames } from "./core/providers.ts";
 import { searchFilterNames } from "./core/types.ts";
 
@@ -189,7 +190,7 @@ function batchWords(description: string) {
 }
 
 /**
- * Input schemas of the four tools and of the two commands that take a batch as words.
+ * Input schemas of the tools and of the two commands that take a batch as words.
  * @returns {object} Closed object schemas by tool.
  */
 export function webInputSchemas() {
@@ -230,6 +231,27 @@ export function webInputSchemas() {
         Type.Boolean({
           description:
             "Let the provider answer from its cache; --no-cache asks for a fresh copy when it supports that.",
+        }),
+      ),
+    }),
+    reveal: strictObject({
+      url: Type.String({
+        description:
+          "Public HTTP or HTTPS page URL. A Wayback Machine capture is read as archived, without the toolbar.",
+        minLength: 1,
+      }),
+      maxChars: Type.Optional(
+        Type.Integer({
+          description: `Maximum characters of findings to return. Defaults to ${DEFAULT_AGENT_READ_MAX_CHARS}.`,
+          minimum: 1,
+          maximum: MAX_AGENT_READ_CHARS,
+        }),
+      ),
+      timeoutSeconds: Type.Optional(
+        Type.Integer({
+          description: "Give up after this many seconds.",
+          minimum: 1,
+          maximum: MAX_AGENT_TIMEOUT_SECONDS,
         }),
       ),
     }),
@@ -385,8 +407,45 @@ export function webOutputSchemas() {
         Type.Array(readBatchItem),
       ]),
     }),
+    reveal: strictObject({ result: revealResult() }),
     providers: strictObject({ result: providersResult() }),
   };
+}
+
+/**
+ * What `web_reveal` reports: the page it read and the findings that fit the character budget.
+ * @returns {TObject} The schema of its `result`.
+ */
+function revealResult() {
+  const optionalText = Type.Optional(Type.String());
+  const finding = strictObject({
+    kind: Type.Enum(hiddenKinds),
+    line: Type.Integer({ minimum: 1 }),
+    element: optionalText,
+    reason: optionalText,
+    name: optionalText,
+    value: optionalText,
+    size: Type.Optional(Type.Integer({ minimum: 0 })),
+    codePoints: Type.Optional(Type.Array(Type.String())),
+    count: Type.Optional(Type.Integer({ minimum: 2 })),
+  });
+  const counts = strictObject(
+    Object.fromEntries(
+      hiddenKinds.map((kind) => [kind, Type.Optional(Type.Integer({ minimum: 1 }))]),
+    ),
+  );
+  return strictObject({
+    url: Type.String(),
+    source: Type.String(),
+    archive: Type.Optional(Type.Literal("wayback")),
+    contentType: optionalText,
+    bytes: Type.Integer({ minimum: 0 }),
+    partial: Type.Optional(Type.Boolean()),
+    counts,
+    findings: Type.Array(finding),
+    truncated: Type.Optional(Type.Boolean()),
+    omitted: Type.Optional(Type.Integer({ minimum: 1 })),
+  });
 }
 
 /**

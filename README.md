@@ -17,6 +17,7 @@ Docs and a live explorer: [web.agntn.dev](https://web.agntn.dev).
 
 - 🧩 **Thirteen backends, one contract.** Brave, Context.dev, Exa, Firecrawl, Jina, Marginalia, Mojeek, OpenAI Codex, SearXNG, SerpAPI, SerpBase, Tavily and TinyFish, and from your side the difference is a string.
 - 🔎 **Search, read, reverse image.** Query to results, URL to Markdown, image URL to the pages it shows up on. Three calls, not three packages.
+- 🕵️ **What the page hides.** Comments, hidden form fields, invisible characters, white text on white. `web reveal` lists them by line, straight from the HTML.
 - 🌐 **`all` means all.** One query goes to every provider you have a key for, comes back deduplicated by URL with the UTM junk stripped, and each hit says which providers agreed on it.
 - 🛟 **Fallback you don't write.** Out of credits on Firecrawl, rate limited on SerpAPI? The next configured provider gets the query and the answer names who actually replied.
 - 📏 **Reads have a ceiling.** `maxChars` is exact, counted in code points, and a page that doesn't fit hands you a continuation token instead of 400 kB you didn't ask for.
@@ -59,7 +60,7 @@ How many r are in strawberry? | AI Roundtable by Opper
 
 Three. All four models agreed, good for them ;)
 
-No subcommand, no flags. Anything that isn't `search`, `read`, `search-image`, `providers` or `mcp` is a query. Which provider answered? The first one with a key in your env, checked in this order: Exa, Brave, Context.dev, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, Mojeek, Marginalia, then a saved Codex login, then a SearXNG on `localhost:8080`. No key anywhere means search has nobody to call and says so. `--provider brave` if you'd rather pick.
+No subcommand, no flags. Anything that isn't `search`, `read`, `search-image`, `reveal`, `providers` or `mcp` is a query. Which provider answered? The first one with a key in your env, checked in this order: Exa, Brave, Context.dev, Firecrawl, Jina, Tavily, TinyFish, SerpAPI, SerpBase, Mojeek, Marginalia, then a saved Codex login, then a SearXNG on `localhost:8080`. No key anywhere means search has nobody to call and says so. `--provider brave` if you'd rather pick.
 
 Reading is different, that one works with nothing in your env:
 
@@ -99,6 +100,7 @@ web providers
 | `web search <query...>`  | One query or a batch, one provider or `all`   | `web search "a" "b" --provider all --json`       |
 | `web search-image <url>` | Pages that contain or resemble a public image | `web search-image https://.../logo.png`          |
 | `web read <url...>`      | One URL or a batch into normalized content    | `web read https://example.com --max-chars 20000` |
+| `web reveal <url>`       | What the page keeps from its reader           | `web reveal https://gsmg.io/theseedisplanted`    |
 | `web providers`          | Who is configured and what each one can do    | `web providers`                                  |
 | `web mcp`                | The MCP server on stdio                       | `web mcp`                                        |
 
@@ -161,7 +163,7 @@ omp install @agntn/web
 }
 ```
 
-Four tools, `web_search`, `web_image_search`, `web_read` and `web_providers`, one definition each, the same four on the AI SDK (`@agntn/web/ai`), MCP, Pi, OMP and the CLI. Reads stop at 20 000 characters unless the model asks for more, and the page's link list and the favicon URLs on search results stay out unless it asks for those too, so nobody stuffs a whole site into a context window by accident. Pi also gets `/web` and `/web-providers`. Schemas and envelopes for each host: [Agents guide](https://web.agntn.dev/guide/agents).
+`web_search`, `web_image_search`, `web_read`, `web_reveal` and `web_providers`, one definition each, the same set on the AI SDK (`@agntn/web/ai`), MCP, Pi, OMP and the CLI. Reads stop at 20 000 characters unless the model asks for more, and the page's link list and the favicon URLs on search results stay out unless it asks for those too, so nobody stuffs a whole site into a context window by accident. Pi also gets `/web` and `/web-providers`. Schemas and envelopes for each host: [Agents guide](https://web.agntn.dev/guide/agents).
 
 ## 🚫 What this does not do
 

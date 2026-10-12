@@ -16,6 +16,7 @@ import {
 import { optionalText } from "./core/options.ts";
 import { imageSearchProviderNames } from "./core/providers.ts";
 import { packageCapabilities, readUrlDetailed } from "./core/read.ts";
+import { revealUrl } from "./core/reveal.ts";
 import { readProviders, searchImageProviders, searchProviders } from "./core/registry.ts";
 import { listProvidersAsync } from "./core/resolve.ts";
 import type { ReadOptions, SearchPageOptions } from "./core/types.ts";
@@ -24,6 +25,7 @@ import {
   providersText,
   readBatchText,
   readText,
+  revealAnswer,
   searchAllText,
   searchBatchText,
   searchProviderText,
@@ -170,6 +172,20 @@ export async function providers(
   const statuses = await withCodexHostAuth(auth, () => listProvidersAsync({ signal }), sessionId);
   const result = { runtime: runtimeInfo, packageCapabilities, providers: statuses };
   return answer(providersText(result), result);
+}
+
+/**
+ * Lists what a page keeps from its reader, as much as the answer's character budget shows.
+ * @param {Args} args - Tool arguments.
+ * @param signal - Cancellation from the host.
+ * @returns {Promise<WebToolResult>} Model text and the findings that fit.
+ */
+export async function reveal(args: Args, signal?: Readonly<AbortSignal>): Promise<WebToolResult> {
+  const url = stringArg("url", args.url) ?? "";
+  const maxChars = readMaxCharsArg(args.maxChars, true) ?? DEFAULT_AGENT_READ_MAX_CHARS;
+  const deadline = deadlineAfterSeconds(intArg("timeoutSeconds", args.timeoutSeconds));
+  const { text, result } = revealAnswer(await revealUrl(url, { signal, deadline }), maxChars);
+  return answer(text, result);
 }
 
 function answer(text: string, result: unknown): WebToolResult {

@@ -91,18 +91,18 @@ const adaptersTitle = `${total[0]!.toUpperCase()}${total.slice(1)} adapters, one
     </section>
 
     <LandingFeature
-      title="Four tools, every host"
+      title="Every tool, every host"
       to="/guide/agents"
       link="AI SDK, MCP, Pi and OMP"
       :checks="[
-        'web_search, web_image_search, web_read and web_providers, same schema on every surface',
+        'web_search, web_image_search, web_read, web_reveal and web_providers, same schema on every surface',
         'Provider names are checked against the live registry, so a custom provider works in a tool call too',
         'The host abort signal cancels the provider request. Reads default to 20 000 characters',
       ]"
       reverse
     >
       <code class="web-code">searchTool</code> from the <code class="web-code">/ai</code> subpath is
-      a Vercel AI SDK tool, <code class="web-code">web mcp</code> serves the same four over stdio.
+      a Vercel AI SDK tool, <code class="web-code">web mcp</code> serves the same set over stdio.
       The model reads a short header and numbered results, your code gets the data underneath.
       <template #visual>
         <LandingToolCall :sample="current" />
