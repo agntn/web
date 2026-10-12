@@ -39,10 +39,10 @@ const ERROR_BODY_BYTES = 16_384;
 const SNIFF_BYTES = 1_024;
 const WAYBACK_HOSTS = new Set(["web.archive.org", "wayback.archive.org"]);
 const WAYBACK_CAPTURE = /^\/web\/(?<stamp>\d{1,14})(?:[a-z]{2}_)?\/(?<target>.+)$/u;
-const MARKUP_TYPE =
-  /^(?:text\/html|application\/xhtml\+xml|(?:text|application)\/xml|[\w.+-]+\/[\w.+-]+\+xml)$/u;
+/** HTML is parsed; XML, SVG and feeds follow other tree rules, so they are read as text. */
+const MARKUP_TYPE = /^(?:text\/html|application\/xhtml\+xml)$/u;
 const TEXT_TYPE =
-  /^(?:text\/[\w.+-]+|application\/(?:json|javascript|ecmascript|[\w.+-]+\+json))$/u;
+  /^(?:text\/[\w.+-]+|application\/(?:json|javascript|ecmascript|xml|[\w.+-]+\+json)|[\w.+-]+\/[\w.+-]+\+xml)$/u;
 const CHARSET = /charset\s*=\s*["']?(?<label>[\w.:-]+)/iu;
 const MARKUP_START = /^\s*<(?:!doctype\s+html|html|head|body|!--)/iu;
 const TITLE = /<title[^>]*>(?<title>[^<]*)</iu;
@@ -350,7 +350,7 @@ async function readPage(response: Received, request: PageRequest): Promise<Page>
   if (kind === undefined) {
     await response.cancel();
     throw new UnreadablePageError(
-      `${sanitizeUrl(response.url)} is ${clip(response.contentType, 100)}, not a page reveal can read: it reads HTML, XML and text`,
+      `${sanitizeUrl(response.url)} is ${clip(response.contentType, 100)}, not a page reveal can read: it reads HTML and text`,
     );
   }
   const body = await readText(response, request.maxBytes);

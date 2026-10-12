@@ -454,7 +454,7 @@ class HiddenScanner {
     declarations: Declarations,
   ): HiddenText | undefined {
     const inherited = this.stack.at(-1)?.hidden;
-    if (inherited !== undefined) return this.shows(tag.name, declarations) ? undefined : inherited;
+    if (inherited !== undefined && !this.shows(tag.name, declarations)) return inherited;
     const reason = hiddenBy(tag, declarations);
     if (reason === undefined) return undefined;
     return new HiddenText("hidden", place.line, place.label, reason, fallbackOf(tag));

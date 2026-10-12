@@ -60,7 +60,11 @@ const ASCII_LETTER = /[A-Za-z]/u;
 /** Markup that opens like a comment but is a declaration a reveal has no use for. */
 const DECLARATIONS: Readonly<Record<string, RegExp>> = { "!": /^doctype\b/iu, "?": /^xml\b/iu };
 /** Numeric references need no `;`, as browsers read `key&#8203word`; named ones do. */
-const CHARACTER_REFERENCE = /&(?:#[Xx]([\dA-Fa-f]+);?|#(\d+);?|([A-Za-z][A-Za-z\d]{1,31});)/gu;
+const CHARACTER_REFERENCE =
+  /&(?:#[Xx]([\dA-Fa-f]+);?|#(\d+);?|([A-Za-z][A-Za-z\d]{1,31});|(amp|lt|gt|quot|nbsp|shy|copy|reg|laquo|raquo|middot|deg|times))/gu;
+/** In an attribute, a legacy name followed by a letter, digit or \`=\` stays as written. */
+const ATTRIBUTE_REFERENCE =
+  /&(?:#[Xx]([\dA-Fa-f]+);?|#(\d+);?|([A-Za-z][A-Za-z\d]{1,31});|(amp|lt|gt|quot|nbsp|shy|copy|reg|laquo|raquo|middot|deg|times)(?![A-Za-z\d=]))/gu;
 
 /** Named references hidden text uses, plus common ones; any other stays as written. */
 const NAMED_REFERENCES: Readonly<Record<string, string>> = {
@@ -117,18 +121,21 @@ export function tokenizeHtml(html: string): HtmlToken[] {
 /**
  * Decode character references the way text and attribute values show them.
  * @param text - Text or an attribute value as written.
+ * @param attribute - Read it as an attribute value, where a legacy name before a letter stays.
  * @returns {string} The text a reader sees; an unknown or out of range reference stays as written.
  */
-export function decodeCharacterReferences(text: string): string {
+export function decodeCharacterReferences(text: string, attribute = false): string {
   if (!text.includes("&")) return text;
   return text.replaceAll(
-    CHARACTER_REFERENCE,
+    attribute ? ATTRIBUTE_REFERENCE : CHARACTER_REFERENCE,
     (
       reference: string,
       hex: string | undefined,
       decimal: string | undefined,
-      name: string | undefined,
+      named: string | undefined,
+      legacy: string | undefined,
     ) => {
+      const name = named ?? legacy;
       if (name !== undefined) {
         return Object.hasOwn(NAMED_REFERENCES, name) ? NAMED_REFERENCES[name]! : reference;
       }
@@ -364,7 +371,7 @@ class AttributeReader {
     }
     if (this.seen.has(name)) return;
     this.seen.add(name);
-    this.attributes.push({ name, value: decodeCharacterReferences(value) });
+    this.attributes.push({ name, value: decodeCharacterReferences(value, true) });
   }
 
   private value(): string {

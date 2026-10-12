@@ -167,6 +167,30 @@ describe("revealHtml", () => {
     expect(hidden.map(({ value }) => value)).toEqual(["gone", "tiny", "out still out"]);
   });
 
+  it("still hides a descendant that undoes visibility but hides itself", () => {
+    const html =
+      "<div style='visibility:hidden'>a<span style='visibility:visible;display:none'>b</span></div>";
+
+    const hidden = ofKind(revealHtml(html), "hidden");
+
+    expect(hidden.map(({ reason, value }) => [reason, value])).toEqual([
+      ["display: none", "b"],
+      ["visibility: hidden", "a"],
+    ]);
+  });
+
+  it("keeps a heading inside an open inline element, as the HTML parser does", () => {
+    const hidden = ofKind(revealHtml("<h1 hidden>secret<span><h2>visible</h2>"), "hidden");
+
+    expect(hidden).toEqual([expect.objectContaining({ value: "secretvisible" })]);
+  });
+
+  it("keeps an escaped quote inside a CSS string", () => {
+    const html = String.raw`<div style="--x:'\';display:none;'">shown</div>`;
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
+  });
+
   it("shows only the first summary of closed details", () => {
     const html = "<details><summary>a</summary><summary>b</summary>c</details>";
 
@@ -254,6 +278,15 @@ describe("revealHtml", () => {
     const invisible = ofKind(revealHtml("<p>key&#8203word and &#x200Cmore</p>"), "invisible");
 
     expect(invisible.map(({ codePoints }) => codePoints?.[0])).toEqual(["U+200B", "U+200C"]);
+  });
+
+  it("decodes a legacy name without its semicolon in text, not before a letter in an attribute", () => {
+    const invisible = ofKind(revealHtml("<p data-k='a&shyb'>x&shyword</p>"), "invisible");
+
+    expect(invisible.map(({ element, codePoints }) => [element, codePoints?.[0]])).toEqual([
+      ["p", "U+00AD"],
+    ]);
+    expect(invisible[0]?.value).toBe("x⟨U+00AD⟩word");
   });
 
   it("leaves the joiners text needs and an opening byte order mark alone", () => {
@@ -533,6 +566,20 @@ describe("revealUrl", () => {
     await expect(revealUrl(`${base}/image`, { allowPrivateNetwork: true })).rejects.toThrow(
       UnreadablePageError,
     );
+  });
+
+  it.each(["application/xml", "image/svg+xml"])("reads %s as text, not HTML", async (type) => {
+    routes.set("/feed", [
+      {
+        status: 200,
+        headers: { "Content-Type": type },
+        body: `<root><![CDATA[shown]]><!-- note --><a/>key${ZWSP}word</root>`,
+      },
+    ]);
+
+    const result = await revealUrl(`${base}/feed`, { allowPrivateNetwork: true });
+
+    expect(result.findings.map(({ kind }) => kind)).toEqual(["invisible"]);
   });
 
   it("looks for invisible characters in a text file without parsing it as HTML", async () => {

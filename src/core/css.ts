@@ -276,11 +276,12 @@ function winner(
  */
 function splitTopLevel(text: string, separator: string): string[] {
   const parts: string[] = [];
+  const masked = text.replaceAll(/\\[\s\S]/gu, (escape) => "_".repeat(escape.length));
   let depth = 0;
   let quote = "";
   let start = 0;
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index]!;
+  for (let index = 0; index < masked.length; index += 1) {
+    const character = masked[index]!;
     const quoted = quote !== "";
     quote = quoteAfter(quote, character);
     if (!quoted && quote === "") depth += NESTING[character] ?? 0;
