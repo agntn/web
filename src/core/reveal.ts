@@ -39,8 +39,8 @@ const ERROR_BODY_BYTES = 16_384;
 const SNIFF_BYTES = 1_024;
 const WAYBACK_HOSTS = new Set(["web.archive.org", "wayback.archive.org"]);
 const WAYBACK_CAPTURE = /^\/web\/(?<stamp>\d{1,14})(?:[a-z]{2}_)?\/(?<target>.+)$/u;
-/** HTML is parsed; XML, SVG and feeds follow other tree rules, so they are read as text. */
-const MARKUP_TYPE = /^(?:text\/html|application\/xhtml\+xml)$/u;
+/** HTML is parsed; XHTML, XML, SVG and feeds follow XML tree rules, so they are read as text. */
+const MARKUP_TYPE = /^text\/html$/u;
 const TEXT_TYPE =
   /^(?:text\/[\w.+-]+|application\/(?:json|javascript|ecmascript|xml|[\w.+-]+\+json)|[\w.+-]+\/[\w.+-]+\+xml)$/u;
 const CHARSET = /charset\s*=\s*["']?(?<label>[\w.:-]+)/iu;

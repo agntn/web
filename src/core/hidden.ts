@@ -86,6 +86,14 @@ const SINGLETON_ELEMENTS = new Set(["html", "head", "body"]);
 const HEADINGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 /** Hiding properties that inherit, so a descendant can set them back. */
 const INHERITED_HIDING = new Set(["visibility", "font-size", "color"]);
+/** Values that undo an inherited hiding; `inherit`, `em` and `%` follow the parent. */
+const VISIBLE_VALUES: Readonly<Record<string, RegExp>> = {
+  visibility: /^visible$/iu,
+  "font-size":
+    /^(?:(?:\d+(?:\.\d+)?|\.\d+)(?:px|pt|pc|in|cm|mm|q|rem|vw|vh|vmin|vmax)|medium|(?:x{1,3}-)?(?:small|large))$/iu,
+};
+/** Media a `<style>` applies to on a screen of any size. */
+const SCREEN_MEDIA = /^(?:all|screen)?$/iu;
 const FIELD_ELEMENTS = new Set(["input", "select", "textarea", "button"]);
 /** Raw text a browser never draws: code, and the fallbacks for frames and plugins. */
 const UNDRAWN_ELEMENTS = new Set([
@@ -375,7 +383,8 @@ class HiddenScanner {
         this.fileRules(parseStylesheet(token.text, this.ruleCount));
         if (/@import\b/iu.test(token.text)) this.assumeDefaults = false;
       }
-      inStyle = token.kind === "start" && token.name === "style";
+      inStyle =
+        token.kind === "start" && token.name === "style" && forScreen(attribute(token, "media"));
       if (token.kind === "start") this.prepareTag(token);
     }
   }
@@ -724,6 +733,15 @@ function hiddenBy(tag: HtmlStartTag, declarations: Declarations): string | undef
 }
 
 /**
+ * Whether a `<style>` applies on any screen, like the `@media` rules the stylesheet parser skips.
+ * @param media - Its `media` attribute.
+ * @returns {boolean} True for no media, `all` or `screen` in its list.
+ */
+function forScreen(media: string | undefined): boolean {
+  return (media ?? "").split(",").some((query) => SCREEN_MEDIA.test(query.trim()));
+}
+
+/**
  * Whether an element's own declarations undo a hiding it inherits; `display: none` and the
  * rest hide the whole subtree, but `visibility`, `font-size` and `color` inherit and give way.
  * @param reason - The inherited reason, starting with its property.
@@ -734,7 +752,11 @@ function overridesHiding(reason: string, declarations: Declarations): boolean {
   const property = reason.slice(0, reason.indexOf(":"));
   const own = declarations[property];
   if (own === undefined || !INHERITED_HIDING.has(property)) return false;
-  return hidingReason({ [property]: own }) === undefined;
+  if (property === "color") return (parseColor(own.value)?.alpha ?? 0) > 0;
+  const visible = Object.hasOwn(VISIBLE_VALUES, property) ? VISIBLE_VALUES[property] : undefined;
+  return (
+    visible?.test(own.value.trim()) === true && hidingReason({ [property]: own }) === undefined
+  );
 }
 
 /**

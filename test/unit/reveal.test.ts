@@ -109,6 +109,12 @@ describe("revealHtml", () => {
       "display: none via .s",
     ],
     ["visibility", "<p style='visibility:hidden'>x</p>", "visibility: hidden"],
+    ["a declaration with a comment in it", "<p style='display:/**/none'>x</p>", "display: none"],
+    [
+      "a screen stylesheet",
+      "<style media='screen'>.s{display:none}</style><p class=s>x</p>",
+      "display: none via .s",
+    ],
     ["opacity", "<p style='opacity:0.0'>x</p>", "opacity: 0.0"],
     ["font size", "<p style='font-size:0px'>x</p>", "font-size: 0px"],
     ["transparent text", "<p style='color:rgba(0,0,0,0)'>x</p>", "color: rgba(0,0,0,0)"],
@@ -149,6 +155,7 @@ describe("revealHtml", () => {
     ],
     ["half opacity", "<p style='opacity:.5'>x</p>"],
     ["an open dialog", "<dialog open>x</dialog>"],
+    ["a print stylesheet", "<style media='print'>.s{display:none}</style><p class=s>x</p>"],
     ["an open details", "<details open><summary>s</summary>x</details>"],
     ["a small negative margin", "<p style='text-indent:-2em'>x</p>"],
   ])("leaves %s in sight", (_label, html) => {
@@ -165,6 +172,17 @@ describe("revealHtml", () => {
     const hidden = ofKind(revealHtml(html), "hidden");
 
     expect(hidden.map(({ value }) => value)).toEqual(["gone", "tiny", "out still out"]);
+  });
+
+  it("keeps hiding a descendant whose value still follows the parent", () => {
+    const html = [
+      "<div style='color:transparent'>a<span style='color:inherit'>b</span></div>",
+      "<div style='font-size:0'>c<b style='font-size:1em'>d</b></div>",
+    ].join("\n");
+
+    const hidden = ofKind(revealHtml(html), "hidden");
+
+    expect(hidden.map(({ value }) => value)).toEqual(["ab", "cd"]);
   });
 
   it("still hides a descendant that undoes visibility but hides itself", () => {
@@ -287,6 +305,15 @@ describe("revealHtml", () => {
       ["p", "U+00AD"],
     ]);
     expect(invisible[0]?.value).toBe("x⟨U+00AD⟩word");
+  });
+
+  it("decodes the named aliases of a zero width space", () => {
+    const invisible = ofKind(
+      revealHtml("<p>a&NegativeMediumSpace;b&NegativeVeryThinSpace;c</p>"),
+      "invisible",
+    );
+
+    expect(invisible.map(({ codePoints }) => codePoints?.[0])).toEqual(["U+200B", "U+200B"]);
   });
 
   it("leaves the joiners text needs and an opening byte order mark alone", () => {
@@ -568,19 +595,22 @@ describe("revealUrl", () => {
     );
   });
 
-  it.each(["application/xml", "image/svg+xml"])("reads %s as text, not HTML", async (type) => {
-    routes.set("/feed", [
-      {
-        status: 200,
-        headers: { "Content-Type": type },
-        body: `<root><![CDATA[shown]]><!-- note --><a/>key${ZWSP}word</root>`,
-      },
-    ]);
+  it.each(["application/xml", "image/svg+xml", "application/xhtml+xml"])(
+    "reads %s as text, not HTML",
+    async (type) => {
+      routes.set("/feed", [
+        {
+          status: 200,
+          headers: { "Content-Type": type },
+          body: `<root><![CDATA[shown]]><!-- note --><a/>key${ZWSP}word</root>`,
+        },
+      ]);
 
-    const result = await revealUrl(`${base}/feed`, { allowPrivateNetwork: true });
+      const result = await revealUrl(`${base}/feed`, { allowPrivateNetwork: true });
 
-    expect(result.findings.map(({ kind }) => kind)).toEqual(["invisible"]);
-  });
+      expect(result.findings.map(({ kind }) => kind)).toEqual(["invisible"]);
+    },
+  );
 
   it("looks for invisible characters in a text file without parsing it as HTML", async () => {
     routes.set("/notes.txt", [

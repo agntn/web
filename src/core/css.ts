@@ -106,7 +106,7 @@ const NAMED_COLORS: Readonly<Record<string, readonly [number, number, number]>> 
  */
 export function parseDeclarations(text: string, source?: string): Record<string, Declaration> {
   const declarations: Record<string, Declaration> = {};
-  for (const part of splitTopLevel(text, ";")) {
+  for (const part of splitTopLevel(withoutComments(text), ";")) {
     const colon = part.indexOf(":");
     if (colon <= 0) continue;
     const property = part.slice(0, colon).trim().toLowerCase();
