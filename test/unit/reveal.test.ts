@@ -420,6 +420,14 @@ describe("revealHtml", () => {
     expect(performance.now() - started).toBeLessThan(3_000);
   });
 
+  it("keeps a processing instruction that is not the XML declaration as a comment", () => {
+    const html = '<?xml version="1.0"?><?xml-stylesheet href="a.xsl"?><p>x</p>';
+
+    expect(ofKind(revealHtml(html), "comment").map(({ value }) => value)).toEqual([
+      'xml-stylesheet href="a.xsl"?',
+    ]);
+  });
+
   it("reads comments a browser keeps, and markup that breaks off", () => {
     const findings = revealHtml("<!--a--><!-->b<?php echo 1 ?><![CDATA[c]]></><div title='open");
 

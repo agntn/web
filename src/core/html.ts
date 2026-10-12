@@ -58,7 +58,10 @@ const ENDS = {
 const SPACE = /[\t\n\f\r ]/u;
 const ASCII_LETTER = /[A-Za-z]/u;
 /** Markup that opens like a comment but is a declaration a reveal has no use for. */
-const DECLARATIONS: Readonly<Record<string, RegExp>> = { "!": /^doctype\b/iu, "?": /^xml\b/iu };
+const DECLARATIONS: Readonly<Record<string, RegExp>> = {
+  "!": /^doctype\b/iu,
+  "?": /^xml(?=\s|\?|$)/iu,
+};
 /** Numeric references need no `;`, as browsers read `key&#8203word`; named ones do. */
 const CHARACTER_REFERENCE =
   /&(?:#[Xx]([\dA-Fa-f]+);?|#(\d+);?|([A-Za-z][A-Za-z\d]{1,31});|(amp|lt|gt|quot|nbsp|shy|copy|reg|laquo|raquo|middot|deg|times))/gu;
