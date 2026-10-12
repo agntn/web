@@ -175,6 +175,12 @@ describe("revealHtml", () => {
     expect(hidden).toEqual([expect.objectContaining({ reason: "closed details", value: "bc" })]);
   });
 
+  it("ends a heading where the next one starts", () => {
+    const hidden = ofKind(revealHtml("<h1 hidden>secret<h2>visible</h2>"), "hidden");
+
+    expect(hidden).toEqual([expect.objectContaining({ value: "secret" })]);
+  });
+
   it("ends a hidden paragraph where the next one starts", () => {
     const hidden = ofKind(revealHtml("<p hidden>gone<p>shown</p>"), "hidden");
 
@@ -205,6 +211,16 @@ describe("revealHtml", () => {
         value: "black on black",
       }),
     ]);
+  });
+
+  it("lets the later of background and background-color decide", () => {
+    const later = "<span style='background-color:#000;background:#fff;color:#fff'>x</span>";
+    const earlier = "<span style='background:#fff;background-color:#000;color:#fff'>y</span>";
+
+    expect(ofKind(revealHtml(later), "camouflage")).toEqual([
+      expect.objectContaining({ value: "x" }),
+    ]);
+    expect(ofKind(revealHtml(earlier), "camouflage")).toEqual([]);
   });
 
   it("assumes no default colors once a stylesheet is linked", () => {

@@ -83,6 +83,7 @@ const VOID_ELEMENTS = new Set([
   "wbr",
 ]);
 const SINGLETON_ELEMENTS = new Set(["html", "head", "body"]);
+const HEADINGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 /** Hiding properties that inherit, so a descendant can set them back. */
 const INHERITED_HIDING = new Set(["visibility", "font-size", "color"]);
 const FIELD_ELEMENTS = new Set(["input", "select", "textarea", "button"]);
@@ -322,7 +323,10 @@ export function invisibleCharacters(text: string): HiddenFinding[] {
   );
 }
 
-/** Walks the tokens once with the stack of open elements. */
+/**
+ * Walks the tokens once with the stack of open elements. Implied ends follow HTML for paragraphs,
+ * lists, options, tables and headings; the rest of its error recovery is out of scope.
+ */
 class HiddenScanner {
   private readonly lines: number[];
   private readonly tokens: HtmlToken[];
@@ -547,6 +551,7 @@ class HiddenScanner {
     const rule = Object.hasOwn(IMPLIED_END, name) ? IMPLIED_END[name] : undefined;
     if (rule !== undefined) this.closeWithin(rule.closes, rule.scope);
     if (CLOSES_PARAGRAPH.has(name)) this.closeWithin(["p"], PARAGRAPH_SCOPE);
+    if (HEADINGS.has(name) && HEADINGS.has(this.stack.at(-1)?.name ?? "")) this.pop();
   }
 
   /**
@@ -814,7 +819,7 @@ function ownBackground(
   label: string,
 ): Paint | undefined {
   const declared = backgroundColor(declarations);
-  const source = declarations["background-color"]?.source ?? declarations.background?.source;
+  const source = declarations["background-color"]?.source;
   if (declared !== undefined) return { color: declared, source: source ?? label };
   const bgcolor = attribute(tag, "bgcolor");
   const color = bgcolor === undefined ? undefined : parseColor(bgcolor);

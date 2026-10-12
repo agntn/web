@@ -115,8 +115,24 @@ export function parseDeclarations(text: string, source?: string): Record<string,
     const value = (important ? raw.replace(/!\s*important$/iu, "") : raw).trim();
     const declaration = { value, important, ...(source === undefined ? {} : { source }) };
     declarations[property] = winner(declarations[property], declaration);
+    if (property === "background") {
+      const color = { ...declaration, value: shorthandColor(value) };
+      declarations["background-color"] = winner(declarations["background-color"], color);
+    }
   }
   return declarations;
+}
+
+/**
+ * The color a `background` shorthand sets; one without a color resets it to transparent.
+ * @param value - The shorthand's value.
+ * @returns {string} The color as written, or `transparent`.
+ */
+function shorthandColor(value: string): string {
+  for (const [token] of value.slice(0, BACKGROUND_SCAN).matchAll(COLOR_TOKEN)) {
+    if (parseColor(token) !== undefined) return token;
+  }
+  return "transparent";
 }
 
 /**
@@ -211,13 +227,9 @@ export function parseColor(value: string): Color | undefined {
  * @returns {Color | undefined} The color, or undefined when none is set or it is transparent.
  */
 export function backgroundColor(declarations: Declarations): Color | undefined {
-  const color = declarations["background-color"]?.value ?? declarations.background?.value;
-  if (color === undefined) return undefined;
-  for (const [token] of color.slice(0, BACKGROUND_SCAN).matchAll(COLOR_TOKEN)) {
-    const parsed = parseColor(token);
-    if (parsed !== undefined) return parsed.alpha === 0 ? undefined : parsed;
-  }
-  return undefined;
+  const declared = declarations["background-color"];
+  const color = declared === undefined ? undefined : parseColor(declared.value);
+  return color === undefined || color.alpha === 0 ? undefined : color;
 }
 
 /**
