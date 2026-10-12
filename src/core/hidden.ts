@@ -83,6 +83,8 @@ const VOID_ELEMENTS = new Set([
   "wbr",
 ]);
 const SINGLETON_ELEMENTS = new Set(["html", "head", "body"]);
+/** Hiding properties that inherit, so a descendant can set them back. */
+const INHERITED_HIDING = new Set(["visibility", "font-size", "color"]);
 const FIELD_ELEMENTS = new Set(["input", "select", "textarea", "button"]);
 /** Raw text a browser never draws: code, and the fallbacks for frames and plugins. */
 const UNDRAWN_ELEMENTS = new Set([
@@ -206,6 +208,7 @@ class HiddenText {
   fields = 0;
   private text = "";
   private length = 0;
+  private summaryShown = false;
 
   constructor(
     kind: "hidden" | "camouflage",
@@ -219,6 +222,16 @@ class HiddenText {
     this.label = label;
     this.reason = reason;
     this.fallback = fallback;
+  }
+
+  /**
+   * A closed `<details>` shows its first `<summary>` and nothing else.
+   * @returns {boolean} True for the first summary asked about, false after.
+   */
+  showSummary(): boolean {
+    if (this.summaryShown) return false;
+    this.summaryShown = true;
+    return true;
   }
 
   add(text: string): void {
@@ -437,22 +450,28 @@ class HiddenScanner {
     declarations: Declarations,
   ): HiddenText | undefined {
     const inherited = this.stack.at(-1)?.hidden;
-    if (inherited !== undefined) return this.isSummaryOfClosed(tag.name) ? undefined : inherited;
+    if (inherited !== undefined) return this.shows(tag.name, declarations) ? undefined : inherited;
     const reason = hiddenBy(tag, declarations);
     if (reason === undefined) return undefined;
     return new HiddenText("hidden", place.line, place.label, reason, fallbackOf(tag));
   }
 
   /**
-   * A closed `<details>` still shows its `<summary>`.
+   * Whether an element inside a hidden one shows anyway: the first summary of a closed
+   * `<details>`, or a descendant that overrides an inherited `visibility`, size or color.
    * @param name - The tag about to open.
-   * @returns {boolean} Whether it is the summary of the closed details element it opens in.
+   * @param declarations - Its own winning declarations.
+   * @returns {boolean} True when the element and its content are in sight.
    */
-  private isSummaryOfClosed(name: string): boolean {
+  private shows(name: string, declarations: Declarations): boolean {
     const parent = this.stack.at(-1);
     const record = parent?.hidden;
-    if (name !== "summary" || parent?.name !== "details" || record === undefined) return false;
-    return record.reason === "closed details" && parent.owned.includes(record);
+    if (parent === undefined || record === undefined) return false;
+    const opener = parent.name === "details" && parent.owned.includes(record);
+    if (opener && name === "summary" && record.reason === "closed details") {
+      return record.showSummary();
+    }
+    return overridesHiding(record.reason, declarations);
   }
 
   private paintsOf(
@@ -697,6 +716,20 @@ function hiddenBy(tag: HtmlStartTag, declarations: Declarations): string | undef
   if (hiding !== undefined) return hiding;
   const utility = classesOf(tag).find((name) => HIDING_CLASSES.has(name.toLowerCase()));
   return utility === undefined ? undefined : `class ${utility}, a framework's hidden class`;
+}
+
+/**
+ * Whether an element's own declarations undo a hiding it inherits; `display: none` and the
+ * rest hide the whole subtree, but `visibility`, `font-size` and `color` inherit and give way.
+ * @param reason - The inherited reason, starting with its property.
+ * @param declarations - The element's own winning declarations.
+ * @returns {boolean} True when the element shows again.
+ */
+function overridesHiding(reason: string, declarations: Declarations): boolean {
+  const property = reason.slice(0, reason.indexOf(":"));
+  const own = declarations[property];
+  if (own === undefined || !INHERITED_HIDING.has(property)) return false;
+  return hidingReason({ [property]: own }) === undefined;
 }
 
 /**

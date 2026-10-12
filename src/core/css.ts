@@ -351,13 +351,34 @@ export function ruleKey(rule: Readonly<StyleRule>): string {
  */
 function withoutComments(css: string): string {
   let text = "";
-  let position = 0;
-  for (let open = css.indexOf("/*"); open !== -1; open = css.indexOf("/*", position)) {
-    const close = css.indexOf("*/", open + 2);
-    text += `${css.slice(position, open)} `;
-    position = close === -1 ? css.length : close + 2;
+  let start = 0;
+  for (let index = 0; index < css.length; index += 1) {
+    const character = css[index] ?? "";
+    if (character === '"' || character === "'") {
+      index = stringEnd(css, index);
+    } else if (character === "/" && css[index + 1] === "*") {
+      const close = css.indexOf("*/", index + 2);
+      text += `${css.slice(start, index)} `;
+      start = close === -1 ? css.length : close + 2;
+      index = start - 1;
+    }
   }
-  return text + css.slice(position);
+  return text + css.slice(start);
+}
+
+/**
+ * Where a quoted CSS string ends: its closing quote, past escapes, or a line break that cuts it.
+ * @param css - Stylesheet text.
+ * @param open - Offset of the opening quote.
+ * @returns {number} Offset of the character that ends the string.
+ */
+function stringEnd(css: string, open: number): number {
+  const quote = css[open];
+  for (let index = open + 1; index < css.length; index += 1) {
+    if (css[index] === "\\") index += 1;
+    else if (css[index] === quote || css[index] === "\n") return index;
+  }
+  return css.length;
 }
 
 /**

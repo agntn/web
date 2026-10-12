@@ -124,6 +124,11 @@ describe("revealHtml", () => {
     ["closed dialog", "<dialog><p>x</p></dialog>", "closed dialog"],
     ["closed details", "<details><summary>Hint</summary>x</details>", "closed details"],
     [
+      "a rule after a quoted comment",
+      '<style>.a{content:"/*"} .s{display:none}</style><p class=s>x</p>',
+      "display: none via .s",
+    ],
+    [
       "a rule after a quoted brace",
       '<style>.a{content:"}"} .s{display:none}</style><p class=s>x</p>',
       "display: none via .s",
@@ -148,6 +153,26 @@ describe("revealHtml", () => {
     ["a small negative margin", "<p style='text-indent:-2em'>x</p>"],
   ])("leaves %s in sight", (_label, html) => {
     expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
+  });
+
+  it("lets a descendant undo inherited visibility, size or color", () => {
+    const html = [
+      "<div style='visibility:hidden'>gone <span style='visibility:visible'>back</span></div>",
+      "<div style='font-size:0'>tiny <b style='font-size:16px'>big</b></div>",
+      "<div style='display:none'>out <span style='display:block;visibility:visible'>still out</span></div>",
+    ].join("\n");
+
+    const hidden = ofKind(revealHtml(html), "hidden");
+
+    expect(hidden.map(({ value }) => value)).toEqual(["gone", "tiny", "out still out"]);
+  });
+
+  it("shows only the first summary of closed details", () => {
+    const html = "<details><summary>a</summary><summary>b</summary>c</details>";
+
+    const hidden = ofKind(revealHtml(html), "hidden");
+
+    expect(hidden).toEqual([expect.objectContaining({ reason: "closed details", value: "bc" })]);
   });
 
   it("ends a hidden paragraph where the next one starts", () => {
