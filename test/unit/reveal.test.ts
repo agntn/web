@@ -546,6 +546,7 @@ describe("revealUrl", () => {
     "http://10.0.0.8/",
     "http://192.168.1.1/",
     "http://2130706433/",
+    "http://[64:ff9b:1::a00:8]/",
   ])("refuses %s before any request", async (url) => {
     await expect(revealUrl(url)).rejects.toThrow(PrivateAddressError);
     expect(lookup).not.toHaveBeenCalled();

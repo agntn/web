@@ -119,10 +119,10 @@ const NAMED_REFERENCES: Readonly<Record<string, string>> = {
 /**
  * Split HTML into tokens like a browser does; whatever opens no markup is text.
  * @param html - The page source.
- * @returns {HtmlToken[]} Tokens in source order.
+ * @yields {HtmlToken} Tokens in source order, a few at a time, never the whole page as a list.
  */
-export function tokenizeHtml(html: string): HtmlToken[] {
-  return new Tokenizer(html).run();
+export function* tokenizeHtml(html: string): Generator<HtmlToken> {
+  yield* new Tokenizer(html).run();
 }
 
 /**
@@ -210,15 +210,16 @@ class Tokenizer {
     this.html = html;
   }
 
-  run(): HtmlToken[] {
+  *run(): Generator<HtmlToken> {
     while (this.position < this.html.length) {
       const open = this.html.indexOf("<", this.position);
       if (open === -1) break;
       this.position = open;
       if (!this.markup()) this.position = open + 1;
+      yield* this.tokens.splice(0);
     }
     this.flushText(this.html.length);
-    return this.tokens;
+    yield* this.tokens.splice(0);
   }
 
   /**

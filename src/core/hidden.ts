@@ -21,7 +21,6 @@ import {
   type HtmlEndTag,
   type HtmlStartTag,
   type HtmlText,
-  type HtmlToken,
 } from "./html.ts";
 import { hiddenKinds, type HiddenKind } from "./hidden-kinds.ts";
 import { clip } from "./text.ts";
@@ -62,6 +61,8 @@ const CONTEXT_CHARACTERS = 24;
 const CODE_POINT_LIMIT = 32;
 /** How far down the stack an implied end tag looks; real pages nest a few dozen deep. */
 const SCOPE_SCAN_LIMIT = 256;
+/** Deepest nesting the walk keeps; past it an element closes where it opens. */
+const STACK_LIMIT = 512;
 /** Rules kept from a page's stylesheets; inline CSS past this is a framework dump, not a clue. */
 const RULE_LIMIT = 2_000;
 
@@ -337,7 +338,7 @@ export function invisibleCharacters(text: string): HiddenFinding[] {
  */
 class HiddenScanner {
   private readonly lines: number[];
-  private readonly tokens: HtmlToken[];
+  private readonly html: string;
   /** Stylesheet rules by {@link ruleKey}, so an element meets only the rules that can match it. */
   private readonly rules = new Map<string, StyleRule[]>();
   private ruleCount = 0;
@@ -353,13 +354,13 @@ class HiddenScanner {
 
   constructor(html: string, url: string | undefined) {
     this.lines = lineStarts(html);
-    this.tokens = tokenizeHtml(html);
+    this.html = html;
     this.base = url;
     this.prepare();
   }
 
   run(): HiddenFinding[] {
-    for (const token of this.tokens) {
+    for (const token of tokenizeHtml(this.html)) {
       if (token.kind === "start") this.start(token);
       else if (token.kind === "end") this.end(token);
       else if (token.kind === "text") this.text(token);
@@ -378,7 +379,7 @@ class HiddenScanner {
   /** Stylesheet rules, the `<base>` URL and whether a stylesheet is linked, before the walk. */
   private prepare(): void {
     let inStyle = false;
-    for (const token of this.tokens) {
+    for (const token of tokenizeHtml(this.html)) {
       if (token.kind === "text" && inStyle) {
         this.fileRules(parseStylesheet(token.text, this.ruleCount));
         if (/@import\b/iu.test(token.text)) this.assumeDefaults = false;
@@ -419,7 +420,7 @@ class HiddenScanner {
     this.stack.push(element);
     this.open.set(element.name, (this.open.get(element.name) ?? 0) + 1);
     if (FIELD_ELEMENTS.has(tag.name)) this.field(tag, place);
-    if (closesAtOnce(tag, foreign)) this.pop();
+    if (closesAtOnce(tag, foreign) || this.stack.length > STACK_LIMIT) this.pop();
   }
 
   /**

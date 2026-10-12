@@ -68,6 +68,7 @@ const PRIVATE_RANGES: readonly (readonly [string, number, "ipv4" | "ipv6"])[] = 
   ["::", 128, "ipv6"],
   ["::1", 128, "ipv6"],
   ["64:ff9b::", 96, "ipv6"],
+  ["64:ff9b:1::", 48, "ipv6"],
   ["100::", 64, "ipv6"],
   ["2001:db8::", 32, "ipv6"],
   ["fc00::", 7, "ipv6"],
