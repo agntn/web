@@ -527,6 +527,17 @@ describe("revealUrl", () => {
     expect(hits.get("/")).toBeUndefined();
   });
 
+  it("vets every connection, never a pooled socket from an earlier reveal", async () => {
+    resolveHere();
+    routes.set("/", [{ status: 200, headers: html, body: "<!-- inside -->" }]);
+    const url = `http://pool.test:${new URL(base).port}/`;
+
+    await revealUrl(url, { allowPrivateNetwork: true });
+
+    await expect(revealUrl(url)).rejects.toThrow(PrivateAddressError);
+    expect(hits.get("/")).toBe(1);
+  });
+
   it.each([
     "http://127.0.0.1/",
     "http://[::1]/",

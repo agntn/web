@@ -288,7 +288,8 @@ async function send(url: string, request: PageRequest): Promise<Answer> {
 }
 
 /**
- * Open the request and the body stream, gunzipped or unbrotlied when the server compressed it.
+ * Open the request on a fresh connection, never a pooled one the lookup would not vet, and the
+ * body stream, decompressed when the server compressed it.
  * @param url - What to fetch.
  * @param lookup - The lookup that vets each address.
  * @param signal - Caller cancellation and the timeout.
@@ -313,7 +314,7 @@ async function connect(
     "User-Agent": `agntn-web/${version}`,
   };
   const response = await new Promise<IncomingMessage>((resolve, reject) => {
-    const outgoing = get(url, { headers, lookup, signal }, resolve);
+    const outgoing = get(url, { headers, lookup, signal, agent: false }, resolve);
     outgoing.once("error", reject);
     outgoing.end();
   });
