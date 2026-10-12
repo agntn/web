@@ -21,7 +21,7 @@ docs/
 ├── server/api/                    # search, all, read, providers over the library
 ├── server/utils/query.ts          # parameter caps, cache, rate limit, error mapping
 ├── content/index.md               # landing
-├── content/1.guide/               # getting started, search, fanout, read, image, cli, agents, custom, explorer
+├── content/1.guide/               # getting started, search, fanout, read, image, reveal, cli, agents, custom, explorer
 └── content/2.providers/           # one page per provider
 ```
 

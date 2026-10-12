@@ -201,6 +201,7 @@ describe.concurrent("web usage paths", () => {
       ).toEqual([]);
       expect(coreModules(loaded)).toEqual([
         "errors",
+        "hidden-kinds",
         "limits",
         "providers",
         "redaction",

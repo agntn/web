@@ -115,6 +115,7 @@ describe("OMP extension", () => {
       "web_search",
       "web_image_search",
       "web_read",
+      "web_reveal",
       "web_providers",
     ]);
     for (const tool of tools.values()) {

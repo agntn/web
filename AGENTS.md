@@ -6,7 +6,7 @@
 
 ## OVERVIEW
 
-`@agntn/web` is a unified web-access provider for agents and CLI. It exposes three explicit capabilities: `search` (query → result URLs/snippets), `image search` (image URL → matching pages/images), and `read` (URL → normalized page content). Providers implement only the capabilities they support; keep each capability behind its own interface.
+`@agntn/web` is a unified web-access provider for agents and CLI. It exposes three explicit capabilities: `search` (query → result URLs/snippets), `image search` (image URL → matching pages/images), and `read` (URL → normalized page content). One more, `reveal` (URL → what the page hides from a reader), needs no provider: it fetches the page's own HTML, refuses private network addresses and scans it without a parser dependency. Providers implement only the capabilities they support; keep each capability behind its own interface.
 
 Keep URL-based image search here while it returns web matches through lightweight provider adapters. Image uploads, hosting, OCR, embeddings, perceptual hashes, and local image analysis belong in a separate image or vision package. Likewise, split browser rendering, crawling, many read-only providers, or heavy read dependencies out of this package when they stop being lightweight.
 
@@ -14,7 +14,7 @@ Keep URL-based image search here while it returns web matches through lightweigh
 
 ```
 src/
-├── core/                 # Registry, shared types/errors, searchAll, readUrl
+├── core/                 # Registry, shared types/errors, searchAll, readUrl, revealUrl
 ├── providers/            # Provider adapters; integrations may support search and/or read
 ├── commands/mcp.ts       # Serves the MCP server over stdio
 ├── index.ts              # Public API barrel
@@ -39,21 +39,22 @@ test/unit/                # Public behavior and provider contract tests
 
 ## WHERE TO LOOK
 
-| Task                 | Location                                                         | Notes                                                                                                                                                    |
-| -------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Add public exports   | `src/index.ts`                                                   | Keep the public surface small and explicit                                                                                                               |
-| Add/extend providers | `src/providers/`                                                 | Keep provider response shapes inside the adapter                                                                                                         |
-| Add search behavior  | `src/core/all.ts` + provider adapter                             | Preserve query → results semantics                                                                                                                       |
-| Add image search     | `src/core/image.ts` + provider adapter + `src/tools.ts`          | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                      |
-| Add read behavior    | `src/core/read.ts` + provider adapter + `src/tools.ts`           | Preserve URL → content semantics                                                                                                                         |
-| Extend CLI           | `src/tools.ts` (`cli` hints, `webCommands()`) + `src/cli-run.ts` | Commands come from the tool definitions through `runCli`; a CLI-only shape is a definition in `webCommands()` over the same executor                     |
-| Extend agent tools   | `src/tools.ts`, `src/tool-schemas.ts`, `src/tool-operations.ts`  | One definition reaches MCP, Pi, OMP, the AI SDK and the CLI; static descriptions advertise built in names, execution validates against the live registry |
-| Change TUI rendering | `src/tui.ts` + both extension adapters                           | Keep collapsed rows compact, expanded previews bounded, and every interpolated value safe for terminals                                                  |
-| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                             | `@agntn/tools/mcp` validates, sanitizes errors and sends `details` as `structuredContent`; executor guards cover a direct `definition.execute` call      |
-| Add tests            | `test/`                                                          | Mirror public behavior, not implementation details                                                                                                       |
-| Change build outputs | `build.config.ts` + `package.json`                               | Keep the obuild inputs and `exports` aligned                                                                                                             |
-| Change CI flow       | `.github/workflows/test.yml`                                     | Order stays `check -> build -> test`                                                                                                                     |
-| Change release flow  | `.github/workflows/publish.yml`                                  | Publish through npm OIDC only from `v*` tags                                                                                                             |
+| Task                 | Location                                                         | Notes                                                                                                                                                         |
+| -------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Add public exports   | `src/index.ts`                                                   | Keep the public surface small and explicit                                                                                                                    |
+| Add/extend providers | `src/providers/`                                                 | Keep provider response shapes inside the adapter                                                                                                              |
+| Add search behavior  | `src/core/all.ts` + provider adapter                             | Preserve query → results semantics                                                                                                                            |
+| Add image search     | `src/core/image.ts` + provider adapter + `src/tools.ts`          | Preserve image URL → matching pages/images semantics; keep local image analysis out                                                                           |
+| Add read behavior    | `src/core/read.ts` + provider adapter + `src/tools.ts`           | Preserve URL → content semantics                                                                                                                              |
+| Add reveal behavior  | `src/core/hidden.ts` + `src/core/reveal.ts`                      | The scanner reads tokens from `html.ts` and styles from `css.ts`; the fetch and its address guard stay in `reveal.ts`, and a new kind joins `hidden-kinds.ts` |
+| Extend CLI           | `src/tools.ts` (`cli` hints, `webCommands()`) + `src/cli-run.ts` | Commands come from the tool definitions through `runCli`; a CLI-only shape is a definition in `webCommands()` over the same executor                          |
+| Extend agent tools   | `src/tools.ts`, `src/tool-schemas.ts`, `src/tool-operations.ts`  | One definition reaches MCP, Pi, OMP, the AI SDK and the CLI; static descriptions advertise built in names, execution validates against the live registry      |
+| Change TUI rendering | `src/tui.ts` + both extension adapters                           | Keep collapsed rows compact, expanded previews bounded, and every interpolated value safe for terminals                                                       |
+| Extend MCP server    | `src/mcp.ts` + `src/commands/mcp.ts`                             | `@agntn/tools/mcp` validates, sanitizes errors and sends `details` as `structuredContent`; executor guards cover a direct `definition.execute` call           |
+| Add tests            | `test/`                                                          | Mirror public behavior, not implementation details                                                                                                            |
+| Change build outputs | `build.config.ts` + `package.json`                               | Keep the obuild inputs and `exports` aligned                                                                                                                  |
+| Change CI flow       | `.github/workflows/test.yml`                                     | Order stays `check -> build -> test`                                                                                                                          |
+| Change release flow  | `.github/workflows/publish.yml`                                  | Publish through npm OIDC only from `v*` tags                                                                                                                  |
 
 ## CONVENTIONS
 
@@ -63,7 +64,7 @@ test/unit/                # Public behavior and provider contract tests
 - CLI should be thin and call reusable functions from `src/index.ts`
 - Prefer normalized models over provider-shaped raw objects
 - Keep capability names explicit and topically aligned: `search*` for query → results, `searchImage*`/`searchByImage` for image URL → matches, and `read*`/`readUrl` for URL → content
-- Keep capability order consistent across APIs and documentation: search, search image, read
+- Keep capability order consistent across APIs and documentation: search, search image, read, reveal
 - Blank optional text inputs count as unset on every surface; `src/core/options.ts` owns that normalization and required inputs keep rejecting empty values
 - CLI must support both human-readable and machine-readable JSON output
 - Keep provider names and capability flags as literal unions where possible

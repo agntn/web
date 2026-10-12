@@ -169,6 +169,37 @@ export class InvalidImageUrlError extends WebError {
   }
 }
 
+/** Thrown when the page to reveal is not an absolute HTTP or HTTPS URL. */
+export class InvalidPageUrlError extends WebError {
+  constructor() {
+    super("Page URL must be an absolute HTTP or HTTPS URL");
+    this.name = "InvalidPageUrlError";
+  }
+}
+
+/** Thrown when the page to reveal, or a redirect on the way, sits on a private network. */
+export class PrivateAddressError extends WebError {
+  readonly host: string;
+  readonly address: string;
+
+  constructor(host: string, address: string) {
+    const literal = host.replace(/^\[(.*)\]$/u, "$1") === address;
+    const where = literal ? `${host} is` : `${host} resolves to ${address},`;
+    super(`${where} a private network address; reveal reads public pages only`);
+    this.name = "PrivateAddressError";
+    this.host = host;
+    this.address = address;
+  }
+}
+
+/** Thrown when the revealed page is neither markup nor text, or never settles on one address. */
+export class UnreadablePageError extends WebError {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnreadablePageError";
+  }
+}
+
 /** Thrown when the read URL is empty or whitespace-only. */
 export class EmptyUrlError extends WebError {
   constructor() {

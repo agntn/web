@@ -7,6 +7,7 @@ const NAV_ICONS: Record<string, string> = {
   "/guide/fanout": "i-lucide-git-fork",
   "/guide/read": "i-lucide-file-text",
   "/guide/image": "i-lucide-image",
+  "/guide/reveal": "i-lucide-eye",
   "/guide/cli": "i-lucide-terminal",
   "/guide/agents": "i-lucide-bot",
   "/guide/custom": "i-lucide-plus",

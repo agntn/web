@@ -6,7 +6,8 @@ import { defineConfig } from "vite-plus";
 export default defineConfig({
   fmt: {
     ...oxfmt,
-    ignorePatterns: ["dist", "coverage", "docs", "CHANGELOG.md"],
+    /** Page fixtures stay byte for byte as the server sent them. */
+    ignorePatterns: ["dist", "coverage", "docs", "CHANGELOG.md", "test/fixtures/**/*.html"],
   },
   lint: {
     ...oxlint,

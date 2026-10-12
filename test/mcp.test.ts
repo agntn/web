@@ -145,7 +145,7 @@ describe("web MCP server", () => {
     await vi.waitFor(() => expect(providerSignal?.aborted).toBe(true));
   });
 
-  it("advertises the four capability tools as read-only", async () => {
+  it("advertises the capability tools as read-only", async () => {
     const client = await connectTestClient();
 
     const response = await client.listTools();
@@ -154,18 +154,24 @@ describe("web MCP server", () => {
       "web_search",
       "web_image_search",
       "web_read",
+      "web_reveal",
       "web_providers",
     ]);
     expect(response.tools.map((tool) => tool.title)).toEqual([
       "⌕ Web Search",
       "▧ Search by Image",
       "↗ Web Read",
+      "◐ Web Reveal",
       "◫ Web Providers",
     ]);
     for (const tool of response.tools) {
       expect(tool.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
     }
-    expect(response.tools[3]?.annotations).toMatchObject({ openWorldHint: false });
+    const providers = response.tools.find((tool) => tool.name === "web_providers");
+    expect(providers?.annotations).toMatchObject({ openWorldHint: false });
+    const reveal = response.tools.find((tool) => tool.name === "web_reveal");
+    expect(reveal?.annotations).toMatchObject({ openWorldHint: true });
+    expect(reveal?.inputSchema).toMatchObject({ required: ["url"], additionalProperties: false });
     const searchInput = response.tools[0]?.inputSchema as {
       readonly properties: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
     };
@@ -219,6 +225,15 @@ describe("web MCP server", () => {
           requestedProvider: "auto",
           provider: "jina",
           attempts: "jina",
+        },
+      },
+      web_reveal: {
+        result: {
+          url: "https://example.com",
+          source: "https://example.com",
+          bytes: "11",
+          counts: {},
+          findings: [],
         },
       },
       web_providers: { result: { runtime: {}, providers: [{ configured: "yes" }] } },

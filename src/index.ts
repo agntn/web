@@ -77,6 +77,9 @@ export {
   InvalidSearchContinuationError,
   EmptyImageUrlError,
   InvalidImageUrlError,
+  InvalidPageUrlError,
+  PrivateAddressError,
+  UnreadablePageError,
   EmptyUrlError,
   InvalidReadContinuationError,
   StaleReadContinuationError,
@@ -144,6 +147,15 @@ export {
   packageCapabilities,
 } from "./core/read.ts";
 export type { ReadProviderName, ReadUrlOptions, ReadUrlDetailedResult } from "./core/read.ts";
+
+export { DEFAULT_REVEAL_MAX_BYTES, hiddenKinds, revealHtml, revealUrl } from "./core/reveal.ts";
+export type {
+  HiddenFinding,
+  HiddenKind,
+  RevealHtmlOptions,
+  RevealOptions,
+  RevealResult,
+} from "./core/reveal.ts";
 
 export {
   DEFAULT_CONCURRENCY,

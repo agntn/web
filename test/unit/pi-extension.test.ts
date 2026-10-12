@@ -106,6 +106,48 @@ describe("Pi extension", () => {
     expect(renderedText(result)).toBe("✓ found 2 results · exa");
   });
 
+  it("draws a reveal call and counts what the page hides", () => {
+    const reveal = captureTools().get("web_reveal");
+    if (!reveal?.renderCall || !reveal.renderResult) throw new Error("Missing reveal renderers");
+    const theme = {};
+    const call: unknown = Reflect.apply(reveal.renderCall, reveal, [
+      { url: "https://gsmg.io/theseedisplanted" },
+      theme,
+      { executionStarted: true, isPartial: true },
+    ]);
+    const partial: unknown = Reflect.apply(reveal.renderResult, reveal, [
+      { content: [] },
+      { expanded: false, isPartial: true },
+      theme,
+      { isError: false },
+    ]);
+    const result: unknown = Reflect.apply(reveal.renderResult, reveal, [
+      {
+        content: [{ type: "text", text: "[reveal] https://gsmg.io/theseedisplanted" }],
+        details: {
+          result: {
+            url: "https://gsmg.io/theseedisplanted",
+            source: "https://gsmg.io/theseedisplanted",
+            bytes: 1_585,
+            counts: { comment: 1, hidden: 1, field: 3, meta: 6 },
+            findings: [],
+            truncated: true,
+            omitted: 10,
+          },
+        },
+      },
+      { expanded: false, isPartial: false },
+      theme,
+      { isError: false },
+    ]);
+
+    expect(renderedText(call)).toBe("◌ ◐ Web Reveal https://gsmg.io/theseedisplanted");
+    expect(renderedText(partial)).toBe("· Revealing");
+    expect(renderedText(result)).toBe(
+      "✓ revealed 1 comment · 1 hidden element · 3 fields · truncated",
+    );
+  });
+
   it("renders Pi failures from the render context and strips terminal controls", () => {
     const read = captureTools().get("web_read");
     if (!read?.renderCall || !read.renderResult) throw new Error("Missing read renderers");
