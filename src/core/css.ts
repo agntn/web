@@ -24,7 +24,22 @@ export interface StyleRule {
   readonly specificity: number;
   /** Position in the page's stylesheets, which breaks ties of specificity. */
   readonly order: number;
+  /** Rank of its cascade layer, the first named lowest; a rule outside any layer has none. */
+  readonly layer?: number;
   readonly declarations: Declarations;
+}
+
+/** An `@import` a screen applies, and the cascade layer it puts the sheet in. */
+export interface StylesheetImport {
+  readonly url: string;
+  /** The layer's name, `""` for an anonymous one; unset outside any layer. */
+  readonly layer?: string;
+}
+
+/** What a sheet opens with: its imports, and the layer names in the order they first come up. */
+export interface StylesheetPreamble {
+  readonly imports: readonly StylesheetImport[];
+  readonly layers: readonly string[];
 }
 
 /** A color with alpha from 0 to 1. */
@@ -173,20 +188,59 @@ export function parseStylesheet(css: string, firstOrder = 0): StyleRule[] {
 }
 
 /**
- * A sheet's screen imports, read only before its first rule, the one place a browser takes them.
+ * A sheet's screen imports and `@layer` names, read before its first rule, as a browser does.
  * @param css - Stylesheet text.
- * @returns {string[]} Each import's URL as written, unresolved.
+ * @returns {StylesheetPreamble} Each import's URL as written, unresolved, and the layer names.
  */
-export function stylesheetImports(css: string): string[] {
-  const urls: string[] = [];
+export function stylesheetPreamble(css: string): StylesheetPreamble {
+  const imports: StylesheetImport[] = [];
+  const layers: string[] = [];
   for (const statement of leadingStatements(withoutComments(css))) {
-    if (/^@(?:charset|layer)\b/iu.test(statement)) continue;
-    const parts = IMPORT.exec(statement)?.groups;
-    if (parts?.url === undefined) break;
-    const url = parts.url.replaceAll(/^["']|["']$/gu, "");
-    if (url !== "" && forScreen(importMedia(parts.media))) urls.push(url);
+    const taken = statementPreamble(statement);
+    if (taken === undefined) break;
+    imports.push(...taken.imports);
+    layers.push(...taken.layers);
   }
-  return urls;
+  return { imports, layers };
+}
+
+/**
+ * What one opening statement adds: an import, layer names, or nothing for `@charset`.
+ * @param statement - An at-rule that ends with `;`.
+ * @returns {StylesheetPreamble | undefined} Its part, or undefined when it ends the preamble.
+ */
+function statementPreamble(statement: string): StylesheetPreamble | undefined {
+  if (/^@charset\b/iu.test(statement)) return { imports: [], layers: [] };
+  const names = /^@layer\s+(?<names>.+)$/isu.exec(statement)?.groups?.names;
+  if (names !== undefined)
+    return { imports: [], layers: names.split(",").map((name) => name.trim()) };
+  return importPreamble(statement);
+}
+
+/**
+ * What an `@import` adds: itself, and its layer's name when it has one.
+ * @param statement - The statement.
+ * @returns {StylesheetPreamble | undefined} Its part, or undefined when it is no import.
+ */
+function importPreamble(statement: string): StylesheetPreamble | undefined {
+  const parts = IMPORT.exec(statement)?.groups;
+  if (parts?.url === undefined) return undefined;
+  const found = importOf(parts.url, parts.media ?? "");
+  if (found === undefined) return { imports: [], layers: [] };
+  return { imports: [found], layers: found.layer ? [found.layer] : [] };
+}
+
+/**
+ * One `@import`, unless its media list leaves screens out.
+ * @param url - Its URL token, quotes and all.
+ * @param conditions - What follows it: `layer`, `supports()` and media.
+ * @returns {StylesheetImport | undefined} The import, its layer named or `""` when anonymous.
+ */
+function importOf(url: string, conditions: string): StylesheetImport | undefined {
+  const bare = url.replaceAll(/^["']|["']$/gu, "");
+  if (bare === "" || !forScreen(importMedia(conditions))) return undefined;
+  const layer = /^layer\b(?:\((?<name>[^)]*)\))?/iu.exec(conditions.trim());
+  return layer === null ? { url: bare } : { url: bare, layer: layer.groups?.name?.trim() ?? "" };
 }
 
 /**
@@ -276,7 +330,8 @@ function endsPrelude(character: string, atRule: boolean): boolean {
 }
 
 /**
- * The cascade for one element: matching rules by specificity, then its `style` attribute.
+ * The cascade for one element: matching rules by layer, then specificity, then its `style`.
+ * Layered rules lose to unlayered ones; `!important` doesn't turn that around here.
  * Values aren't validated per property, so a later invalid one still wins; that's out of scope.
  * @param rulesFor - The page's rules filed under one key, from {@link ruleKey}.
  * @param element - Tag, id and classes of the element.
@@ -293,7 +348,12 @@ export function cascade(
   const matched = [...keys]
     .flatMap((key) => rulesFor(key))
     .filter((rule) => matches(rule, element))
-    .toSorted((left, right) => left.specificity - right.specificity || left.order - right.order);
+    .toSorted(
+      (left, right) =>
+        layerRank(left) - layerRank(right) ||
+        left.specificity - right.specificity ||
+        left.order - right.order,
+    );
   const result: Record<string, Declaration> = {};
   for (const rule of matched) {
     for (const [property, declaration] of Object.entries(rule.declarations)) {
@@ -547,6 +607,10 @@ function simpleRule(
     ...(tag === undefined ? {} : { tag }),
     ...(ids[0] === undefined ? {} : { id: ids[0] }),
   };
+}
+
+function layerRank(rule: Readonly<StyleRule>): number {
+  return rule.layer ?? Number.MAX_SAFE_INTEGER;
 }
 
 function matches(rule: Readonly<StyleRule>, element: Readonly<ElementIdentity>): boolean {

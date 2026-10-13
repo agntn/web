@@ -326,6 +326,23 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("ranks imported layers by their declared order, all below rules outside a layer", () => {
+    const url = "https://example.com/";
+    const stylesheets = {
+      "https://example.com/high.css": ".a { display: block }",
+      "https://example.com/low.css": ".a { display: none }",
+      "https://example.com/kit.css": "p#b { display: none }",
+    };
+    const html = [
+      "<style>.b { display: block }</style>",
+      "<style>@layer low, high; @import 'high.css' layer(high); @import 'low.css' layer(low);",
+      "@import 'kit.css' layer;</style>",
+      "<p class=a>declared order</p><p id=b class=b>unlayered</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([]);
+  });
+
   it("names the sheets a screen applies, each once, and ends an import cycle", () => {
     const html = [
       "<link rel=stylesheet href=a.css><link rel='alternate stylesheet' href=alt.css>",
@@ -630,6 +647,31 @@ describe("revealUrl", () => {
     );
 
     expect(result.stylesheets).toEqual(["https://example.com/s.css"]);
+    expect(ofKind(result.findings, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .x", value: "old" }),
+    ]);
+  });
+
+  it("resolves a capture that redirects against the page it lands on", async () => {
+    resolveHere();
+    const stamp = "/web/20260418153806id_";
+    routes.set(`${stamp}/https://example.com/`, [
+      { status: 302, headers: { Location: "/web/20260418160000id_/https://example.com/blog/" } },
+    ]);
+    routes.set("/web/20260418160000id_/https://example.com/blog/", [
+      { status: 200, headers: html, body: "<link rel=stylesheet href=s.css><p class=x>old</p>" },
+    ]);
+    routes.set(`${stamp}/https://example.com/blog/s.css`, [
+      { status: 200, headers: css, body: ".x { display: none }" },
+    ]);
+    const port = new URL(base).port;
+
+    const result = await revealUrl(
+      `http://web.archive.org:${port}/web/20260418153806/https://example.com/`,
+      { allowPrivateNetwork: true },
+    );
+
+    expect(result.stylesheets).toEqual(["https://example.com/blog/s.css"]);
     expect(ofKind(result.findings, "hidden")).toEqual([
       expect.objectContaining({ reason: "display: none via .x", value: "old" }),
     ]);

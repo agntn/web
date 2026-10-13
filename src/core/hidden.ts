@@ -9,8 +9,9 @@ import {
   parseStylesheet,
   ruleKey,
   sameColor,
-  stylesheetImports,
+  stylesheetPreamble,
   type Color,
+  type StylesheetPreamble,
   type Declarations,
   type StyleRule,
 } from "./css.ts";
@@ -309,8 +310,7 @@ interface Pending {
 }
 
 /** A linked sheet's imports, resolved, and its rules. */
-interface ParsedSheet {
-  readonly imports: readonly string[];
+interface ParsedSheet extends StylesheetPreamble {
   readonly rules: readonly StyleRule[];
 }
 
@@ -381,6 +381,8 @@ class HiddenScanner {
   /** Each linked sheet parsed once, however often it gets imported. */
   private readonly parsed = new Map<string, ParsedSheet>();
   private filings = 0;
+  /** Cascade layers by name, in the order they first come up; nested ones count as their outer. */
+  private readonly layers: string[] = [];
   /** Every stylesheet the page applies, read or not, by absolute URL. */
   readonly linked = new Set<string>();
 
@@ -432,22 +434,47 @@ class HiddenScanner {
    * @param css - The content of a `<style>`.
    */
   private fileSheet(css: string): void {
-    for (const url of stylesheetImports(css)) this.fileLinked(resolve(url, this.base), []);
-    this.fileRules(parseStylesheet(css));
+    this.fileParsed(parseSheet(css, this.base), [], undefined);
   }
 
   /**
    * File a linked sheet the same way, when it was read.
    * @param url - Its absolute URL.
    * @param chain - Sheets importing this one, so an import cycle ends.
+   * @param layer - The cascade layer an import put it in, if any.
    */
-  private fileLinked(url: string, chain: readonly string[]): void {
+  private fileLinked(url: string, chain: readonly string[], layer: string | undefined): void {
     this.linked.add(url);
     const sheet = this.parsedSheet(url);
     if (sheet === undefined || chain.includes(url) || this.filings >= SHEET_FILINGS_LIMIT) return;
     this.filings += 1;
-    for (const imported of sheet.imports) this.fileLinked(imported, [...chain, url]);
-    this.fileRules(sheet.rules);
+    this.fileParsed(sheet, [...chain, url], layer);
+  }
+
+  /**
+   * File imports before rules, every one of them in the layer the sheet sits in, if any.
+   * @param sheet - The parsed sheet.
+   * @param chain - Sheets importing this one.
+   * @param layer - The layer an import put it in.
+   */
+  private fileParsed(
+    sheet: Readonly<ParsedSheet>,
+    chain: readonly string[],
+    layer: string | undefined,
+  ): void {
+    if (layer === undefined) for (const name of sheet.layers) this.layerRank(name);
+    for (const imported of sheet.imports) {
+      const inner = imported.layer === "" ? `\u0000${this.layers.length}` : imported.layer;
+      this.fileLinked(imported.url, chain, layer ?? inner);
+    }
+    this.fileRules(sheet.rules, layer);
+  }
+
+  private layerRank(name: string): number {
+    const known = this.layers.indexOf(name);
+    if (known !== -1) return known;
+    this.layers.push(name);
+    return this.layers.length - 1;
   }
 
   private parsedSheet(url: string): ParsedSheet | undefined {
@@ -456,8 +483,7 @@ class HiddenScanner {
     const source = Object.hasOwn(this.sheets, url) ? this.sheets[url] : undefined;
     if (source === undefined) return undefined;
     const { text, url: base } = typeof source === "string" ? { text: source, url } : source;
-    const imports = stylesheetImports(text).map((imported) => resolve(imported, base));
-    const sheet = { imports, rules: parseStylesheet(text) };
+    const sheet = parseSheet(text, base);
     this.parsed.set(url, sheet);
     return sheet;
   }
@@ -465,10 +491,12 @@ class HiddenScanner {
   /**
    * Add a sheet's rules after the ones filed so far, up to {@link RULE_LIMIT}.
    * @param rules - The sheet's rules, ordered from 0.
+   * @param layer - The cascade layer they sit in, if any.
    */
-  private fileRules(rules: readonly StyleRule[]): void {
+  private fileRules(rules: readonly StyleRule[], layer: string | undefined): void {
+    const rank = layer === undefined ? {} : { layer: this.layerRank(layer) };
     for (const rule of rules.slice(0, RULE_LIMIT - this.ruleCount)) {
-      const placed = { ...rule, order: rule.order + this.ruleCount };
+      const placed = { ...rule, order: rule.order + this.ruleCount, ...rank };
       const key = ruleKey(placed);
       this.rules.set(key, [...(this.rules.get(key) ?? []), placed]);
     }
@@ -495,7 +523,7 @@ class HiddenScanner {
     this.assumeDefaults = false;
     const href = attribute(tag, "href");
     if (href !== undefined && !rel.includes("alternate")) {
-      this.fileLinked(resolve(href, this.base), []);
+      this.fileLinked(resolve(href, this.base), [], undefined);
     }
   }
 
@@ -1019,6 +1047,18 @@ function labelOf(tag: HtmlStartTag): string {
   const classes = classesOf(tag).slice(0, 2);
   const label = `${tag.name}${id === "" ? "" : `#${id}`}${classes.map((name) => `.${name}`).join("")}`;
   return clip(marked(label), 80);
+}
+
+/**
+ * A sheet's imports resolved against its address, its layer names and its rules.
+ * @param css - The sheet.
+ * @param base - What its imports resolve against.
+ * @returns {ParsedSheet} The parsed sheet.
+ */
+function parseSheet(css: string, base: string | undefined): ParsedSheet {
+  const { imports, layers } = stylesheetPreamble(css);
+  const resolved = imports.map((imported) => ({ ...imported, url: resolve(imported.url, base) }));
+  return { imports: resolved, layers, rules: parseStylesheet(css) };
 }
 
 function resolve(url: string, base: string | undefined): string {
