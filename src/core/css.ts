@@ -331,7 +331,7 @@ function endsPrelude(character: string, atRule: boolean): boolean {
 
 /**
  * The cascade for one element: matching rules by layer, then specificity, then its `style`.
- * Layered rules lose to unlayered ones; `!important` doesn't turn that around here.
+ * Layered rules lose to unlayered ones, and win once both sides are `!important`.
  * Values aren't validated per property, so a later invalid one still wins; that's out of scope.
  * @param rulesFor - The page's rules filed under one key, from {@link ruleKey}.
  * @param element - Tag, id and classes of the element.
@@ -347,17 +347,13 @@ export function cascade(
   if (element.id !== undefined) keys.add(`#${element.id}`);
   const matched = [...keys]
     .flatMap((key) => rulesFor(key))
-    .filter((rule) => matches(rule, element))
-    .toSorted(
-      (left, right) =>
-        layerRank(left) - layerRank(right) ||
-        left.specificity - right.specificity ||
-        left.order - right.order,
-    );
+    .filter((rule) => matches(rule, element));
   const result: Record<string, Declaration> = {};
-  for (const rule of matched) {
-    for (const [property, declaration] of Object.entries(rule.declarations)) {
-      result[property] = winner(result[property], declaration);
+  for (const important of [false, true]) {
+    for (const rule of matched.toSorted(cascadeOrder(important))) {
+      for (const [property, declaration] of Object.entries(rule.declarations)) {
+        if (declaration.important === important) result[property] = declaration;
+      }
     }
   }
   for (const [property, declaration] of Object.entries(inline)) {
@@ -607,6 +603,21 @@ function simpleRule(
     ...(tag === undefined ? {} : { tag }),
     ...(ids[0] === undefined ? {} : { id: ids[0] }),
   };
+}
+
+/**
+ * How rules line up, the winner last; `!important` reverses the layers, as in a browser.
+ * @param important - Whether the order is for important declarations.
+ * @returns {(left: Readonly<StyleRule>, right: Readonly<StyleRule>) => number} The comparator.
+ */
+function cascadeOrder(
+  important: boolean,
+): (left: Readonly<StyleRule>, right: Readonly<StyleRule>) => number {
+  const direction = important ? -1 : 1;
+  return (left, right) =>
+    direction * (layerRank(left) - layerRank(right)) ||
+    left.specificity - right.specificity ||
+    left.order - right.order;
 }
 
 function layerRank(rule: Readonly<StyleRule>): number {

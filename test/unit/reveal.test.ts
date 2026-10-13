@@ -343,6 +343,22 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([]);
   });
 
+  it("turns the layer order around for important declarations", () => {
+    const url = "https://example.com/";
+    const stylesheets = {
+      "https://example.com/low.css": ".a { display: none !important }",
+      "https://example.com/high.css": ".a { display: block !important }",
+    };
+    const html = [
+      "<style>@layer low, high; @import 'low.css' layer(low); @import 'high.css' layer(high);</style>",
+      "<style>.a { display: block !important }</style><p class=a>low wins</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "low wins" }),
+    ]);
+  });
+
   it("applies untitled sheets and the first titled set only", () => {
     const html = [
       "<link rel=stylesheet title=Light href=light.css><link rel=stylesheet title=Dark href=dark.css>",
