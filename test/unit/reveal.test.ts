@@ -343,6 +343,23 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([]);
   });
 
+  it("applies untitled sheets and the first titled set only", () => {
+    const html = [
+      "<link rel=stylesheet title=Light href=light.css><link rel=stylesheet title=Dark href=dark.css>",
+      "<link rel=stylesheet href=base.css><style title=Dark>.y { display: none }</style>",
+      "<style title=Light>.z { display: none }</style><p class=y>dark only</p><p class=z>light</p>",
+    ].join("\n");
+    const findings = revealHtml(html, { url: "https://example.com/" });
+
+    expect(linkedStylesheets(html, { url: "https://example.com/" })).toEqual([
+      "https://example.com/light.css",
+      "https://example.com/base.css",
+    ]);
+    expect(ofKind(findings, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .z", value: "light" }),
+    ]);
+  });
+
   it("names the sheets a screen applies, each once, and ends an import cycle", () => {
     const html = [
       "<link rel=stylesheet href=a.css><link rel='alternate stylesheet' href=alt.css>",

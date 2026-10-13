@@ -381,6 +381,7 @@ class HiddenScanner {
   /** Each linked sheet parsed once, however often it gets imported. */
   private readonly parsed = new Map<string, ParsedSheet>();
   private filings = 0;
+  private preferredTitle: string | undefined;
   /** Cascade layers by name, in the order they first come up; nested ones count as their outer. */
   private readonly layers: string[] = [];
   /** Every stylesheet the page applies, read or not, by absolute URL. */
@@ -423,8 +424,7 @@ class HiddenScanner {
         this.fileSheet(token.text);
         if (/@import\b/iu.test(token.text)) this.assumeDefaults = false;
       }
-      inStyle =
-        token.kind === "start" && token.name === "style" && forScreen(attribute(token, "media"));
+      inStyle = token.kind === "start" && token.name === "style" && this.styleApplies(token);
       if (token.kind === "start") this.prepareTag(token);
     }
   }
@@ -512,8 +512,8 @@ class HiddenScanner {
   }
 
   /**
-   * A screen stylesheet drops the default colors; an alternate one waits for the reader's pick,
-   * and a disabled one applies nothing at all.
+   * A screen stylesheet drops the default colors; an alternate one or one of another titled set
+   * waits for the reader's pick, and a disabled one applies nothing at all.
    * @param tag - The `<link>` start tag.
    */
   private prepareLink(tag: HtmlStartTag): void {
@@ -522,9 +522,25 @@ class HiddenScanner {
     if (!forScreen(attribute(tag, "media"))) return;
     this.assumeDefaults = false;
     const href = attribute(tag, "href");
-    if (href !== undefined && !rel.includes("alternate")) {
-      this.fileLinked(resolve(href, this.base), [], undefined);
-    }
+    const applied = !rel.includes("alternate") && this.inPreferredSet(attribute(tag, "title"));
+    if (href !== undefined && applied) this.fileLinked(resolve(href, this.base), [], undefined);
+  }
+
+  private styleApplies(tag: HtmlStartTag): boolean {
+    return forScreen(attribute(tag, "media")) && this.inPreferredSet(attribute(tag, "title"));
+  }
+
+  /**
+   * Whether a sheet's title keeps it on: an untitled sheet always is, and the first title picks
+   * the set, the way CSSOM chooses the preferred style sheet set.
+   * @param title - Its `title` attribute.
+   * @returns {boolean} True when a browser applies it without the reader picking another set.
+   */
+  private inPreferredSet(title: string | undefined): boolean {
+    const name = title ?? "";
+    if (name === "") return true;
+    this.preferredTitle ??= name;
+    return this.preferredTitle === name;
   }
 
   private start(tag: HtmlStartTag): void {
