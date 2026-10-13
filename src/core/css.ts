@@ -15,7 +15,7 @@ export interface ElementIdentity {
   readonly classes: readonly string[];
 }
 
-/** A rule from a `<style>` block whose selector names one tag, id or class set. */
+/** A stylesheet rule whose selector names one tag, id or class set. */
 export interface StyleRule {
   readonly selector: string;
   readonly tag?: string;
@@ -24,8 +24,25 @@ export interface StyleRule {
   readonly specificity: number;
   /** Position in the page's stylesheets, which breaks ties of specificity. */
   readonly order: number;
+  /** Rank of its cascade layer, the first named lowest; a rule outside any layer has none. */
+  readonly layer?: number;
   readonly declarations: Declarations;
 }
+
+/** An `@import` a screen applies, and the cascade layer it puts the sheet in. */
+export interface StylesheetImport {
+  readonly url: string;
+  /** The layer's name, `""` for an anonymous one; unset outside any layer. */
+  readonly layer?: string;
+}
+
+/** An `@layer a, b;` statement, its names in the order the cascade ranks them. */
+export interface LayerStatement {
+  readonly layers: readonly string[];
+}
+
+/** What a sheet opens with: its imports and `@layer` statements, in source order. */
+export type StylesheetPreamble = readonly (StylesheetImport | LayerStatement)[];
 
 /** A color with alpha from 0 to 1. */
 export interface Color {
@@ -35,6 +52,12 @@ export interface Color {
   readonly alpha: number;
 }
 
+/** An at-rule ahead, past whitespace; sticky, so it tests one position. */
+const AT_RULE = /\s*@/uy;
+/** `@import` with its URL, quoted or in `url()`, and the media list after it. */
+const IMPORT = /^@import\s*(?:url\(\s*)?(?<url>"[^"]*"|'[^']*'|[^\s"')]+)\s*\)?\s*(?<media>.*)$/isu;
+/** Media that hold on a screen of any size. */
+const SCREEN_MEDIA = /^(?:all|screen)?$/iu;
 const COMPOUND_SELECTOR = /^(?<tag>[a-z][\w-]*|\*)?(?<rest>(?:[.#][\w-]+)*)$/iu;
 const SELECTOR_PART = /[.#][\w-]+/gu;
 const COLOR_TOKEN = /#[\da-f]{3,8}\b|rgba?\([^)]{0,64}\)|\b[a-z]+\b/giu;
@@ -140,7 +163,7 @@ function shorthandColor(value: string): string {
 
 /**
  * Top-level rules for one element, like `.secret` or `p#key`; `@media` depends on a screen we lack.
- * @param css - Content of a `<style>` element.
+ * @param css - Content of a `<style>` element or a linked sheet.
  * @param firstOrder - Order of its first rule, after the rules of earlier stylesheets.
  * @returns {StyleRule[]} One rule per simple selector, in source order.
  */
@@ -149,11 +172,16 @@ export function parseStylesheet(css: string, firstOrder = 0): StyleRule[] {
   const text = withoutComments(css);
   let position = 0;
   while (position < text.length) {
-    const open = text.indexOf("{", position);
+    const atRule = atRuleAt(text, position);
+    const open = preludeEnd(text, position, atRule);
     if (open === -1) break;
+    if (text[open] === ";") {
+      position = open + 1;
+      continue;
+    }
     const close = matchingBrace(text, open);
-    const prelude = text.slice(position, open).trim();
-    if (!prelude.startsWith("@")) {
+    if (!atRule) {
+      const prelude = text.slice(position, open).trim();
       rules.push(...selectorRules(prelude, text.slice(open + 1, close), firstOrder + rules.length));
     }
     position = close + 1;
@@ -162,7 +190,146 @@ export function parseStylesheet(css: string, firstOrder = 0): StyleRule[] {
 }
 
 /**
- * The cascade for one element: matching rules by specificity, then its `style` attribute.
+ * A sheet's screen imports and `@layer` names, read before its first rule, as a browser does.
+ * @param css - Stylesheet text.
+ * @returns {StylesheetPreamble} Imports with URLs as written, unresolved, and layer statements.
+ */
+export function stylesheetPreamble(css: string): StylesheetPreamble {
+  const entries: (StylesheetImport | LayerStatement)[] = [];
+  for (const statement of leadingStatements(withoutComments(css))) {
+    const taken = statementPreamble(statement);
+    if (taken === undefined) break;
+    entries.push(...taken);
+  }
+  return entries;
+}
+
+/**
+ * What one opening statement adds: an import, layer names, or nothing for `@charset`.
+ * @param statement - An at-rule that ends with `;`.
+ * @returns {StylesheetPreamble | undefined} Its part, or undefined when it ends the preamble.
+ */
+function statementPreamble(statement: string): StylesheetPreamble | undefined {
+  if (/^@charset\b/iu.test(statement)) return [];
+  const names = /^@layer\s+(?<names>.+)$/isu.exec(statement)?.groups?.names;
+  if (names !== undefined) return [{ layers: names.split(",").map((name) => name.trim()) }];
+  return importPreamble(statement);
+}
+
+/**
+ * What an `@import` adds: itself, or nothing when its media leave screens out.
+ * @param statement - The statement.
+ * @returns {StylesheetPreamble | undefined} Its part, or undefined when it is no import.
+ */
+function importPreamble(statement: string): StylesheetPreamble | undefined {
+  const parts = IMPORT.exec(statement)?.groups;
+  if (parts?.url === undefined) return undefined;
+  const found = importOf(parts.url, parts.media ?? "");
+  return found === undefined ? [] : [found];
+}
+
+/**
+ * One `@import`, unless its media list leaves screens out.
+ * @param url - Its URL token, quotes and all.
+ * @param conditions - What follows it: `layer`, `supports()` and media.
+ * @returns {StylesheetImport | undefined} The import, its layer named or `""` when anonymous.
+ */
+function importOf(url: string, conditions: string): StylesheetImport | undefined {
+  const bare = url.replaceAll(/^["']|["']$/gu, "");
+  if (bare === "" || !forScreen(importMedia(conditions))) return undefined;
+  const layer = /^layer\b(?:\((?<name>[^)]*)\))?/iu.exec(conditions.trim());
+  return layer === null ? { url: bare } : { url: bare, layer: layer.groups?.name?.trim() ?? "" };
+}
+
+/**
+ * The statements a stylesheet opens with, up to its first block.
+ * @param text - Stylesheet text without comments.
+ * @yields {string} Each at-rule that ends with `;`, such as `@import "a.css"`.
+ */
+function* leadingStatements(text: string): Generator<string> {
+  let position = 0;
+  while (atRuleAt(text, position)) {
+    const end = preludeEnd(text, position, true);
+    if (end === -1 || text[end] !== ";") return;
+    yield text.slice(position, end).trim();
+    position = end + 1;
+  }
+}
+
+/**
+ * An import's media list past its `layer` and `supports()`; the reveal takes both as met.
+ * @param conditions - What follows the import's URL.
+ * @returns {string} The media list alone.
+ */
+function importMedia(conditions: string | undefined): string {
+  let text = (conditions ?? "").trim().replace(/^layer\b(?:\([^)]*\))?\s*/iu, "");
+  if (/^supports\(/iu.test(text)) text = text.slice(closingParen(text, text.indexOf("(")) + 1);
+  return text.trim();
+}
+
+/**
+ * The parenthesis that closes the one at `open`, past nested ones like `selector(:has(a))`.
+ * @param text - The text.
+ * @param open - Offset of the `(`.
+ * @returns {number} Offset of its `)`, or the text length when it never closes.
+ */
+function closingParen(text: string, open: number): number {
+  let depth = 0;
+  for (let index = open; index < text.length; index += 1) {
+    depth += NESTING[text[index] ?? ""] ?? 0;
+    if (depth === 0) return index;
+  }
+  return text.length;
+}
+
+/**
+ * Whether a media list holds on a screen of any size; a query with conditions depends on one.
+ * @param media - A `media` attribute or the media list of an `@import`.
+ * @returns {boolean} True for no media, `all` or `screen` in the list.
+ */
+export function forScreen(media: string | undefined): boolean {
+  return (media ?? "").split(",").some((query) => SCREEN_MEDIA.test(query.trim()));
+}
+
+/**
+ * Whether an at-rule starts at `position`, past any whitespace.
+ * @param text - Stylesheet text.
+ * @param position - Where to look.
+ * @returns {boolean} True when the next token is an at-keyword.
+ */
+function atRuleAt(text: string, position: number): boolean {
+  AT_RULE.lastIndex = position;
+  return AT_RULE.test(text);
+}
+
+/**
+ * Where a prelude ends: its `{`, or an at-rule's `;`, outside quotes and `url(...)`.
+ * @param text - Stylesheet text without comments.
+ * @param from - Where the prelude starts.
+ * @param atRule - Whether it is an at-rule, which may end without a block.
+ * @returns {number} Offset of the `{` or `;`, or -1 when neither comes.
+ */
+function preludeEnd(text: string, from: number, atRule: boolean): number {
+  let depth = 0;
+  let quote = "";
+  for (let index = from; index < text.length; index += 1) {
+    const character = text[index] ?? "";
+    const quoted = quote !== "";
+    quote = quoteAfter(quote, character);
+    if (quoted || quote !== "") continue;
+    depth += NESTING[character] ?? 0;
+    if (depth <= 0 && endsPrelude(character, atRule)) return index;
+  }
+  return -1;
+}
+
+function endsPrelude(character: string, atRule: boolean): boolean {
+  return character === "{" || (atRule && character === ";");
+}
+
+/**
+ * The cascade for one element: matching rules by layer, then specificity, then its `style`.
+ * Layered rules lose to unlayered ones, and win once both sides are `!important`.
  * Values aren't validated per property, so a later invalid one still wins; that's out of scope.
  * @param rulesFor - The page's rules filed under one key, from {@link ruleKey}.
  * @param element - Tag, id and classes of the element.
@@ -178,12 +345,13 @@ export function cascade(
   if (element.id !== undefined) keys.add(`#${element.id}`);
   const matched = [...keys]
     .flatMap((key) => rulesFor(key))
-    .filter((rule) => matches(rule, element))
-    .toSorted((left, right) => left.specificity - right.specificity || left.order - right.order);
+    .filter((rule) => matches(rule, element));
   const result: Record<string, Declaration> = {};
-  for (const rule of matched) {
-    for (const [property, declaration] of Object.entries(rule.declarations)) {
-      result[property] = winner(result[property], declaration);
+  for (const important of [false, true]) {
+    for (const rule of matched.toSorted(cascadeOrder(important))) {
+      for (const [property, declaration] of Object.entries(rule.declarations)) {
+        if (declaration.important === important) result[property] = declaration;
+      }
     }
   }
   for (const [property, declaration] of Object.entries(inline)) {
@@ -433,6 +601,25 @@ function simpleRule(
     ...(tag === undefined ? {} : { tag }),
     ...(ids[0] === undefined ? {} : { id: ids[0] }),
   };
+}
+
+/**
+ * How rules line up, the winner last; `!important` reverses the layers, as in a browser.
+ * @param important - Whether the order is for important declarations.
+ * @returns {(left: Readonly<StyleRule>, right: Readonly<StyleRule>) => number} The comparator.
+ */
+function cascadeOrder(
+  important: boolean,
+): (left: Readonly<StyleRule>, right: Readonly<StyleRule>) => number {
+  const direction = important ? -1 : 1;
+  return (left, right) =>
+    direction * (layerRank(left) - layerRank(right)) ||
+    left.specificity - right.specificity ||
+    left.order - right.order;
+}
+
+function layerRank(rule: Readonly<StyleRule>): number {
+  return rule.layer ?? Number.MAX_SAFE_INTEGER;
 }
 
 function matches(rule: Readonly<StyleRule>, element: Readonly<ElementIdentity>): boolean {

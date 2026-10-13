@@ -107,7 +107,7 @@ function defineTools() {
       name: "web_reveal",
       title: webToolTitle("web_reveal"),
       description:
-        "List what a page hides from its reader: HTML comments, hidden elements with their text and form fields, text in its background's color, invisible Unicode, data-* and nonstandard attributes, meta and link tags, scripts and styles. Reads the page's own HTML, with no provider in between; a Wayback Machine capture is read as archived, without the toolbar.",
+        "List what a page hides from its reader: HTML comments, hidden elements with their text and form fields, text in its background's color, invisible Unicode, data-* and nonstandard attributes, meta and link tags, scripts and styles. Reads the page's own HTML and the stylesheets it links, with no provider in between; a Wayback Machine capture is read as archived, without the toolbar.",
       snippet:
         "Reveal what a page hides, such as source comments and hidden form fields, with web_reveal.",
       guidelines: [

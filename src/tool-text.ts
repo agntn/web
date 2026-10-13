@@ -376,7 +376,6 @@ function revealHeader(
       : result.source === result.url
         ? undefined
         : `Read ${line(result.source, 500)}`;
-  const size = `${result.bytes.toLocaleString("en")} bytes${result.partial === true ? ", the start of a longer page" : ""}`;
   const found = hiddenKinds.flatMap((kind) => {
     const count = counts[kind];
     return count === undefined ? [] : [`${count} ${REVEAL_NOUNS[kind][count === 1 ? 0 : 1]}`];
@@ -384,9 +383,21 @@ function revealHeader(
   return [
     `[reveal] ${line(result.url, 500)}`,
     ...(source === undefined ? [] : [source]),
-    [line(result.contentType ?? "unknown type", 120), size].join(" · "),
+    sizeLine(result),
     ...(found.length === 0 ? [] : [`Found ${found.join(", ")}`]),
   ].join("\n");
+}
+
+/**
+ * The type, the bytes read, and how many stylesheets the reveal applied.
+ * @param result - What `revealUrl` found.
+ * @returns {string} Such as `text/html · 832 bytes · 2 stylesheets applied`.
+ */
+function sizeLine(result: Readonly<RevealResult>): string {
+  const size = `${result.bytes.toLocaleString("en")} bytes${result.partial === true ? ", the start of a longer page" : ""}`;
+  const sheets = result.stylesheets?.length ?? 0;
+  const applied = sheets === 0 ? [] : [`${sheets} stylesheet${sheets === 1 ? "" : "s"} applied`];
+  return [line(result.contentType ?? "unknown type", 120), size, ...applied].join(" · ");
 }
 
 function kindCounts(findings: readonly HiddenFinding[]): Partial<Record<HiddenKind, number>> {

@@ -6,7 +6,7 @@
 
 ## OVERVIEW
 
-`@agntn/web` is a unified web-access provider for agents and CLI. It exposes three explicit capabilities: `search` (query → result URLs/snippets), `image search` (image URL → matching pages/images), and `read` (URL → normalized page content). One more, `reveal` (URL → what the page hides from a reader), needs no provider: it fetches the page's own HTML, refuses private network addresses and scans it without a parser dependency. Providers implement only the capabilities they support; keep each capability behind its own interface.
+`@agntn/web` is a unified web-access provider for agents and CLI. It exposes three explicit capabilities: `search` (query → result URLs/snippets), `image search` (image URL → matching pages/images), and `read` (URL → normalized page content). One more, `reveal` (URL → what the page hides from a reader), needs no provider: it fetches the page's own HTML and the stylesheets it links, refuses private network addresses and scans them without a parser dependency. Providers implement only the capabilities they support; keep each capability behind its own interface.
 
 Keep URL-based image search here while it returns web matches through lightweight provider adapters. Image uploads, hosting, OCR, embeddings, perceptual hashes, and local image analysis belong in a separate image or vision package. Likewise, split browser rendering, crawling, many read-only providers, or heavy read dependencies out of this package when they stop being lightweight.
 

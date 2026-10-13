@@ -2,13 +2,17 @@ import {
   backgroundColor,
   cascade,
   colorText,
+  forScreen,
   hidingReason,
   parseColor,
   parseDeclarations,
   parseStylesheet,
   ruleKey,
   sameColor,
+  stylesheetPreamble,
   type Color,
+  type StylesheetImport,
+  type StylesheetPreamble,
   type Declarations,
   type StyleRule,
 } from "./css.ts";
@@ -48,10 +52,18 @@ export interface HiddenFinding {
   readonly count?: number;
 }
 
+/** A stylesheet as read, and the address after any redirect, which its imports resolve against. */
+export interface Stylesheet {
+  readonly text: string;
+  readonly url: string;
+}
+
 /** Options for {@link revealHtml}. */
 export interface RevealHtmlOptions {
   /** Address of the page, which relative URLs resolve against. */
   readonly url?: string;
+  /** Sheets by the absolute URLs {@link linkedStylesheets} names; a missing one adds no rules. */
+  readonly stylesheets?: Readonly<Record<string, string | Stylesheet>>;
 }
 
 const HIDDEN_TEXT_LIMIT = 1_000;
@@ -63,8 +75,10 @@ const CODE_POINT_LIMIT = 32;
 const SCOPE_SCAN_LIMIT = 256;
 /** Deepest nesting the walk keeps; past it an element closes where it opens. */
 const STACK_LIMIT = 512;
-/** Rules kept from a page's stylesheets; inline CSS past this is a framework dump, not a clue. */
+/** Rules kept from a page's stylesheets; Bootstrap files about 370, so past this is no clue. */
 const RULE_LIMIT = 2_000;
+/** Linked sheets filed per page, each import counted; repeated imports would multiply forever. */
+const SHEET_FILINGS_LIMIT = 50;
 
 const VOID_ELEMENTS = new Set([
   "area",
@@ -93,8 +107,6 @@ const VISIBLE_VALUES: Readonly<Record<string, RegExp>> = {
   "font-size":
     /^(?:(?:\d+(?:\.\d+)?|\.\d+)(?:px|pt|pc|in|cm|mm|q|rem|vw|vh|vmin|vmax)|medium|(?:x{1,3}-)?(?:small|large))$/iu,
 };
-/** Media a `<style>` applies to on a screen of any size. */
-const SCREEN_MEDIA = /^(?:all|screen)?$/iu;
 const FIELD_ELEMENTS = new Set(["input", "select", "textarea", "button"]);
 /** Raw text a browser never draws: code, and the fallbacks for frames and plugins. */
 const UNDRAWN_ELEMENTS = new Set([
@@ -298,6 +310,12 @@ interface Pending {
   readonly finding: HiddenFinding;
 }
 
+/** A linked sheet's imports, resolved, and its rules. */
+interface ParsedSheet {
+  readonly preamble: StylesheetPreamble;
+  readonly rules: readonly StyleRule[];
+}
+
 /** A repeated attribute, listed once with how often it occurs. */
 interface AttributeTally {
   readonly finding: HiddenFinding;
@@ -317,7 +335,17 @@ interface Place {
  * @returns {HiddenFinding[]} Findings by kind in {@link hiddenKinds} order, then by line.
  */
 export function revealHtml(html: string, options?: Readonly<RevealHtmlOptions>): HiddenFinding[] {
-  return new HiddenScanner(html, options?.url).run();
+  return new HiddenScanner(html, options?.url, options?.stylesheets).run();
+}
+
+/**
+ * The stylesheets a page applies on a screen: linked ones and the ones its `<style>` imports.
+ * @param html - The page source.
+ * @param options - The page address, for relative URLs; sheets already read add their imports.
+ * @returns {string[]} Absolute URLs in the order the page applies them, each once.
+ */
+export function linkedStylesheets(html: string, options?: Readonly<RevealHtmlOptions>): string[] {
+  return [...new HiddenScanner(html, options?.url, options?.stylesheets).linked];
 }
 
 /**
@@ -351,11 +379,25 @@ class HiddenScanner {
   private baseFromPage = false;
   private assumeDefaults = true;
   private pending: Pending | undefined;
+  private readonly sheets: Readonly<Record<string, string | Stylesheet>>;
+  /** Each linked sheet parsed once, however often it gets imported. */
+  private readonly parsed = new Map<string, ParsedSheet>();
+  private filings = 0;
+  private preferredTitle: string | undefined;
+  /** Cascade layers by name, in the order they first come up; nested ones count as their outer. */
+  private readonly layers: string[] = [];
+  /** Every stylesheet the page applies, read or not, by absolute URL. */
+  readonly linked = new Set<string>();
 
-  constructor(html: string, url: string | undefined) {
+  constructor(
+    html: string,
+    url: string | undefined,
+    sheets: Readonly<Record<string, string | Stylesheet>> = {},
+  ) {
     this.lines = lineStarts(html);
     this.html = html;
     this.base = url;
+    this.sheets = sheets;
     this.prepare();
   }
 
@@ -381,31 +423,142 @@ class HiddenScanner {
     let inStyle = false;
     for (const token of tokenizeHtml(this.html)) {
       if (token.kind === "text" && inStyle) {
-        this.fileRules(parseStylesheet(token.text, this.ruleCount));
+        this.fileSheet(token.text);
         if (/@import\b/iu.test(token.text)) this.assumeDefaults = false;
       }
-      inStyle =
-        token.kind === "start" && token.name === "style" && forScreen(attribute(token, "media"));
+      inStyle = token.kind === "start" && token.name === "style" && this.styleApplies(token);
       if (token.kind === "start") this.prepareTag(token);
     }
   }
 
-  private fileRules(rules: readonly StyleRule[]): void {
+  /**
+   * File an inline sheet's imports, then its own rules, the order a browser cascades them in.
+   * @param css - The content of a `<style>`.
+   */
+  private fileSheet(css: string): void {
+    this.fileParsed(parseSheet(css, this.base), [], undefined);
+  }
+
+  /**
+   * File a linked sheet the same way, when it was read.
+   * @param url - Its absolute URL.
+   * @param chain - Sheets importing this one, so an import cycle ends.
+   * @param layer - The cascade layer an import put it in, if any.
+   */
+  private fileLinked(url: string, chain: readonly string[], layer: string | undefined): void {
+    this.linked.add(url);
+    const sheet = this.parsedSheet(url);
+    if (sheet === undefined || chain.includes(url) || this.filings >= SHEET_FILINGS_LIMIT) return;
+    this.filings += 1;
+    this.fileParsed(sheet, [...chain, url], layer);
+  }
+
+  /**
+   * File imports before rules, every one of them in the layer the sheet sits in, if any.
+   * @param sheet - The parsed sheet.
+   * @param chain - Sheets importing this one.
+   * @param layer - The layer an import put it in.
+   */
+  private fileParsed(
+    sheet: Readonly<ParsedSheet>,
+    chain: readonly string[],
+    layer: string | undefined,
+  ): void {
+    for (const entry of sheet.preamble) {
+      if (!("layers" in entry)) this.fileImport(entry, chain, layer);
+      else if (layer === undefined) for (const name of entry.layers) this.layerRank(name);
+    }
+    this.fileRules(sheet.rules, layer);
+  }
+
+  /**
+   * Rank an import's layer as the walk meets it, the order a browser declares layers in, then
+   * file the sheet into it; inside a layer every import stays in that outer one.
+   * @param entry - The import.
+   * @param chain - Sheets importing the one that holds it.
+   * @param layer - The layer that sheet sits in, if any.
+   */
+  private fileImport(
+    entry: Readonly<StylesheetImport>,
+    chain: readonly string[],
+    layer: string | undefined,
+  ): void {
+    const own = entry.layer === "" ? `\u0000${this.layers.length}` : entry.layer;
+    const placed = layer ?? own;
+    if (placed !== undefined) this.layerRank(placed);
+    this.fileLinked(entry.url, chain, placed);
+  }
+
+  private layerRank(name: string): number {
+    const known = this.layers.indexOf(name);
+    if (known !== -1) return known;
+    this.layers.push(name);
+    return this.layers.length - 1;
+  }
+
+  private parsedSheet(url: string): ParsedSheet | undefined {
+    const known = this.parsed.get(url);
+    if (known !== undefined) return known;
+    const source = Object.hasOwn(this.sheets, url) ? this.sheets[url] : undefined;
+    if (source === undefined) return undefined;
+    const { text, url: base } = typeof source === "string" ? { text: source, url } : source;
+    const sheet = parseSheet(text, base);
+    this.parsed.set(url, sheet);
+    return sheet;
+  }
+
+  /**
+   * Add a sheet's rules after the ones filed so far, up to {@link RULE_LIMIT}.
+   * @param rules - The sheet's rules, ordered from 0.
+   * @param layer - The cascade layer they sit in, if any.
+   */
+  private fileRules(rules: readonly StyleRule[], layer: string | undefined): void {
+    const rank = layer === undefined ? {} : { layer: this.layerRank(layer) };
     for (const rule of rules.slice(0, RULE_LIMIT - this.ruleCount)) {
-      const key = ruleKey(rule);
-      this.rules.set(key, [...(this.rules.get(key) ?? []), rule]);
+      const placed = { ...rule, order: rule.order + this.ruleCount, ...rank };
+      const key = ruleKey(placed);
+      this.rules.set(key, [...(this.rules.get(key) ?? []), placed]);
     }
     this.ruleCount = Math.min(RULE_LIMIT, this.ruleCount + rules.length);
   }
 
   private prepareTag(tag: HtmlStartTag): void {
-    const rel = attribute(tag, "rel")?.toLowerCase().split(/\s+/u) ?? [];
-    const linksStyles = tag.name === "link" && rel.includes("stylesheet");
-    if (linksStyles && forScreen(attribute(tag, "media"))) this.assumeDefaults = false;
+    if (tag.name === "link") this.prepareLink(tag);
     const href = attribute(tag, "href");
     if (tag.name !== "base" || href === undefined || this.baseFromPage) return;
     this.base = resolve(href, this.base);
     this.baseFromPage = true;
+  }
+
+  /**
+   * A screen stylesheet drops the default colors; an alternate one or one of another titled set
+   * waits for the reader's pick, and a disabled one or one typed as `text/less` applies nothing.
+   * @param tag - The `<link>` start tag.
+   */
+  private prepareLink(tag: HtmlStartTag): void {
+    const rel = attribute(tag, "rel")?.toLowerCase().split(/\s+/u) ?? [];
+    if (!rel.includes("stylesheet") || !linkApplies(tag)) return;
+    this.assumeDefaults = false;
+    const href = attribute(tag, "href");
+    const applied = !rel.includes("alternate") && this.inPreferredSet(attribute(tag, "title"));
+    if (href !== undefined && applied) this.fileLinked(resolve(href, this.base), [], undefined);
+  }
+
+  private styleApplies(tag: HtmlStartTag): boolean {
+    return forScreen(attribute(tag, "media")) && this.inPreferredSet(attribute(tag, "title"));
+  }
+
+  /**
+   * Whether a sheet's title keeps it on: an untitled sheet always is, and the first title picks
+   * the set, the way CSSOM chooses the preferred style sheet set.
+   * @param title - Its `title` attribute.
+   * @returns {boolean} True when a browser applies it without the reader picking another set.
+   */
+  private inPreferredSet(title: string | undefined): boolean {
+    const name = title ?? "";
+    if (name === "") return true;
+    this.preferredTitle ??= name;
+    return this.preferredTitle === name;
   }
 
   private start(tag: HtmlStartTag): void {
@@ -741,15 +894,6 @@ function hiddenBy(tag: HtmlStartTag, declarations: Declarations): string | undef
 }
 
 /**
- * Whether a `<style>` applies on any screen, like the `@media` rules the stylesheet parser skips.
- * @param media - Its `media` attribute.
- * @returns {boolean} True for no media, `all` or `screen` in its list.
- */
-function forScreen(media: string | undefined): boolean {
-  return (media ?? "").split(",").some((query) => SCREEN_MEDIA.test(query.trim()));
-}
-
-/**
  * Whether an element's own declarations undo a hiding it inherits; `display: none` and the
  * rest hide the whole subtree, but `visibility`, `font-size` and `color` inherit and give way.
  * @param reason - The inherited reason, starting with its property.
@@ -780,6 +924,17 @@ function structuralReason(tag: HtmlStartTag, declarations: Declarations): string
   if (opens && attribute(tag, "open") === undefined) return `closed ${tag.name}`;
   const hidden = attribute(tag, "hidden") !== undefined && declarations.display === undefined;
   return hidden ? "hidden attribute" : undefined;
+}
+
+/**
+ * Whether a browser would apply a linked sheet on a screen: not disabled, typed as CSS if at all.
+ * @param tag - The `<link>` start tag.
+ * @returns {boolean} True when the link counts.
+ */
+function linkApplies(tag: HtmlStartTag): boolean {
+  const type = attribute(tag, "type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+  const css = type === "" || type === "text/css";
+  return css && attribute(tag, "disabled") === undefined && forScreen(attribute(tag, "media"));
 }
 
 function fieldType(tag: HtmlStartTag): string {
@@ -937,6 +1092,19 @@ function labelOf(tag: HtmlStartTag): string {
   const classes = classesOf(tag).slice(0, 2);
   const label = `${tag.name}${id === "" ? "" : `#${id}`}${classes.map((name) => `.${name}`).join("")}`;
   return clip(marked(label), 80);
+}
+
+/**
+ * A sheet's imports resolved against its address, its layer names and its rules.
+ * @param css - The sheet.
+ * @param base - What its imports resolve against.
+ * @returns {ParsedSheet} The parsed sheet.
+ */
+function parseSheet(css: string, base: string | undefined): ParsedSheet {
+  const preamble = stylesheetPreamble(css).map((entry) =>
+    "url" in entry ? { ...entry, url: resolve(entry.url, base) } : entry,
+  );
+  return { preamble, rules: parseStylesheet(css) };
 }
 
 function resolve(url: string, base: string | undefined): string {
