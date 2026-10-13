@@ -380,7 +380,8 @@ describe("revealHtml", () => {
     const html = [
       "<link rel=stylesheet href=a.css><link rel='alternate stylesheet' href=alt.css>",
       "<link rel=stylesheet media=print href=print.css><link rel=stylesheet href=a.css>",
-      "<link rel=stylesheet href=off.css disabled>",
+      "<link rel=stylesheet href=off.css disabled><link rel=stylesheet type=text/less href=x.less>",
+      "<link rel=stylesheet type='text/css; charset=utf-8' href=typed.css>",
       "<style>@import 'b.css' screen; @import url(p.css) print; @import 'l.css' layer(theme);",
       "@import url(s.css) supports(selector(:has(a))) screen; @import 'q.css' layer supports(display: grid) print;",
       "p {} @import 'late.css';</style>",
@@ -392,6 +393,7 @@ describe("revealHtml", () => {
 
     expect(linkedStylesheets(html, { url: "https://example.com/" })).toEqual([
       "https://example.com/a.css",
+      "https://example.com/typed.css",
       "https://example.com/b.css",
       "https://example.com/l.css",
       "https://example.com/s.css",
@@ -399,6 +401,7 @@ describe("revealHtml", () => {
     expect(linkedStylesheets(html, { url: "https://example.com/", stylesheets })).toEqual([
       "https://example.com/a.css",
       "https://example.com/c.css",
+      "https://example.com/typed.css",
       "https://example.com/b.css",
       "https://example.com/l.css",
       "https://example.com/s.css",

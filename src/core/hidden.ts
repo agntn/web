@@ -513,13 +513,12 @@ class HiddenScanner {
 
   /**
    * A screen stylesheet drops the default colors; an alternate one or one of another titled set
-   * waits for the reader's pick, and a disabled one applies nothing at all.
+   * waits for the reader's pick, and a disabled one or one typed as `text/less` applies nothing.
    * @param tag - The `<link>` start tag.
    */
   private prepareLink(tag: HtmlStartTag): void {
     const rel = attribute(tag, "rel")?.toLowerCase().split(/\s+/u) ?? [];
-    if (!rel.includes("stylesheet") || attribute(tag, "disabled") !== undefined) return;
-    if (!forScreen(attribute(tag, "media"))) return;
+    if (!rel.includes("stylesheet") || !linkApplies(tag)) return;
     this.assumeDefaults = false;
     const href = attribute(tag, "href");
     const applied = !rel.includes("alternate") && this.inPreferredSet(attribute(tag, "title"));
@@ -906,6 +905,17 @@ function structuralReason(tag: HtmlStartTag, declarations: Declarations): string
   if (opens && attribute(tag, "open") === undefined) return `closed ${tag.name}`;
   const hidden = attribute(tag, "hidden") !== undefined && declarations.display === undefined;
   return hidden ? "hidden attribute" : undefined;
+}
+
+/**
+ * Whether a browser would apply a linked sheet on a screen: not disabled, typed as CSS if at all.
+ * @param tag - The `<link>` start tag.
+ * @returns {boolean} True when the link counts.
+ */
+function linkApplies(tag: HtmlStartTag): boolean {
+  const type = attribute(tag, "type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+  const css = type === "" || type === "text/css";
+  return css && attribute(tag, "disabled") === undefined && forScreen(attribute(tag, "media"));
 }
 
 function fieldType(tag: HtmlStartTag): string {
