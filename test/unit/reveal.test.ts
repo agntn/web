@@ -688,6 +688,28 @@ describe("revealUrl", () => {
     ]);
   });
 
+  it("drops a capture's stylesheet that redirects out to the live site", async () => {
+    resolveHere();
+    const port = new URL(base).port;
+    const stamp = "/web/20260418153806id_";
+    routes.set(`${stamp}/https://example.com/`, [
+      { status: 200, headers: html, body: "<link rel=stylesheet href=s.css><p class=x>old</p>" },
+    ]);
+    routes.set(`${stamp}/https://example.com/s.css`, [
+      { status: 302, headers: { Location: `http://example.com:${port}/s.css` } },
+    ]);
+    routes.set("/s.css", [{ status: 200, headers: css, body: ".x { display: none }" }]);
+
+    const result = await revealUrl(
+      `http://web.archive.org:${port}/web/20260418153806/https://example.com/`,
+      { allowPrivateNetwork: true },
+    );
+
+    expect(hits.get("/s.css")).toBe(1);
+    expect(result.stylesheets).toBeUndefined();
+    expect(ofKind(result.findings, "hidden")).toEqual([]);
+  });
+
   it("resolves a capture that redirects against the page it lands on", async () => {
     resolveHere();
     const stamp = "/web/20260418153806id_";

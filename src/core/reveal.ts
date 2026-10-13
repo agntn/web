@@ -292,7 +292,7 @@ async function readStylesheets(
 }
 
 /**
- * One stylesheet, or nothing when it fails or isn't CSS, the way a browser drops it.
+ * One stylesheet, or nothing when it fails, isn't CSS or slips out of the capture to a live site.
  * @param url - The sheet's address as the page links it.
  * @param request - The page's request settings, under the stylesheets' own deadline.
  * @param target - Where the page came from, so a capture's sheet comes from the same archive.
@@ -307,7 +307,7 @@ async function readStylesheet(
     const sheet = await fetchPage(`${target.archived ?? ""}${url}`, request);
     if (sheet.contentType.split(";")[0]?.trim().toLowerCase() !== "text/css") return undefined;
     const final = target.archived === undefined ? sheet.url : pageTarget(sheet.url).original;
-    return { text: sheet.text, url: final ?? url };
+    return final === undefined ? undefined : { text: sheet.text, url: final };
   } catch {
     return undefined;
   }
