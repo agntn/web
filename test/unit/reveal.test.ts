@@ -271,14 +271,18 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(earlier), "camouflage")).toEqual([]);
   });
 
-  it("keeps the default page under a print stylesheet and ignores words inside url()", () => {
+  it("keeps the default page under a print or disabled stylesheet and ignores words in url()", () => {
     const print = "<link rel=stylesheet media=print href=p.css><span style='color:#fff'>x</span>";
+    const off = "<link rel=stylesheet disabled href=o.css><span style='color:#fff'>z</span>";
     const image = "<span style='background:url(red.png);color:red'>y</span>";
 
     expect(ofKind(revealHtml(print), "camouflage")).toEqual([
       expect.objectContaining({ value: "x" }),
     ]);
     expect(ofKind(revealHtml(image), "camouflage")).toEqual([]);
+    expect(ofKind(revealHtml(off), "camouflage")).toEqual([
+      expect.objectContaining({ value: "z" }),
+    ]);
   });
 
   it("assumes no default colors once a stylesheet is linked", () => {
@@ -326,7 +330,10 @@ describe("revealHtml", () => {
     const html = [
       "<link rel=stylesheet href=a.css><link rel='alternate stylesheet' href=alt.css>",
       "<link rel=stylesheet media=print href=print.css><link rel=stylesheet href=a.css>",
-      "<style>@import 'b.css' screen; @import url(p.css) print; p {} @import 'late.css';</style>",
+      "<link rel=stylesheet href=off.css disabled>",
+      "<style>@import 'b.css' screen; @import url(p.css) print; @import 'l.css' layer(theme);",
+      "@import url(s.css) supports(selector(:has(a))) screen; @import 'q.css' layer supports(display: grid) print;",
+      "p {} @import 'late.css';</style>",
     ].join("\n");
     const stylesheets = {
       "https://example.com/a.css": "@import 'c.css';",
@@ -336,11 +343,15 @@ describe("revealHtml", () => {
     expect(linkedStylesheets(html, { url: "https://example.com/" })).toEqual([
       "https://example.com/a.css",
       "https://example.com/b.css",
+      "https://example.com/l.css",
+      "https://example.com/s.css",
     ]);
     expect(linkedStylesheets(html, { url: "https://example.com/", stylesheets })).toEqual([
       "https://example.com/a.css",
       "https://example.com/c.css",
       "https://example.com/b.css",
+      "https://example.com/l.css",
+      "https://example.com/s.css",
     ]);
   });
 
@@ -526,6 +537,8 @@ interface Reply {
   readonly body?: string | Buffer;
   /* Never answer, like a server that stalls. */
   readonly hang?: boolean;
+  /* Answer this many milliseconds late. */
+  readonly delay?: number;
 }
 
 const html = { "Content-Type": "text/html" };
@@ -535,6 +548,8 @@ describe("revealUrl", () => {
   /* What a path answers on its first, second and later hits; the last reply repeats. */
   const routes = new Map<string, readonly Reply[]>();
   const hits = new Map<string, number>();
+  /* Requests open right now, and the most that were open at once. */
+  const load = { open: 0, peak: 0 };
   const server = createServer((request, response) => {
     const path = request.url ?? "/";
     const hit = (hits.get(path) ?? 0) + 1;
@@ -542,7 +557,12 @@ describe("revealUrl", () => {
     const replies = routes.get(path) ?? [{ status: 404 }];
     const reply = replies[Math.min(hit, replies.length) - 1] ?? { status: 404 };
     if (reply.hang === true) return;
-    response.writeHead(reply.status, reply.headers).end(reply.body);
+    load.open += 1;
+    load.peak = Math.max(load.peak, load.open);
+    setTimeout(() => {
+      load.open -= 1;
+      response.writeHead(reply.status, reply.headers).end(reply.body);
+    }, reply.delay ?? 0);
   });
   let base = "";
 
@@ -559,6 +579,7 @@ describe("revealUrl", () => {
   beforeEach(() => {
     routes.clear();
     hits.clear();
+    load.peak = 0;
   });
 
   /* Every name resolves to this machine, so a URL with the test server's port reaches it. */
@@ -787,6 +808,38 @@ describe("revealUrl", () => {
     ]);
     expect(ofKind(result.findings, "camouflage")).toEqual([
       expect.objectContaining({ value: "white on white" }),
+    ]);
+  });
+
+  it("loads stylesheets no more at once than concurrency allows", async () => {
+    const links = ["a", "b", "c"].map((name) => `<link rel=stylesheet href=/${name}.css>`);
+    routes.set("/", [{ status: 200, headers: html, body: links.join("") }]);
+    for (const name of ["a", "b", "c"]) {
+      routes.set(`/${name}.css`, [{ status: 200, headers: css, body: "p {}", delay: 30 }]);
+    }
+
+    const result = await revealUrl(`${base}/`, { allowPrivateNetwork: true, concurrency: 1 });
+
+    expect(result.stylesheets).toHaveLength(3);
+    expect(load.peak).toBe(1);
+  });
+
+  it("resolves a redirected stylesheet's imports against where it landed", async () => {
+    const page = "<link rel=stylesheet href=/style.css><p class=secret>key</p>";
+    routes.set("/", [{ status: 200, headers: html, body: page }]);
+    routes.set("/style.css", [{ status: 302, headers: { Location: "/assets/v2/style.css" } }]);
+    routes.set("/assets/v2/style.css", [
+      { status: 200, headers: css, body: "@import 'theme.css';" },
+    ]);
+    routes.set("/assets/v2/theme.css", [
+      { status: 200, headers: css, body: ".secret { display: none }" },
+    ]);
+
+    const result = await revealUrl(`${base}/`, { allowPrivateNetwork: true });
+
+    expect(result.stylesheets).toEqual([`${base}/style.css`, `${base}/assets/v2/theme.css`]);
+    expect(ofKind(result.findings, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
     ]);
   });
 

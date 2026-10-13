@@ -8,12 +8,13 @@ import {
   UnreadablePageError,
   WebError,
 } from "./errors.ts";
-import { operationSignal } from "./execution.ts";
+import { operationSignal, settleWithConcurrency } from "./execution.ts";
 import {
   invisibleCharacters,
   linkedStylesheets,
   revealHtml,
   type HiddenFinding,
+  type Stylesheet,
 } from "./hidden.ts";
 import { sanitizeUrl } from "./redaction.ts";
 import { clip } from "./text.ts";
@@ -27,6 +28,7 @@ export {
   type HiddenFinding,
   type HiddenKind,
   type RevealHtmlOptions,
+  type Stylesheet,
 } from "./hidden.ts";
 
 /** Largest page a reveal reads by default, 4 MiB: past nearly any HTML document. */
@@ -127,6 +129,8 @@ interface PageRequest {
   readonly maxBytes: number;
   readonly allowPrivateNetwork: boolean;
   readonly accept: string;
+  /** How many stylesheets load at once. */
+  readonly concurrency: number | undefined;
 }
 
 /** A response, through the parts reading it needs. */
@@ -180,6 +184,7 @@ export async function revealUrl(
     maxBytes: byteLimit(options?.maxBytes),
     allowPrivateNetwork: options?.allowPrivateNetwork === true,
     accept: ACCEPT,
+    concurrency: options?.concurrency,
   };
   const page = await fetchPage(target.fetch, request);
   const { findings, stylesheets } = await scan(page, target, request);
@@ -259,8 +264,8 @@ async function readStylesheets(
   url: string,
   request: Readonly<PageRequest>,
   target: Readonly<PageTarget>,
-): Promise<Record<string, string>> {
-  const sheets: Record<string, string> = {};
+): Promise<Record<string, Stylesheet>> {
+  const sheets: Record<string, Stylesheet> = {};
   const tried = new Set<string>();
   const budget = AbortSignal.timeout(STYLESHEETS_TIMEOUT_MS);
   const signal = request.signal === undefined ? budget : AbortSignal.any([request.signal, budget]);
@@ -271,35 +276,38 @@ async function readStylesheets(
       .slice(0, MAX_STYLESHEETS - tried.size);
     if (next.length === 0) return sheets;
     for (const sheet of next) tried.add(sheet);
-    const texts = await Promise.all(
-      next.map((sheet) =>
-        readStylesheet(`${target.archived ?? ""}${sheet}`, sheetRequest, request.signal),
-      ),
+    const read = await settleWithConcurrency(
+      next,
+      async (sheet) => readStylesheet(sheet, sheetRequest, target),
+      { signal, concurrency: request.concurrency },
     );
-    for (const [index, css] of texts.entries()) {
-      if (css !== undefined) sheets[next[index]!] = css;
+    request.signal?.throwIfAborted();
+    for (const [index, outcome] of read.entries()) {
+      if (outcome.status === "fulfilled" && outcome.value !== undefined) {
+        sheets[next[index]!] = outcome.value;
+      }
     }
   }
 }
 
 /**
  * One stylesheet, or nothing when it fails or isn't CSS, the way a browser drops it.
- * @param url - What to fetch.
+ * @param url - The sheet's address as the page links it.
  * @param request - The page's request settings, under the stylesheets' own deadline.
- * @param caller - The caller's signal, whose abort ends the whole reveal.
- * @returns {Promise<string | undefined>} The sheet's text.
+ * @param target - Where the page came from, so a capture's sheet comes from the same archive.
+ * @returns {Promise<Stylesheet | undefined>} The text and the address it came from in the end.
  */
 async function readStylesheet(
   url: string,
   request: Readonly<PageRequest>,
-  caller: Readonly<AbortSignal> | undefined,
-): Promise<string | undefined> {
+  target: Readonly<PageTarget>,
+): Promise<Stylesheet | undefined> {
   try {
-    const sheet = await fetchPage(url, request);
-    const media = sheet.contentType.split(";")[0]?.trim().toLowerCase();
-    return media === "text/css" ? sheet.text : undefined;
+    const sheet = await fetchPage(`${target.archived ?? ""}${url}`, request);
+    if (sheet.contentType.split(";")[0]?.trim().toLowerCase() !== "text/css") return undefined;
+    const final = target.archived === undefined ? sheet.url : pageTarget(sheet.url).original;
+    return { text: sheet.text, url: final ?? url };
   } catch {
-    caller?.throwIfAborted();
     return undefined;
   }
 }

@@ -50,12 +50,18 @@ export interface HiddenFinding {
   readonly count?: number;
 }
 
+/** A stylesheet as read, and the address after any redirect, which its imports resolve against. */
+export interface Stylesheet {
+  readonly text: string;
+  readonly url: string;
+}
+
 /** Options for {@link revealHtml}. */
 export interface RevealHtmlOptions {
   /** Address of the page, which relative URLs resolve against. */
   readonly url?: string;
   /** Sheets by the absolute URLs {@link linkedStylesheets} names; a missing one adds no rules. */
-  readonly stylesheets?: Readonly<Record<string, string>>;
+  readonly stylesheets?: Readonly<Record<string, string | Stylesheet>>;
 }
 
 const HIDDEN_TEXT_LIMIT = 1_000;
@@ -371,7 +377,7 @@ class HiddenScanner {
   private baseFromPage = false;
   private assumeDefaults = true;
   private pending: Pending | undefined;
-  private readonly sheets: Readonly<Record<string, string>>;
+  private readonly sheets: Readonly<Record<string, string | Stylesheet>>;
   /** Each linked sheet parsed once, however often it gets imported. */
   private readonly parsed = new Map<string, ParsedSheet>();
   private filings = 0;
@@ -381,7 +387,7 @@ class HiddenScanner {
   constructor(
     html: string,
     url: string | undefined,
-    sheets: Readonly<Record<string, string>> = {},
+    sheets: Readonly<Record<string, string | Stylesheet>> = {},
   ) {
     this.lines = lineStarts(html);
     this.html = html;
@@ -447,10 +453,11 @@ class HiddenScanner {
   private parsedSheet(url: string): ParsedSheet | undefined {
     const known = this.parsed.get(url);
     if (known !== undefined) return known;
-    const css = Object.hasOwn(this.sheets, url) ? this.sheets[url] : undefined;
-    if (css === undefined) return undefined;
-    const imports = stylesheetImports(css).map((imported) => resolve(imported, url));
-    const sheet = { imports, rules: parseStylesheet(css) };
+    const source = Object.hasOwn(this.sheets, url) ? this.sheets[url] : undefined;
+    if (source === undefined) return undefined;
+    const { text, url: base } = typeof source === "string" ? { text: source, url } : source;
+    const imports = stylesheetImports(text).map((imported) => resolve(imported, base));
+    const sheet = { imports, rules: parseStylesheet(text) };
     this.parsed.set(url, sheet);
     return sheet;
   }
@@ -477,12 +484,14 @@ class HiddenScanner {
   }
 
   /**
-   * A screen stylesheet drops the default colors; an alternate one waits for the reader's pick.
+   * A screen stylesheet drops the default colors; an alternate one waits for the reader's pick,
+   * and a disabled one applies nothing at all.
    * @param tag - The `<link>` start tag.
    */
   private prepareLink(tag: HtmlStartTag): void {
     const rel = attribute(tag, "rel")?.toLowerCase().split(/\s+/u) ?? [];
-    if (!rel.includes("stylesheet") || !forScreen(attribute(tag, "media"))) return;
+    if (!rel.includes("stylesheet") || attribute(tag, "disabled") !== undefined) return;
+    if (!forScreen(attribute(tag, "media"))) return;
     this.assumeDefaults = false;
     const href = attribute(tag, "href");
     if (href !== undefined && !rel.includes("alternate")) {

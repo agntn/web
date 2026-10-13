@@ -161,6 +161,7 @@ export type {
   RevealHtmlOptions,
   RevealOptions,
   RevealResult,
+  Stylesheet,
 } from "./core/reveal.ts";
 
 export {

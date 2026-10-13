@@ -184,7 +184,7 @@ export function stylesheetImports(css: string): string[] {
     const parts = IMPORT.exec(statement)?.groups;
     if (parts?.url === undefined) break;
     const url = parts.url.replaceAll(/^["']|["']$/gu, "");
-    if (url !== "" && forScreen(parts.media)) urls.push(url);
+    if (url !== "" && forScreen(importMedia(parts.media))) urls.push(url);
   }
   return urls;
 }
@@ -202,6 +202,32 @@ function* leadingStatements(text: string): Generator<string> {
     yield text.slice(position, end).trim();
     position = end + 1;
   }
+}
+
+/**
+ * An import's media list past its `layer` and `supports()`; the reveal takes both as met.
+ * @param conditions - What follows the import's URL.
+ * @returns {string} The media list alone.
+ */
+function importMedia(conditions: string | undefined): string {
+  let text = (conditions ?? "").trim().replace(/^layer\b(?:\([^)]*\))?\s*/iu, "");
+  if (/^supports\(/iu.test(text)) text = text.slice(closingParen(text, text.indexOf("(")) + 1);
+  return text.trim();
+}
+
+/**
+ * The parenthesis that closes the one at `open`, past nested ones like `selector(:has(a))`.
+ * @param text - The text.
+ * @param open - Offset of the `(`.
+ * @returns {number} Offset of its `)`, or the text length when it never closes.
+ */
+function closingParen(text: string, open: number): number {
+  let depth = 0;
+  for (let index = open; index < text.length; index += 1) {
+    depth += NESTING[text[index] ?? ""] ?? 0;
+    if (depth === 0) return index;
+  }
+  return text.length;
 }
 
 /**
