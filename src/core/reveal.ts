@@ -9,7 +9,12 @@ import {
   WebError,
 } from "./errors.ts";
 import { operationSignal } from "./execution.ts";
-import { invisibleCharacters, revealHtml, type HiddenFinding } from "./hidden.ts";
+import {
+  invisibleCharacters,
+  linkedStylesheets,
+  revealHtml,
+  type HiddenFinding,
+} from "./hidden.ts";
 import { sanitizeUrl } from "./redaction.ts";
 import { clip } from "./text.ts";
 import type { ExecutionOptions } from "./types.ts";
@@ -17,6 +22,7 @@ import { version } from "../version.ts";
 
 export {
   hiddenKinds,
+  linkedStylesheets,
   revealHtml,
   type HiddenFinding,
   type HiddenKind,
@@ -48,6 +54,11 @@ const CHARSET = /charset\s*=\s*["']?(?<label>[\w.:-]+)/iu;
 const MARKUP_START = /^\s*<(?:!doctype\s+html|!--|[a-z][\w-]*[\s/>])/iu;
 const TITLE = /<title[^>]*>(?<title>[^<]*)</iu;
 const ACCEPT = "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8";
+const STYLESHEET_ACCEPT = "text/css,*/*;q=0.1";
+/** Stylesheets one reveal reads, linked and imported together; a theme rarely needs more. */
+const MAX_STYLESHEETS = 10;
+/** One deadline for all the sheets, so a stalling `site.css` can't hold up a page already read. */
+const STYLESHEETS_TIMEOUT_MS = 30_000;
 
 /** Address ranges a page to reveal may not sit on, unless the caller allows private networks. */
 const PRIVATE_RANGES: readonly (readonly [string, number, "ipv4" | "ipv6"])[] = [
@@ -93,6 +104,8 @@ export interface RevealResult {
   /** Set when the Wayback Machine served the capture as archived, without its toolbar. */
   readonly archive?: "wayback";
   readonly contentType?: string;
+  /** Linked and imported stylesheets whose rules the reveal applied, by URL. */
+  readonly stylesheets?: readonly string[];
   /** Bytes scanned. */
   readonly bytes: number;
   /** True when the page ran past `maxBytes` and only its start was scanned. */
@@ -104,6 +117,8 @@ export interface RevealResult {
 interface PageTarget {
   readonly fetch: string;
   readonly original?: string;
+  /** The capture's `id_` prefix, which fetches what the archived page links as archived too. */
+  readonly archived?: string;
 }
 
 /** One request's settings, the same for every try and redirect. */
@@ -111,6 +126,7 @@ interface PageRequest {
   readonly signal: Readonly<AbortSignal> | undefined;
   readonly maxBytes: number;
   readonly allowPrivateNetwork: boolean;
+  readonly accept: string;
 }
 
 /** A response, through the parts reading it needs. */
@@ -145,7 +161,7 @@ interface Page {
 let privateNetworks: BlockList | undefined;
 
 /**
- * Fetch a page's own HTML, no provider in between, and list what it keeps from its reader.
+ * Fetch a page's own HTML and its stylesheets, no provider in between, and list what it hides.
  * @param url - Public HTTP or HTTPS page URL.
  * @param options - Cancellation, deadline, byte limit, and whether private networks are allowed.
  * @returns {Promise<RevealResult>} Findings in the order of {@link hiddenKinds}, then by line.
@@ -163,16 +179,16 @@ export async function revealUrl(
     signal: operationSignal(options),
     maxBytes: byteLimit(options?.maxBytes),
     allowPrivateNetwork: options?.allowPrivateNetwork === true,
+    accept: ACCEPT,
   };
   const page = await fetchPage(target.fetch, request);
-  const findings = page.markup
-    ? revealHtml(page.text, { url: target.original ?? page.url })
-    : invisibleCharacters(page.text);
+  const { findings, stylesheets } = await scan(page, target, request);
   return {
     url,
     source: page.url,
     ...(target.original === undefined ? {} : { archive: "wayback" as const }),
     ...(page.contentType === "" ? {} : { contentType: page.contentType }),
+    ...(stylesheets.length === 0 ? {} : { stylesheets }),
     bytes: page.bytes,
     ...(page.partial ? { partial: true } : {}),
     findings,
@@ -194,10 +210,8 @@ function pageTarget(url: string): PageTarget {
     : undefined;
   if (capture?.stamp === undefined || capture.target === undefined) return { fetch: page.href };
   const archived = `${capture.target}${page.search}`;
-  return {
-    fetch: `${page.origin}/web/${capture.stamp}id_/${archived}`,
-    original: originalAddress(archived),
-  };
+  const prefix = `${page.origin}/web/${capture.stamp}id_/`;
+  return { fetch: `${prefix}${archived}`, original: originalAddress(archived), archived: prefix };
 }
 
 /**
@@ -210,6 +224,84 @@ function originalAddress(target: string): string | undefined {
     ? target.replace(/^(https?:)\/*/iu, "$1//")
     : `http://${target}`;
   return URL.canParse(absolute) ? new URL(absolute).href : undefined;
+}
+
+/**
+ * Scan markup with the stylesheets it applies, or text for invisible characters alone.
+ * @param page - The decoded page.
+ * @param target - Where it came from.
+ * @param request - The page's request settings, which its stylesheets reuse.
+ * @returns {Promise<{ findings: HiddenFinding[]; stylesheets: string[] }>} The findings and the
+ * sheets whose rules they saw.
+ */
+async function scan(
+  page: Readonly<Page>,
+  target: Readonly<PageTarget>,
+  request: Readonly<PageRequest>,
+): Promise<{ findings: HiddenFinding[]; stylesheets: string[] }> {
+  if (!page.markup) return { findings: invisibleCharacters(page.text), stylesheets: [] };
+  const url = target.original ?? page.url;
+  const stylesheets = await readStylesheets(page.text, url, request, target);
+  const findings = revealHtml(page.text, { url, stylesheets });
+  return { findings, stylesheets: Object.keys(stylesheets) };
+}
+
+/**
+ * The page's sheets and their imports, vetted and capped like the page; a failed one is skipped.
+ * @param html - The page source.
+ * @param url - The page address its links resolve against.
+ * @param request - Signal, byte limit and network policy.
+ * @param target - Where the page came from, so a capture's sheets come from the same archive.
+ * @returns {Promise<Record<string, string>>} Each sheet read, by absolute URL.
+ */
+async function readStylesheets(
+  html: string,
+  url: string,
+  request: Readonly<PageRequest>,
+  target: Readonly<PageTarget>,
+): Promise<Record<string, string>> {
+  const sheets: Record<string, string> = {};
+  const tried = new Set<string>();
+  const budget = AbortSignal.timeout(STYLESHEETS_TIMEOUT_MS);
+  const signal = request.signal === undefined ? budget : AbortSignal.any([request.signal, budget]);
+  const sheetRequest = { ...request, signal, accept: STYLESHEET_ACCEPT };
+  for (;;) {
+    const next = linkedStylesheets(html, { url, stylesheets: sheets })
+      .filter((sheet) => !tried.has(sheet) && /^https?:/iu.test(sheet))
+      .slice(0, MAX_STYLESHEETS - tried.size);
+    if (next.length === 0) return sheets;
+    for (const sheet of next) tried.add(sheet);
+    const texts = await Promise.all(
+      next.map((sheet) =>
+        readStylesheet(`${target.archived ?? ""}${sheet}`, sheetRequest, request.signal),
+      ),
+    );
+    for (const [index, css] of texts.entries()) {
+      if (css !== undefined) sheets[next[index]!] = css;
+    }
+  }
+}
+
+/**
+ * One stylesheet, or nothing when it fails or isn't CSS, the way a browser drops it.
+ * @param url - What to fetch.
+ * @param request - The page's request settings, under the stylesheets' own deadline.
+ * @param caller - The caller's signal, whose abort ends the whole reveal.
+ * @returns {Promise<string | undefined>} The sheet's text.
+ */
+async function readStylesheet(
+  url: string,
+  request: Readonly<PageRequest>,
+  caller: Readonly<AbortSignal> | undefined,
+): Promise<string | undefined> {
+  try {
+    const sheet = await fetchPage(url, request);
+    const media = sheet.contentType.split(";")[0]?.trim().toLowerCase();
+    return media === "text/css" ? sheet.text : undefined;
+  } catch {
+    caller?.throwIfAborted();
+    return undefined;
+  }
 }
 
 function byteLimit(maxBytes: number | undefined): number {
@@ -270,7 +362,7 @@ async function send(url: string, request: PageRequest): Promise<Answer> {
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const signal =
     request.signal === undefined ? timeout : AbortSignal.any([request.signal, timeout]);
-  const { response, chunks } = await connect(url, lookup, signal);
+  const { response, chunks } = await connect(url, { lookup, signal, accept: request.accept });
   return {
     status: response.statusCode ?? 0,
     location: response.headers.location,
@@ -292,16 +384,16 @@ async function send(url: string, request: PageRequest): Promise<Answer> {
  * Open the request on a fresh connection, never a pooled one the lookup would not vet, and the
  * body stream, decompressed when the server compressed it.
  * @param url - What to fetch.
- * @param lookup - The lookup that vets each address.
- * @param signal - Caller cancellation and the timeout.
+ * @param how - The lookup that vets each address, cancellation with the timeout, and the
+ * media types to ask for.
  * @returns {Promise<{ response: IncomingMessage; chunks: AsyncIterator<unknown> }>} The response
  * and its decoded body.
  */
 async function connect(
   url: string,
-  lookup: LookupFunction,
-  signal: Readonly<AbortSignal>,
+  how: Readonly<{ lookup: LookupFunction; signal: Readonly<AbortSignal>; accept: string }>,
 ): Promise<{ response: IncomingMessage; chunks: AsyncIterator<unknown> }> {
+  const { lookup, signal } = how;
   const [http, https, { pipeline }, zlib] = await Promise.all([
     import("node:http"),
     import("node:https"),
@@ -310,7 +402,7 @@ async function connect(
   ]);
   const get = url.startsWith("https:") ? https.request : http.request;
   const headers = {
-    Accept: ACCEPT,
+    Accept: how.accept,
     "Accept-Encoding": "gzip, deflate, br",
     "User-Agent": `agntn-web/${version}`,
   };

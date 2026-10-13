@@ -439,6 +439,7 @@ function revealResult() {
     source: Type.String(),
     archive: Type.Optional(Type.Literal("wayback")),
     contentType: optionalText,
+    stylesheets: Type.Optional(Type.Array(Type.String())),
     bytes: Type.Integer({ minimum: 0 }),
     partial: Type.Optional(Type.Boolean()),
     counts,

@@ -148,7 +148,13 @@ export {
 } from "./core/read.ts";
 export type { ReadProviderName, ReadUrlOptions, ReadUrlDetailedResult } from "./core/read.ts";
 
-export { DEFAULT_REVEAL_MAX_BYTES, hiddenKinds, revealHtml, revealUrl } from "./core/reveal.ts";
+export {
+  DEFAULT_REVEAL_MAX_BYTES,
+  hiddenKinds,
+  linkedStylesheets,
+  revealHtml,
+  revealUrl,
+} from "./core/reveal.ts";
 export type {
   HiddenFinding,
   HiddenKind,

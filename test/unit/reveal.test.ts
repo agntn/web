@@ -11,7 +11,12 @@ import {
   PrivateAddressError,
   UnreadablePageError,
 } from "../../src/core/errors.ts";
-import { revealHtml, revealUrl, type HiddenFinding } from "../../src/core/reveal.ts";
+import {
+  linkedStylesheets,
+  revealHtml,
+  revealUrl,
+  type HiddenFinding,
+} from "../../src/core/reveal.ts";
 import { revealAnswer } from "../../src/tool-text.ts";
 import { webTools } from "../../src/tools.ts";
 
@@ -282,6 +287,80 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "camouflage")).toEqual([]);
   });
 
+  it("keeps the rule after an @charset or @import statement", () => {
+    const charset = `<style>@charset "utf-8"; .secret { display: none }</style><p class=secret>a</p>`;
+    const imports = `<style>@import url("x;y.css"); .secret { display: none }</style><p class=secret>b</p>`;
+
+    expect(ofKind(revealHtml(charset), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "a" }),
+    ]);
+    expect(ofKind(revealHtml(imports), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "b" }),
+    ]);
+  });
+
+  it("cascades a linked sheet where the page links it, after the sheets it imports", () => {
+    const url = "https://example.com/blog/post";
+    const page = (order: string) =>
+      `${order}<body><p class=secret>key</p><span class=quiet>white on white</span>`;
+    const stylesheets = {
+      "https://example.com/site.css": `@charset "UTF-8"; @import "theme.css"; .secret { display: none }`,
+      "https://example.com/theme.css": "body { background: #fff } .quiet { color: #fff }",
+    };
+    const shown = "<style>.secret { display: block }</style>";
+    const linked = "<link rel=stylesheet href=/site.css>";
+
+    const after = revealHtml(page(shown + linked), { url, stylesheets });
+    const before = revealHtml(page(linked + shown), { url, stylesheets });
+
+    expect(ofKind(after, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+    ]);
+    expect(ofKind(before, "hidden")).toEqual([]);
+    expect(ofKind(after, "camouflage")).toEqual([
+      expect.objectContaining({ reason: "#ffffff text from .quiet on #ffffff from body" }),
+    ]);
+  });
+
+  it("names the sheets a screen applies, each once, and ends an import cycle", () => {
+    const html = [
+      "<link rel=stylesheet href=a.css><link rel='alternate stylesheet' href=alt.css>",
+      "<link rel=stylesheet media=print href=print.css><link rel=stylesheet href=a.css>",
+      "<style>@import 'b.css' screen; @import url(p.css) print; p {} @import 'late.css';</style>",
+    ].join("\n");
+    const stylesheets = {
+      "https://example.com/a.css": "@import 'c.css';",
+      "https://example.com/c.css": "@import 'a.css'; .x { display: none }",
+    };
+
+    expect(linkedStylesheets(html, { url: "https://example.com/" })).toEqual([
+      "https://example.com/a.css",
+      "https://example.com/b.css",
+    ]);
+    expect(linkedStylesheets(html, { url: "https://example.com/", stylesheets })).toEqual([
+      "https://example.com/a.css",
+      "https://example.com/c.css",
+      "https://example.com/b.css",
+    ]);
+  });
+
+  it("files a sheet that imports repeat a bounded number of times", () => {
+    const stylesheets: Record<string, string> = {};
+    for (let index = 0; index < 9; index += 1) {
+      stylesheets[`https://example.com/${index}.css`] = `@import '${index + 1}.css';`.repeat(100);
+    }
+    stylesheets["https://example.com/9.css"] = ".secret { display: none }";
+    const html = "<link rel=stylesheet href=0.css><p class=secret>key</p>";
+
+    const started = performance.now();
+    const findings = revealHtml(html, { url: "https://example.com/", stylesheets });
+
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(ofKind(findings, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+    ]);
+  });
+
   it("spells out invisible characters and what they carry", () => {
     const html = [
       `<p>zero${ZWSP}width</p>`,
@@ -445,9 +524,12 @@ interface Reply {
   readonly status: number;
   readonly headers?: Readonly<Record<string, string>>;
   readonly body?: string | Buffer;
+  /* Never answer, like a server that stalls. */
+  readonly hang?: boolean;
 }
 
 const html = { "Content-Type": "text/html" };
+const css = { "Content-Type": "text/css; charset=utf-8" };
 
 describe("revealUrl", () => {
   /* What a path answers on its first, second and later hits; the last reply repeats. */
@@ -459,6 +541,7 @@ describe("revealUrl", () => {
     hits.set(path, hit);
     const replies = routes.get(path) ?? [{ status: 404 }];
     const reply = replies[Math.min(hit, replies.length) - 1] ?? { status: 404 };
+    if (reply.hang === true) return;
     response.writeHead(reply.status, reply.headers).end(reply.body);
   });
   let base = "";
@@ -507,6 +590,28 @@ describe("revealUrl", () => {
     expect(ofKind(result.findings, "script")[0]?.value).toMatch(
       /^https:\/\/static\.cloudflareinsights\.com\//u,
     );
+  });
+
+  it("reads a capture's stylesheets from the same capture", async () => {
+    resolveHere();
+    const stamp = "/web/20260418153806id_";
+    routes.set(`${stamp}/https://example.com/`, [
+      { status: 200, headers: html, body: "<link rel=stylesheet href=/s.css><p class=x>old</p>" },
+    ]);
+    routes.set(`${stamp}/https://example.com/s.css`, [
+      { status: 200, headers: css, body: ".x { display: none }" },
+    ]);
+    const port = new URL(base).port;
+
+    const result = await revealUrl(
+      `http://web.archive.org:${port}/web/20260418153806/https://example.com/`,
+      { allowPrivateNetwork: true },
+    );
+
+    expect(result.stylesheets).toEqual(["https://example.com/s.css"]);
+    expect(ofKind(result.findings, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .x", value: "old" }),
+    ]);
   });
 
   it("refuses a host that resolves to the machine itself", async () => {
@@ -657,6 +762,63 @@ describe("revealUrl", () => {
     expect(ofKind(result.findings, "hidden")).toEqual([
       expect.objectContaining({ value: "secret" }),
     ]);
+  });
+
+  it("applies linked and imported stylesheets and skips the ones a browser would drop", async () => {
+    const page = [
+      "<link rel=stylesheet href=/site.css><link rel=stylesheet href=/gone.css>",
+      "<link rel=stylesheet href=/page.css>",
+      "<body><p class=secret>key</p><span class=quiet>white on white</span>",
+    ].join("\n");
+    routes.set("/", [{ status: 200, headers: html, body: page }]);
+    routes.set("/site.css", [
+      { status: 200, headers: css, body: "@import 'theme.css'; .secret { display: none }" },
+    ]);
+    routes.set("/theme.css", [
+      { status: 200, headers: css, body: "body { background: #fff } .quiet { color: #fff }" },
+    ]);
+    routes.set("/page.css", [{ status: 200, headers: html, body: ".quiet { color: #000 }" }]);
+
+    const result = await revealUrl(`${base}/`, { allowPrivateNetwork: true });
+
+    expect(result.stylesheets).toEqual([`${base}/site.css`, `${base}/theme.css`]);
+    expect(ofKind(result.findings, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+    ]);
+    expect(ofKind(result.findings, "camouflage")).toEqual([
+      expect.objectContaining({ value: "white on white" }),
+    ]);
+  });
+
+  it("reads at most ten stylesheets for one page", async () => {
+    const links = Array.from(
+      { length: 12 },
+      (_, index) => `<link rel=stylesheet href=/${index}.css>`,
+    );
+    routes.set("/", [{ status: 200, headers: html, body: links.join("") }]);
+    for (let index = 0; index < 12; index += 1) {
+      routes.set(`/${index}.css`, [
+        { status: 200, headers: css, body: `@import '${index}-more.css';` },
+      ]);
+    }
+
+    const result = await revealUrl(`${base}/`, { allowPrivateNetwork: true });
+
+    expect(result.stylesheets).toHaveLength(10);
+    expect(hits.get("/10.css")).toBeUndefined();
+    expect(hits.get("/0-more.css")).toBeUndefined();
+  });
+
+  it("stops at the caller's abort while a stylesheet stalls", async () => {
+    routes.set("/", [{ status: 200, headers: html, body: "<link rel=stylesheet href=/slow.css>" }]);
+    routes.set("/slow.css", [{ status: 200, hang: true }]);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new Error("enough")), 200);
+
+    await expect(
+      revealUrl(`${base}/`, { allowPrivateNetwork: true, signal: controller.signal }),
+    ).rejects.toThrow("enough");
+    expect(hits.get("/slow.css")).toBe(1);
   });
 
   it("looks for invisible characters in a text file without parsing it as HTML", async () => {

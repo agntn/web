@@ -15,7 +15,7 @@ export interface ElementIdentity {
   readonly classes: readonly string[];
 }
 
-/** A rule from a `<style>` block whose selector names one tag, id or class set. */
+/** A stylesheet rule whose selector names one tag, id or class set. */
 export interface StyleRule {
   readonly selector: string;
   readonly tag?: string;
@@ -35,6 +35,12 @@ export interface Color {
   readonly alpha: number;
 }
 
+/** An at-rule ahead, past whitespace; sticky, so it tests one position. */
+const AT_RULE = /\s*@/uy;
+/** `@import` with its URL, quoted or in `url()`, and the media list after it. */
+const IMPORT = /^@import\s*(?:url\(\s*)?(?<url>"[^"]*"|'[^']*'|[^\s"')]+)\s*\)?\s*(?<media>.*)$/isu;
+/** Media that hold on a screen of any size. */
+const SCREEN_MEDIA = /^(?:all|screen)?$/iu;
 const COMPOUND_SELECTOR = /^(?<tag>[a-z][\w-]*|\*)?(?<rest>(?:[.#][\w-]+)*)$/iu;
 const SELECTOR_PART = /[.#][\w-]+/gu;
 const COLOR_TOKEN = /#[\da-f]{3,8}\b|rgba?\([^)]{0,64}\)|\b[a-z]+\b/giu;
@@ -140,7 +146,7 @@ function shorthandColor(value: string): string {
 
 /**
  * Top-level rules for one element, like `.secret` or `p#key`; `@media` depends on a screen we lack.
- * @param css - Content of a `<style>` element.
+ * @param css - Content of a `<style>` element or a linked sheet.
  * @param firstOrder - Order of its first rule, after the rules of earlier stylesheets.
  * @returns {StyleRule[]} One rule per simple selector, in source order.
  */
@@ -149,16 +155,98 @@ export function parseStylesheet(css: string, firstOrder = 0): StyleRule[] {
   const text = withoutComments(css);
   let position = 0;
   while (position < text.length) {
-    const open = text.indexOf("{", position);
+    const atRule = atRuleAt(text, position);
+    const open = preludeEnd(text, position, atRule);
     if (open === -1) break;
+    if (text[open] === ";") {
+      position = open + 1;
+      continue;
+    }
     const close = matchingBrace(text, open);
-    const prelude = text.slice(position, open).trim();
-    if (!prelude.startsWith("@")) {
+    if (!atRule) {
+      const prelude = text.slice(position, open).trim();
       rules.push(...selectorRules(prelude, text.slice(open + 1, close), firstOrder + rules.length));
     }
     position = close + 1;
   }
   return rules;
+}
+
+/**
+ * A sheet's screen imports, read only before its first rule, the one place a browser takes them.
+ * @param css - Stylesheet text.
+ * @returns {string[]} Each import's URL as written, unresolved.
+ */
+export function stylesheetImports(css: string): string[] {
+  const urls: string[] = [];
+  for (const statement of leadingStatements(withoutComments(css))) {
+    if (/^@(?:charset|layer)\b/iu.test(statement)) continue;
+    const parts = IMPORT.exec(statement)?.groups;
+    if (parts?.url === undefined) break;
+    const url = parts.url.replaceAll(/^["']|["']$/gu, "");
+    if (url !== "" && forScreen(parts.media)) urls.push(url);
+  }
+  return urls;
+}
+
+/**
+ * The statements a stylesheet opens with, up to its first block.
+ * @param text - Stylesheet text without comments.
+ * @yields {string} Each at-rule that ends with `;`, such as `@import "a.css"`.
+ */
+function* leadingStatements(text: string): Generator<string> {
+  let position = 0;
+  while (atRuleAt(text, position)) {
+    const end = preludeEnd(text, position, true);
+    if (end === -1 || text[end] !== ";") return;
+    yield text.slice(position, end).trim();
+    position = end + 1;
+  }
+}
+
+/**
+ * Whether a media list holds on a screen of any size; a query with conditions depends on one.
+ * @param media - A `media` attribute or the media list of an `@import`.
+ * @returns {boolean} True for no media, `all` or `screen` in the list.
+ */
+export function forScreen(media: string | undefined): boolean {
+  return (media ?? "").split(",").some((query) => SCREEN_MEDIA.test(query.trim()));
+}
+
+/**
+ * Whether an at-rule starts at `position`, past any whitespace.
+ * @param text - Stylesheet text.
+ * @param position - Where to look.
+ * @returns {boolean} True when the next token is an at-keyword.
+ */
+function atRuleAt(text: string, position: number): boolean {
+  AT_RULE.lastIndex = position;
+  return AT_RULE.test(text);
+}
+
+/**
+ * Where a prelude ends: its `{`, or an at-rule's `;`, outside quotes and `url(...)`.
+ * @param text - Stylesheet text without comments.
+ * @param from - Where the prelude starts.
+ * @param atRule - Whether it is an at-rule, which may end without a block.
+ * @returns {number} Offset of the `{` or `;`, or -1 when neither comes.
+ */
+function preludeEnd(text: string, from: number, atRule: boolean): number {
+  let depth = 0;
+  let quote = "";
+  for (let index = from; index < text.length; index += 1) {
+    const character = text[index] ?? "";
+    const quoted = quote !== "";
+    quote = quoteAfter(quote, character);
+    if (quoted || quote !== "") continue;
+    depth += NESTING[character] ?? 0;
+    if (depth <= 0 && endsPrelude(character, atRule)) return index;
+  }
+  return -1;
+}
+
+function endsPrelude(character: string, atRule: boolean): boolean {
+  return character === "{" || (atRule && character === ";");
 }
 
 /**
