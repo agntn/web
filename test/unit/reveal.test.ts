@@ -343,6 +343,19 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([]);
   });
 
+  it("ranks layers in the order the imports reach them", () => {
+    const url = "https://example.com/";
+    const stylesheets = {
+      "https://example.com/container.css": "@import 'x.css' layer(x);",
+      "https://example.com/x.css": ".a { display: none }",
+      "https://example.com/y.css": ".a { display: block }",
+    };
+    const html =
+      "<style>@import 'container.css'; @import 'y.css' layer(y);</style><p class=a>y wins</p>";
+
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([]);
+  });
+
   it("turns the layer order around for important declarations", () => {
     const url = "https://example.com/";
     const stylesheets = {
@@ -719,7 +732,7 @@ describe("revealUrl", () => {
     routes.set("/web/20260418160000id_/https://example.com/blog/", [
       { status: 200, headers: html, body: "<link rel=stylesheet href=s.css><p class=x>old</p>" },
     ]);
-    routes.set(`${stamp}/https://example.com/blog/s.css`, [
+    routes.set("/web/20260418160000id_/https://example.com/blog/s.css", [
       { status: 200, headers: css, body: ".x { display: none }" },
     ]);
     const port = new URL(base).port;

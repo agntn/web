@@ -36,11 +36,13 @@ export interface StylesheetImport {
   readonly layer?: string;
 }
 
-/** What a sheet opens with: its imports, and the layer names in the order they first come up. */
-export interface StylesheetPreamble {
-  readonly imports: readonly StylesheetImport[];
+/** An `@layer a, b;` statement, its names in the order the cascade ranks them. */
+export interface LayerStatement {
   readonly layers: readonly string[];
 }
+
+/** What a sheet opens with: its imports and `@layer` statements, in source order. */
+export type StylesheetPreamble = readonly (StylesheetImport | LayerStatement)[];
 
 /** A color with alpha from 0 to 1. */
 export interface Color {
@@ -190,18 +192,16 @@ export function parseStylesheet(css: string, firstOrder = 0): StyleRule[] {
 /**
  * A sheet's screen imports and `@layer` names, read before its first rule, as a browser does.
  * @param css - Stylesheet text.
- * @returns {StylesheetPreamble} Each import's URL as written, unresolved, and the layer names.
+ * @returns {StylesheetPreamble} Imports with URLs as written, unresolved, and layer statements.
  */
 export function stylesheetPreamble(css: string): StylesheetPreamble {
-  const imports: StylesheetImport[] = [];
-  const layers: string[] = [];
+  const entries: (StylesheetImport | LayerStatement)[] = [];
   for (const statement of leadingStatements(withoutComments(css))) {
     const taken = statementPreamble(statement);
     if (taken === undefined) break;
-    imports.push(...taken.imports);
-    layers.push(...taken.layers);
+    entries.push(...taken);
   }
-  return { imports, layers };
+  return entries;
 }
 
 /**
@@ -210,15 +210,14 @@ export function stylesheetPreamble(css: string): StylesheetPreamble {
  * @returns {StylesheetPreamble | undefined} Its part, or undefined when it ends the preamble.
  */
 function statementPreamble(statement: string): StylesheetPreamble | undefined {
-  if (/^@charset\b/iu.test(statement)) return { imports: [], layers: [] };
+  if (/^@charset\b/iu.test(statement)) return [];
   const names = /^@layer\s+(?<names>.+)$/isu.exec(statement)?.groups?.names;
-  if (names !== undefined)
-    return { imports: [], layers: names.split(",").map((name) => name.trim()) };
+  if (names !== undefined) return [{ layers: names.split(",").map((name) => name.trim()) }];
   return importPreamble(statement);
 }
 
 /**
- * What an `@import` adds: itself, and its layer's name when it has one.
+ * What an `@import` adds: itself, or nothing when its media leave screens out.
  * @param statement - The statement.
  * @returns {StylesheetPreamble | undefined} Its part, or undefined when it is no import.
  */
@@ -226,8 +225,7 @@ function importPreamble(statement: string): StylesheetPreamble | undefined {
   const parts = IMPORT.exec(statement)?.groups;
   if (parts?.url === undefined) return undefined;
   const found = importOf(parts.url, parts.media ?? "");
-  if (found === undefined) return { imports: [], layers: [] };
-  return { imports: [found], layers: found.layer ? [found.layer] : [] };
+  return found === undefined ? [] : [found];
 }
 
 /**

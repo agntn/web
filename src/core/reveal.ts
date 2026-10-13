@@ -245,9 +245,9 @@ async function scan(
   request: Readonly<PageRequest>,
 ): Promise<{ findings: HiddenFinding[]; stylesheets: string[] }> {
   if (!page.markup) return { findings: invisibleCharacters(page.text), stylesheets: [] };
-  const url =
-    target.original === undefined ? page.url : (pageTarget(page.url).original ?? target.original);
-  const stylesheets = await readStylesheets(page.text, url, request, target);
+  const landed = target.archived === undefined ? target : { ...target, ...pageTarget(page.url) };
+  const url = landed.original ?? page.url;
+  const stylesheets = await readStylesheets(page.text, url, request, landed);
   const findings = revealHtml(page.text, { url, stylesheets });
   return { findings, stylesheets: Object.keys(stylesheets) };
 }

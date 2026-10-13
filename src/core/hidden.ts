@@ -11,6 +11,7 @@ import {
   sameColor,
   stylesheetPreamble,
   type Color,
+  type StylesheetImport,
   type StylesheetPreamble,
   type Declarations,
   type StyleRule,
@@ -310,7 +311,8 @@ interface Pending {
 }
 
 /** A linked sheet's imports, resolved, and its rules. */
-interface ParsedSheet extends StylesheetPreamble {
+interface ParsedSheet {
+  readonly preamble: StylesheetPreamble;
   readonly rules: readonly StyleRule[];
 }
 
@@ -462,12 +464,29 @@ class HiddenScanner {
     chain: readonly string[],
     layer: string | undefined,
   ): void {
-    if (layer === undefined) for (const name of sheet.layers) this.layerRank(name);
-    for (const imported of sheet.imports) {
-      const inner = imported.layer === "" ? `\u0000${this.layers.length}` : imported.layer;
-      this.fileLinked(imported.url, chain, layer ?? inner);
+    for (const entry of sheet.preamble) {
+      if (!("layers" in entry)) this.fileImport(entry, chain, layer);
+      else if (layer === undefined) for (const name of entry.layers) this.layerRank(name);
     }
     this.fileRules(sheet.rules, layer);
+  }
+
+  /**
+   * Rank an import's layer as the walk meets it, the order a browser declares layers in, then
+   * file the sheet into it; inside a layer every import stays in that outer one.
+   * @param entry - The import.
+   * @param chain - Sheets importing the one that holds it.
+   * @param layer - The layer that sheet sits in, if any.
+   */
+  private fileImport(
+    entry: Readonly<StylesheetImport>,
+    chain: readonly string[],
+    layer: string | undefined,
+  ): void {
+    const own = entry.layer === "" ? `\u0000${this.layers.length}` : entry.layer;
+    const placed = layer ?? own;
+    if (placed !== undefined) this.layerRank(placed);
+    this.fileLinked(entry.url, chain, placed);
   }
 
   private layerRank(name: string): number {
@@ -1082,9 +1101,10 @@ function labelOf(tag: HtmlStartTag): string {
  * @returns {ParsedSheet} The parsed sheet.
  */
 function parseSheet(css: string, base: string | undefined): ParsedSheet {
-  const { imports, layers } = stylesheetPreamble(css);
-  const resolved = imports.map((imported) => ({ ...imported, url: resolve(imported.url, base) }));
-  return { imports: resolved, layers, rules: parseStylesheet(css) };
+  const preamble = stylesheetPreamble(css).map((entry) =>
+    "url" in entry ? { ...entry, url: resolve(entry.url, base) } : entry,
+  );
+  return { preamble, rules: parseStylesheet(css) };
 }
 
 function resolve(url: string, base: string | undefined): string {
