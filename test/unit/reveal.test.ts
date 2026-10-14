@@ -372,6 +372,115 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("reads rules inside @layer blocks, the way Tailwind v4 ships them", () => {
+    const html = [
+      "<style>@layer theme, base, components, utilities;",
+      "@layer components { .secret { display: none } .shown { display: none } }",
+      "@layer utilities { .shown { display: block } }</style>",
+      "<p class=secret>key</p><p class=shown>utilities win</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+    ]);
+  });
+
+  it("ranks layer blocks in the order they first come up, all below rules outside a layer", () => {
+    const html = [
+      "<style>.b { display: block } @layer first { .a { display: block } }",
+      "@layer second { .a { display: none } } @layer first { .a { display: block } .b { display: none } }</style>",
+      "<p class=a>second wins</p><p class=b>unlayered</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "second wins" }),
+    ]);
+  });
+
+  it("puts a layer's own rules above the layers nested in it, and turns that around for important ones", () => {
+    const html = [
+      "<style>@layer outer { @layer inner { .a { display: block } .b { display: none !important } }",
+      ".a { display: none } .b { display: block !important } }",
+      "@layer outer.inner { .c { display: none } } @layer outer { .c { display: block } }</style>",
+      "<p class=a>outer</p><p class=b>inner important</p><p class=c>dotted</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "outer" }),
+      expect.objectContaining({ reason: "display: none via .b", value: "inner important" }),
+    ]);
+  });
+
+  it("keeps each anonymous layer block apart, the later one higher", () => {
+    const html = [
+      "<style>@layer { .a { display: block } .b { display: none } }",
+      "@layer { .a { display: none } } .b { display: block }</style>",
+      "<p class=a>second</p><p class=b>unlayered</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "second" }),
+    ]);
+  });
+
+  it("cascades a rule in a layer block the same as that rule imported into the layer", () => {
+    const url = "https://example.com/";
+    const theme = "@layer base { .a { display: block } } .a { display: none } .b { display: none }";
+    const page = (styles: string) =>
+      `<style>@layer low, theme; ${styles} @layer low { .b { display: block } }</style><p class=a>a</p><p class=b>b</p>`;
+    const imported = revealHtml(page("@import 'theme.css' layer(theme);"), {
+      url,
+      stylesheets: { "https://example.com/theme.css": theme },
+    });
+    const inline = revealHtml(page(`@layer theme { ${theme} }`), { url });
+
+    expect(ofKind(inline, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "a" }),
+      expect.objectContaining({ reason: "display: none via .b", value: "b" }),
+    ]);
+    expect(ofKind(imported, "hidden")).toEqual(ofKind(inline, "hidden"));
+  });
+
+  it("nests a layer imported inside a layered sheet under that sheet's layer", () => {
+    const url = "https://example.com/";
+    const stylesheets = {
+      "https://example.com/outer.css":
+        "@import 'inner.css' layer(inner); .x { display: block !important }",
+      "https://example.com/inner.css": ".x { display: none !important }",
+    };
+    const html = "<style>@import 'outer.css' layer(outer);</style><p class=x>inner important</p>";
+
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .x", value: "inner important" }),
+    ]);
+  });
+
+  it("applies no rules from a layer block whose prelude lists several names", () => {
+    const html = "<style>@layer a, b { .a { display: none } }</style><p class=a>shown</p>";
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
+  });
+
+  it("reads a layer block that never closes in one pass", () => {
+    const html = `<style>@layer a { ${"@layer b; ".repeat(300_000)}</style><p class=a>x</p>`;
+
+    const started = performance.now();
+    revealHtml(html);
+
+    expect(performance.now() - started).toBeLessThan(3_000);
+  });
+
+  it("survives layer blocks nested far deeper than any sheet needs", () => {
+    const depth = 20_000;
+    const css = `${"@layer x { ".repeat(depth)}.a { display: none }${" }".repeat(depth)}`;
+    const dotted = `@layer ${"x.".repeat(depth)}x { .a { display: none } }`;
+    const html = `<style>@layer x { .b { display: none } } ${css} ${dotted}</style><p class=a>deep</p><p class=b>b</p>`;
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .b", value: "b" }),
+    ]);
+  });
+
   it("applies untitled sheets and the first titled set only", () => {
     const html = [
       "<link rel=stylesheet title=Light href=light.css><link rel=stylesheet title=Dark href=dark.css>",

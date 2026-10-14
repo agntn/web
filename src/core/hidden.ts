@@ -7,10 +7,12 @@ import {
   parseColor,
   parseDeclarations,
   parseStylesheet,
+  layerPath,
   ruleKey,
   sameColor,
   stylesheetPreamble,
   type Color,
+  type LayerPath,
   type StylesheetImport,
   type StylesheetPreamble,
   type Declarations,
@@ -310,10 +312,17 @@ interface Pending {
   readonly finding: HiddenFinding;
 }
 
-/** A linked sheet's imports, resolved, and its rules. */
+/** A linked sheet's imports, resolved, its rules and the layers its body names. */
 interface ParsedSheet {
   readonly preamble: StylesheetPreamble;
   readonly rules: readonly StyleRule[];
+  readonly layers: readonly LayerPath[];
+}
+
+/** A rule filed before the layer ranks are known, with the full name of its layer. */
+interface FiledRule {
+  readonly rule: StyleRule;
+  readonly layer: string | undefined;
 }
 
 /** A repeated attribute, listed once with how often it occurs. */
@@ -384,8 +393,12 @@ class HiddenScanner {
   private readonly parsed = new Map<string, ParsedSheet>();
   private filings = 0;
   private preferredTitle: string | undefined;
-  /** Cascade layers by name, in the order they first come up; nested ones count as their outer. */
-  private readonly layers: string[] = [];
+  /** Cascade layers by full name, each with the ones nested in it in the order they come up. */
+  private readonly layers = new Map<string, string[]>([["", []]]);
+  /** Anonymous layers so far, which keeps each one apart. */
+  private anonymousLayers = 0;
+  /** Rules in filing order, ranked once every layer is known. */
+  private readonly filed: FiledRule[] = [];
   /** Every stylesheet the page applies, read or not, by absolute URL. */
   readonly linked = new Set<string>();
 
@@ -429,6 +442,7 @@ class HiddenScanner {
       inStyle = token.kind === "start" && token.name === "style" && this.styleApplies(token);
       if (token.kind === "start") this.prepareTag(token);
     }
+    this.rankRules();
   }
 
   /**
@@ -454,7 +468,7 @@ class HiddenScanner {
   }
 
   /**
-   * File imports before rules, every one of them in the layer the sheet sits in, if any.
+   * File imports before rules, the sheet's layers nested in the one it sits in, if any.
    * @param sheet - The parsed sheet.
    * @param chain - Sheets importing this one.
    * @param layer - The layer an import put it in.
@@ -464,16 +478,27 @@ class HiddenScanner {
     chain: readonly string[],
     layer: string | undefined,
   ): void {
+    const scope = this.anonymousLayers++;
+    const own = (path: LayerPath): string | undefined =>
+      this.declareLayer(
+        layer,
+        path.map((part) => (part.startsWith("\u0000") ? `\u0000${scope}:${part.slice(1)}` : part)),
+      );
     for (const entry of sheet.preamble) {
-      if (!("layers" in entry)) this.fileImport(entry, chain, layer);
-      else if (layer === undefined) for (const name of entry.layers) this.layerRank(name);
+      if ("layers" in entry) for (const path of entry.layers) own(path);
+      else this.fileImport(entry, chain, layer);
     }
-    this.fileRules(sheet.rules, layer);
+    for (const path of sheet.layers) own(path);
+    for (const rule of sheet.rules.slice(0, RULE_LIMIT - this.ruleCount)) {
+      const placed = { ...rule, order: rule.order + this.ruleCount };
+      this.filed.push({ rule: placed, layer: rule.layerPath ? own(rule.layerPath) : layer });
+    }
+    this.ruleCount = Math.min(RULE_LIMIT, this.ruleCount + sheet.rules.length);
   }
 
   /**
-   * Rank an import's layer as the walk meets it, the order a browser declares layers in, then
-   * file the sheet into it; inside a layer every import stays in that outer one.
+   * Declare an import's layer as the walk meets it, the order a browser declares layers in, then
+   * file the sheet into it, nested in the layer of the sheet that imports it.
    * @param entry - The import.
    * @param chain - Sheets importing the one that holds it.
    * @param layer - The layer that sheet sits in, if any.
@@ -483,17 +508,52 @@ class HiddenScanner {
     chain: readonly string[],
     layer: string | undefined,
   ): void {
-    const own = entry.layer === "" ? `\u0000${this.layers.length}` : entry.layer;
-    const placed = layer ?? own;
-    if (placed !== undefined) this.layerRank(placed);
-    this.fileLinked(entry.url, chain, placed);
+    const anonymous = `\u0000${this.anonymousLayers++}`;
+    const own = entry.layer === undefined ? [] : layerPath(entry.layer || anonymous);
+    if (own !== undefined) this.fileLinked(entry.url, chain, this.declareLayer(layer, own));
   }
 
-  private layerRank(name: string): number {
-    const known = this.layers.indexOf(name);
-    if (known !== -1) return known;
-    this.layers.push(name);
-    return this.layers.length - 1;
+  /**
+   * Declare a layer nested in another, each part the first time it comes up.
+   * @param outer - The full name of the layer it sits in, if any.
+   * @param path - Its name's parts.
+   * @returns {string | undefined} Its full name, or undefined outside any layer.
+   */
+  private declareLayer(outer: string | undefined, path: LayerPath): string | undefined {
+    let name = outer ?? "";
+    for (const part of path) {
+      const full = name === "" ? part : `${name}.${part}`;
+      if (!this.layers.has(full)) {
+        this.layers.get(name)?.push(full);
+        this.layers.set(full, []);
+      }
+      name = full;
+    }
+    return name === "" ? undefined : name;
+  }
+
+  /**
+   * Rank every layer, nested ones below the rules of the layer around them, as a browser does,
+   * then file the rules by {@link ruleKey}.
+   */
+  private rankRules(): void {
+    const ranks = new Map<string, number>();
+    const stack = [{ name: "", next: 0 }];
+    for (let top = stack.at(-1); top !== undefined; top = stack.at(-1)) {
+      const child = this.layers.get(top.name)?.[top.next];
+      top.next += 1;
+      if (child === undefined) {
+        stack.pop();
+        ranks.set(top.name, ranks.size);
+      } else {
+        stack.push({ name: child, next: 0 });
+      }
+    }
+    for (const { rule, layer } of this.filed) {
+      const ranked = layer === undefined ? rule : { ...rule, layer: ranks.get(layer) };
+      const key = ruleKey(ranked);
+      this.rules.set(key, [...(this.rules.get(key) ?? []), ranked]);
+    }
   }
 
   private parsedSheet(url: string): ParsedSheet | undefined {
@@ -505,21 +565,6 @@ class HiddenScanner {
     const sheet = parseSheet(text, base);
     this.parsed.set(url, sheet);
     return sheet;
-  }
-
-  /**
-   * Add a sheet's rules after the ones filed so far, up to {@link RULE_LIMIT}.
-   * @param rules - The sheet's rules, ordered from 0.
-   * @param layer - The cascade layer they sit in, if any.
-   */
-  private fileRules(rules: readonly StyleRule[], layer: string | undefined): void {
-    const rank = layer === undefined ? {} : { layer: this.layerRank(layer) };
-    for (const rule of rules.slice(0, RULE_LIMIT - this.ruleCount)) {
-      const placed = { ...rule, order: rule.order + this.ruleCount, ...rank };
-      const key = ruleKey(placed);
-      this.rules.set(key, [...(this.rules.get(key) ?? []), placed]);
-    }
-    this.ruleCount = Math.min(RULE_LIMIT, this.ruleCount + rules.length);
   }
 
   private prepareTag(tag: HtmlStartTag): void {
@@ -1104,7 +1149,7 @@ function parseSheet(css: string, base: string | undefined): ParsedSheet {
   const preamble = stylesheetPreamble(css).map((entry) =>
     "url" in entry ? { ...entry, url: resolve(entry.url, base) } : entry,
   );
-  return { preamble, rules: parseStylesheet(css) };
+  return { preamble, ...parseStylesheet(css) };
 }
 
 function resolve(url: string, base: string | undefined): string {
