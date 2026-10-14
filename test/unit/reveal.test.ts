@@ -120,6 +120,11 @@ describe("revealHtml", () => {
       "<style media='screen'>.s{display:none}</style><p class=s>x</p>",
       "display: none via .s",
     ],
+    [
+      "a stylesheet for anything but print",
+      "<style media='not print'>.s{display:none}</style><p class=s>x</p>",
+      "display: none via .s",
+    ],
     ["opacity", "<p style='opacity:0.0'>x</p>", "opacity: 0.0"],
     ["font size", "<p style='font-size:0px'>x</p>", "font-size: 0px"],
     ["transparent text", "<p style='color:rgba(0,0,0,0)'>x</p>", "color: rgba(0,0,0,0)"],
@@ -162,6 +167,10 @@ describe("revealHtml", () => {
     ["half opacity", "<p style='opacity:.5'>x</p>"],
     ["an open dialog", "<dialog open>x</dialog>"],
     ["a print stylesheet", "<style media='print'>.s{display:none}</style><p class=s>x</p>"],
+    [
+      "a print stylesheet with a stray comma",
+      "<style media='print,'>.s{display:none}</style><p class=s>x</p>",
+    ],
     ["an open details", "<details open><summary>s</summary>x</details>"],
     ["a small negative margin", "<p style='text-indent:-2em'>x</p>"],
   ])("leaves %s in sight", (_label, html) => {
@@ -533,6 +542,135 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "hidden")).toEqual([
       expect.objectContaining({ reason: "display: none via .escaped", value: "escaped" }),
     ]);
+  });
+
+  it("reads rules inside an @media block that holds on any screen", () => {
+    const html = [
+      "<style>@media screen { .a { display: none } } @MEDIA all { .b { display: none } }",
+      "@media print, screen { .c { display: none } } @media { .d { display: none } }",
+      "@media only screen { .e { display: none } } @media not print { .f { display: none } }",
+      "@media print { .g { display: none } } @media (min-width: 600px) { .h { display: none } }",
+      "@media screen and (min-width: 600px) { .i { display: none } } @media print, { .j { display: none } }",
+      "@media not screen { .k { display: none } } @media only { .l { display: none } }",
+      "@media (example, all,), speech { .m { display: none } }</style>",
+      "<p class=a>a</p><p class=b>b</p><p class=c>c</p><p class=d>d</p><p class=e>e</p><p class=f>f</p>",
+      "<p class=g>g</p><p class=h>h</p><p class=i>i</p><p class=j>j</p><p class=k>k</p><p class=l>l</p>",
+      "<p class=m>speech</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "f",
+    ]);
+  });
+
+  it("cascades @media rules in source order with the rules around them", () => {
+    const html = [
+      "<style>.a { display: none } @media screen { .a { display: block } .b { display: block } }",
+      ".b { display: none }</style><p class=a>media wins</p><p class=b>later wins</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .b", value: "later wins" }),
+    ]);
+  });
+
+  it("files @media rules under the layer around them, and layers inside under their own", () => {
+    const html = [
+      "<style>@layer low, high; @layer high { @media screen { .a { display: block } } }",
+      "@layer low { .a { display: none } } @media screen { @layer low { .b { display: block } } }",
+      "@layer high { .b { display: none } }</style><p class=a>high shows</p><p class=b>high hides</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .b", value: "high hides" }),
+    ]);
+  });
+
+  it("skips a print block inside a screen block and reads on after it", () => {
+    const html = [
+      "<style>@media screen { @media print { .a { display: none } } .b { display: none } }",
+      ".c { display: none }</style><p class=a>print</p><p class=b>b</p><p class=c>c</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .b", value: "b" }),
+      expect.objectContaining({ reason: "display: none via .c", value: "c" }),
+    ]);
+  });
+
+  it("reads @media blocks in a linked sheet too", () => {
+    const url = "https://example.com/";
+    const stylesheets = {
+      "https://example.com/site.css": "@media screen { .secret { display: none } }",
+    };
+    const html = "<link rel=stylesheet href=site.css><p class=secret>key</p>";
+
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+    ]);
+  });
+
+  it("reads an @media block that never closes in one pass", () => {
+    const html = `<style>@media screen { ${"@x; ".repeat(300_000)}</style><p class=a>x</p>`;
+
+    const started = performance.now();
+    revealHtml(html);
+
+    expect(performance.now() - started).toBeLessThan(3_000);
+  });
+
+  it("decodes a media type the way CSS reads identifiers, and keeps layer out of it", () => {
+    const html = [
+      "<style>@media \\73 creen { .a { display: none } } @media \\6e ot print { .b { display: none } }",
+      "@media \\73creen { .c { display: none } } @media not layer { .d { display: none } }</style>",
+      "<style media='not \\70 rint'>.e { display: none }</style>",
+      "<p class=a>a</p><p class=b>b</p><p class=c>hex runs on</p><p class=d>layer</p><p class=e>e</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["a", "b", "e"]);
+  });
+
+  it("keeps commas and parentheses inside a quoted string out of the media list", () => {
+    const html = [
+      `<style>@media (foo: "),screen,(") { .a { display: none } } @media (foo: "a,b"), screen { .b { display: none } }</style>`,
+      "<p class=a>quoted</p><p class=b>screen after</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["screen after"]);
+  });
+
+  it("splits media queries and layer names at CSS whitespace, never at a no-break space", () => {
+    const space = String.fromCodePoint(0xa0);
+    const html = [
+      `<style>@media not${space}print { .a { display: none } } @media screen${space} { .b { display: none } }`,
+      `@layer a${space}b { .c { display: none } } @media not print and (min-width: 600px) { .d { display: none } }</style>`,
+      "<p class=a>one word</p><p class=b>trailing</p><p class=c>layer</p><p class=d>condition</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["layer"]);
+  });
+
+  it("reads a layer name that opens with a hex escape", () => {
+    const html = "<style>@layer \\66 oo { .a { display: none } }</style><p class=a>escaped foo</p>";
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "escaped foo" }),
+    ]);
+  });
+
+  it("turns down a name of hex escapes that never ends well in one pass", () => {
+    const name = `a${"\\abcdef".repeat(200)}!`;
+    const html = `<style>@layer ${name} { .a { display: none } } @media ${name} { .a { display: none } }</style>`;
+
+    const started = performance.now();
+    revealHtml(`${html}<link rel=stylesheet media='${name}' href=a.css><p class=a>a</p>`);
+
+    expect(performance.now() - started).toBeLessThan(3_000);
   });
 
   it("applies untitled sheets and the first titled set only", () => {
