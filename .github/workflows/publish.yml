@@ -1,5 +1,6 @@
 name: Publish
 
+# npm Trusted Publishing matches this exact filename, and OIDC needs no NPM_TOKEN.
 permissions:
   contents: read
   id-token: write

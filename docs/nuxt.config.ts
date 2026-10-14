@@ -9,9 +9,11 @@ export default defineNuxtConfig({
   extends: ["docus"],
   /** The repo root is its own pnpm workspace; Nuxt must not treat it as this site's. */
   workspaceDir: import.meta.dirname,
+  /** Workers Builds installs docs/ alone: docs/package.json lists each npm import of `../src`. */
   alias: {
     "@agntn/web": resolve(librarySource, "index.ts"),
   },
+  /** Both would otherwise resolve from the root workspace. */
   devtools: { enabled: false },
   telemetry: false,
   site: {

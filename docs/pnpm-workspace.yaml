@@ -1,6 +1,7 @@
 packages:
   - .
 
+# Without it Node walks up to the root node_modules and the server bundle can get a second Vue.
 shamefullyHoist: true
 
 allowBuilds:

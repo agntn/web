@@ -5,7 +5,8 @@ import type { SearchPagination, SearchResult } from "@agntn/web";
  * before the docs worker answers and when it cannot. Every panel labels a recorded answer
  * as a sample and swaps to a live one as soon as it arrives.
  *
- * Regenerate with the library (see docs/AGENTS.md); do not edit by hand.
+ * Regenerate with a script over `dist/index.mjs`, provider fields trimmed as in `slimResult`.
+ * Never edit the recorded text by hand.
  */
 
 export type SampleResult = Pick<SearchResult, "url" | "title" | "snippet" | "score" | "publishedDate" | "author" | "favicon" | "text" | "highlights" | "summary">;
