@@ -18,8 +18,10 @@ function isMcpModule(value: unknown): value is typeof McpCommand {
  * Loads the MCP command. A built bin inside a checkout runs the live source, as the Pi and OMP
  * extensions do, so a local server needs a restart after a change instead of a build. The npm
  * package ships no `src/commands` and keeps the bundle, and so does a copy under `node_modules`,
- * where Node refuses to strip types. `WEB_DIST=1` keeps it everywhere, for tests of the build. The
- * URL is built at runtime, because a literal import would pull the source into the bundle.
+ * where Node refuses to strip types. `WEB_DIST=1` keeps it everywhere, for tests of the build. A
+ * source that no longer exports `serveMcp` gets the bundle too, with a note on stderr: an old
+ * server beats a dead one. The URL is built at runtime, because a literal import would pull the
+ * source into the bundle.
  * @returns {Promise<typeof McpCommand>} The module that starts the stdio server.
  */
 async function loadMcpCommand(): Promise<typeof McpCommand> {
@@ -33,8 +35,11 @@ async function loadMcpCommand(): Promise<typeof McpCommand> {
     existsSync(sourcePath);
   if (!fromSource) return import("./commands/mcp.ts");
   const module: unknown = await import(source.href);
-  if (!isMcpModule(module)) throw new TypeError(`${sourcePath} has no serveMcp`);
-  return module;
+  if (isMcpModule(module)) return module;
+  process.stderr.write(
+    `${sourcePath} has no serveMcp, so the bundled server answers instead. dist/ is behind src/, run \`vp run build\` to catch up.\n`,
+  );
+  return import("./commands/mcp.ts");
 }
 
 const argv = process.argv.slice(2);
