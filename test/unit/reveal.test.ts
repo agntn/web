@@ -372,6 +372,169 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("reads rules inside @layer blocks, the way Tailwind v4 ships them", () => {
+    const html = [
+      "<style>@layer theme, base, components, utilities;",
+      "@layer components { .secret { display: none } .shown { display: none } }",
+      "@layer utilities { .shown { display: block } }</style>",
+      "<p class=secret>key</p><p class=shown>utilities win</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+    ]);
+  });
+
+  it("ranks layer blocks in the order they first come up, all below rules outside a layer", () => {
+    const html = [
+      "<style>.b { display: block } @layer first { .a { display: block } }",
+      "@layer second { .a { display: none } } @layer first { .a { display: block } .b { display: none } }</style>",
+      "<p class=a>second wins</p><p class=b>unlayered</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "second wins" }),
+    ]);
+  });
+
+  it("puts a layer's own rules above the layers nested in it, and turns that around for important ones", () => {
+    const html = [
+      "<style>@layer outer { @layer inner { .a { display: block } .b { display: none !important } }",
+      ".a { display: none } .b { display: block !important } }",
+      "@layer outer.inner { .c { display: none } } @layer outer { .c { display: block } }</style>",
+      "<p class=a>outer</p><p class=b>inner important</p><p class=c>dotted</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "outer" }),
+      expect.objectContaining({ reason: "display: none via .b", value: "inner important" }),
+    ]);
+  });
+
+  it("keeps each anonymous layer block apart, the later one higher", () => {
+    const html = [
+      "<style>@layer { .a { display: block } .b { display: none } }",
+      "@layer { .a { display: none } } .b { display: block }</style>",
+      "<p class=a>second</p><p class=b>unlayered</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "second" }),
+    ]);
+  });
+
+  it("cascades a rule in a layer block the same as that rule imported into the layer", () => {
+    const url = "https://example.com/";
+    const theme = "@layer base { .a { display: block } } .a { display: none } .b { display: none }";
+    const page = (styles: string) =>
+      `<style>@layer low, theme; ${styles} @layer low { .b { display: block } }</style><p class=a>a</p><p class=b>b</p>`;
+    const imported = revealHtml(page("@import 'theme.css' layer(theme);"), {
+      url,
+      stylesheets: { "https://example.com/theme.css": theme },
+    });
+    const inline = revealHtml(page(`@layer theme { ${theme} }`), { url });
+
+    expect(ofKind(inline, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "a" }),
+      expect.objectContaining({ reason: "display: none via .b", value: "b" }),
+    ]);
+    expect(ofKind(imported, "hidden")).toEqual(ofKind(inline, "hidden"));
+  });
+
+  it("nests a layer imported inside a layered sheet under that sheet's layer", () => {
+    const url = "https://example.com/";
+    const stylesheets = {
+      "https://example.com/outer.css":
+        "@import 'inner.css' layer(inner); .x { display: block !important }",
+      "https://example.com/inner.css": ".x { display: none !important }",
+    };
+    const html = "<style>@import 'outer.css' layer(outer);</style><p class=x>inner important</p>";
+
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .x", value: "inner important" }),
+    ]);
+  });
+
+  it("applies no rules from a layer block whose name CSS rejects", () => {
+    const html = [
+      "<style>@layer a, b { .a { display: none } } @layer foo bar { .a { display: none } }",
+      "@layer 1st { .a { display: none } } @layer a..b { .a { display: none } } @layer .a { .a { display: none } }",
+      "@layer foo#bar { .a { display: none } }",
+      "</style><p class=a>shown</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
+  });
+
+  it("reads a layer block that never closes in one pass", () => {
+    const html = `<style>@layer a { ${"@x; ".repeat(300_000)}</style><p class=a>x</p>`;
+
+    const started = performance.now();
+    revealHtml(html);
+
+    expect(performance.now() - started).toBeLessThan(3_000);
+  });
+
+  it("still reads rules from layers nested far deeper than any sheet needs", () => {
+    const depth = 20_000;
+    const nested = `${"@layer x { ".repeat(depth)}.a { display: none }${" }".repeat(depth)}`;
+    const dotted = `@layer ${"x.".repeat(depth)}x { .c { display: none } }`;
+    const html = `<style>${nested} ${dotted} @layer x { .b { display: none } }</style><p class=a>a</p><p class=b>b</p><p class=c>c</p>`;
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "a" }),
+      expect.objectContaining({ reason: "display: none via .b", value: "b" }),
+      expect.objectContaining({ reason: "display: none via .c", value: "c" }),
+    ]);
+  });
+
+  it("keeps a layer open past a brace in a quoted selector", () => {
+    const html = `<style>@layer a { [data-x="}"] { display: block } .secret { display: none } }</style><p class=secret>key</p>`;
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+    ]);
+  });
+
+  it("reads a layer name the way CSS spells identifiers, escapes and all", () => {
+    const html = [
+      "<style>@layer foo\\,bar { .comma { display: none } } @layer foo\\{bar { .brace { display: none } }",
+      "@layer foo, bar; @layer \\66 oo { .x { display: none } } @layer bar { .x { display: block } }",
+      "@layer a.b, z; @layer a\\.b { .y { display: none } } @layer z { .y { display: block } }",
+      "@layer foo\\20, baz; @layer foo\\  { .z { display: none } } @layer baz { .z { display: block } }</style>",
+      "<p class=comma>comma</p><p class=brace>brace</p><p class=x>escaped foo</p><p class=y>dot</p><p class=z>space</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .comma", value: "comma" }),
+      expect.objectContaining({ reason: "display: none via .brace", value: "brace" }),
+      expect.objectContaining({ reason: "display: none via .y", value: "dot" }),
+    ]);
+  });
+
+  it("keeps an escaped space at the end of an imported layer's name", () => {
+    const url = "https://example.com/";
+    const stylesheets = {
+      "https://example.com/x.css": ".x { display: none }",
+      "https://example.com/y.css": ".x { display: block }",
+    };
+    const html =
+      "<style>@layer foo\\ , bar; @import 'x.css' layer(foo\\ ); @import 'y.css' layer(bar);</style><p class=x>bar wins</p>";
+
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([]);
+  });
+
+  it("knows @layer by its decoded at-keyword, not by its first five letters", () => {
+    const html = [
+      "<style>@l\\61 yer a { .escaped { display: none } } @layeré { .accent { display: none } }</style>",
+      "<p class=escaped>escaped</p><p class=accent>other at-rule</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .escaped", value: "escaped" }),
+    ]);
+  });
+
   it("applies untitled sheets and the first titled set only", () => {
     const html = [
       "<link rel=stylesheet title=Light href=light.css><link rel=stylesheet title=Dark href=dark.css>",

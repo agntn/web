@@ -26,7 +26,18 @@ export interface StyleRule {
   readonly order: number;
   /** Rank of its cascade layer, the first named lowest; a rule outside any layer has none. */
   readonly layer?: number;
+  /** The `@layer` blocks around it in its sheet, outermost first. */
+  readonly layerPath?: LayerPath;
   readonly declarations: Declarations;
+}
+
+/** A layer name split at its dots, outermost first; `\u0000` and a number name an anonymous one. */
+export type LayerPath = readonly string[];
+
+/** A sheet's rules and the layers its `@layer` statements and blocks name, in source order. */
+export interface StylesheetBody {
+  readonly rules: readonly StyleRule[];
+  readonly layers: readonly LayerPath[];
 }
 
 /** An `@import` a screen applies, and the cascade layer it puts the sheet in. */
@@ -38,7 +49,7 @@ export interface StylesheetImport {
 
 /** An `@layer a, b;` statement, its names in the order the cascade ranks them. */
 export interface LayerStatement {
-  readonly layers: readonly string[];
+  readonly layers: readonly LayerPath[];
 }
 
 /** What a sheet opens with: its imports and `@layer` statements, in source order. */
@@ -54,8 +65,24 @@ export interface Color {
 
 /** An at-rule ahead, past whitespace; sticky, so it tests one position. */
 const AT_RULE = /\s*@/uy;
+/** An at-keyword, whose name may hold escapes and non-ASCII letters, and what follows it. */
+const AT_KEYWORD =
+  /^@(?<name>(?:[\w-]|\P{ASCII}|\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f]))+)(?<rest>.*)$/su;
+/** A layer name list token: an escape, a separator, whitespace, or a run of anything else. */
+const NAME_TOKEN = /\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f])?|[,.]|\s+|[^\\,.\s]+/giu;
+/** A whitespace token between names. */
+const SPACE = /^\s/u;
+/** One whole CSS identifier: a valid start, then only name characters and escapes. */
+const IDENT =
+  /^(?:--|-?(?:[a-z_]|\P{ASCII}|\\[^\n\r\f]))(?:[\w-]|\P{ASCII}|\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f]))*$/iu;
+/** A CSS escape: up to six hex digits and one optional space, or any other character. */
+const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
+/** Layers nested deeper than this fold into their ancestor at this depth; no page needs more. */
+export const LAYER_DEPTH_LIMIT = 32;
 /** `@import` with its URL, quoted or in `url()`, and the media list after it. */
 const IMPORT = /^@import\s*(?:url\(\s*)?(?<url>"[^"]*"|'[^']*'|[^\s"')]+)\s*\)?\s*(?<media>.*)$/isu;
+/** An import's `layer` or `layer(name)`, where an escaped `)` stays in the name. */
+const IMPORT_LAYER = /^layer\b(?:\((?<name>(?:\\[\s\S]|[^)\\])*)\))?/iu;
 /** Media that hold on a screen of any size. */
 const SCREEN_MEDIA = /^(?:all|screen)?$/iu;
 const COMPOUND_SELECTOR = /^(?<tag>[a-z][\w-]*|\*)?(?<rest>(?:[.#][\w-]+)*)$/iu;
@@ -162,31 +189,197 @@ function shorthandColor(value: string): string {
 }
 
 /**
- * Top-level rules for one element, like `.secret` or `p#key`; `@media` depends on a screen we lack.
+ * Rules for one element, like `.secret` or `p#key`, at the top or inside `@layer` blocks.
+ * Other at-rules are skipped: `@media` depends on a screen we lack.
  * @param css - Content of a `<style>` element or a linked sheet.
  * @param firstOrder - Order of its first rule, after the rules of earlier stylesheets.
- * @returns {StyleRule[]} One rule per simple selector, in source order.
+ * @returns {StylesheetBody} One rule per simple selector, in source order, and the layers named.
  */
-export function parseStylesheet(css: string, firstOrder = 0): StyleRule[] {
-  const rules: StyleRule[] = [];
-  const text = withoutComments(css);
-  let position = 0;
-  while (position < text.length) {
-    const atRule = atRuleAt(text, position);
-    const open = preludeEnd(text, position, atRule);
-    if (open === -1) break;
-    if (text[open] === ";") {
-      position = open + 1;
-      continue;
-    }
-    const close = matchingBrace(text, open);
-    if (!atRule) {
-      const prelude = text.slice(position, open).trim();
-      rules.push(...selectorRules(prelude, text.slice(open + 1, close), firstOrder + rules.length));
-    }
-    position = close + 1;
+export function parseStylesheet(css: string, firstOrder = 0): StylesheetBody {
+  const reader = new StylesheetReader(withoutComments(css), firstOrder);
+  reader.read();
+  return { rules: reader.rules, layers: reader.layers };
+}
+
+/** Walks a sheet block by block, stepping into `@layer` ones with a stack, not recursion. */
+class StylesheetReader {
+  readonly rules: StyleRule[] = [];
+  readonly layers: LayerPath[] = [];
+  private anonymous = 0;
+  /** The layer blocks open at the reader, the innermost last. */
+  private readonly open: LayerPath[] = [];
+  /** The next `}` from where the reader last looked, or -1; the reader only moves forward. */
+  private nextClose = -2;
+  private readonly text: string;
+  private readonly firstOrder: number;
+
+  constructor(text: string, firstOrder: number) {
+    this.text = text;
+    this.firstOrder = firstOrder;
   }
-  return rules;
+
+  /** Read every statement and block, in source order. */
+  read(): void {
+    let position = 0;
+    while (position < this.text.length) position = this.step(position);
+  }
+
+  /**
+   * Read one statement, block or layer close.
+   * @param from - Where it starts.
+   * @returns {number} Where the next one starts, or the text length when nothing follows.
+   */
+  private step(from: number): number {
+    const path = this.open.at(-1) ?? [];
+    const close = path.length === 0 ? -1 : this.closeAfter(from);
+    const atRule = atRuleAt(this.text, from);
+    const open = preludeEnd(this.text, from, atRule, close === -1 ? this.text.length : close);
+    if (open === -1 && close !== -1) {
+      this.open.pop();
+      return close + 1;
+    }
+    if (open === -1) return this.text.length;
+    const prelude = this.text.slice(from, open).trimStart();
+    if (this.text[open] === ";") return this.statement(prelude, path, open);
+    return this.block(prelude, open, path);
+  }
+
+  /**
+   * The next `}` outside quotes and escapes, which closes the innermost layer block.
+   * @param from - Where to look from.
+   * @returns {number} Its offset, or -1 when none comes.
+   */
+  private closeAfter(from: number): number {
+    if (this.nextClose === -1 || this.nextClose >= from) return this.nextClose;
+    let quote = "";
+    for (let index = from; index < this.text.length; index += 1) {
+      const character = this.text[index] ?? "";
+      if (character === "\\") index += 1;
+      else if (quote !== "") quote = quoteAfter(quote, character);
+      else if (character === "}") return (this.nextClose = index);
+      else quote = quoteAfter(quote, character);
+    }
+    return (this.nextClose = -1);
+  }
+
+  /**
+   * Take an `@layer a, b;` statement's names; any other statement adds nothing here.
+   * @param prelude - The statement.
+   * @param path - The layer blocks around it.
+   * @param end - Offset of its `;`.
+   * @returns {number} Where the next one starts.
+   */
+  private statement(prelude: string, path: LayerPath, end: number): number {
+    const names = layerNames(prelude) ?? "";
+    if (names.trim() !== "") this.layers.push(...(layerPaths(names, path) ?? []));
+    return end + 1;
+  }
+
+  /**
+   * Take a style rule, or step into an `@layer` block; any other block gets skipped.
+   * @param prelude - The selector or at-rule before the `{`.
+   * @param open - Offset of the `{`.
+   * @param path - The layer blocks around it.
+   * @returns {number} Where the next one starts.
+   */
+  private block(prelude: string, open: number, path: LayerPath): number {
+    const inner = this.layerBlock(prelude, path);
+    if (inner !== undefined) {
+      this.open.push(inner);
+      return open + 1;
+    }
+    const close = matchingBrace(this.text, open);
+    if (!prelude.startsWith("@")) {
+      const body = this.text.slice(open + 1, close);
+      const order = this.firstOrder + this.rules.length;
+      this.rules.push(...selectorRules(prelude, body, order, path));
+    }
+    return close + 1;
+  }
+
+  /**
+   * The path inside a layer block, declared as it comes up; a list of names voids the block.
+   * @param prelude - The block's prelude.
+   * @param path - The layer blocks around it.
+   * @returns {LayerPath | undefined} Its path, or undefined for any other block.
+   */
+  private layerBlock(prelude: string, path: LayerPath): LayerPath | undefined {
+    const names = layerNames(prelude);
+    if (names === undefined) return undefined;
+    const anonymous = [[...path, `\u0000${this.anonymous++}`].slice(0, LAYER_DEPTH_LIMIT)];
+    const [inner, ...more] = names.trim() === "" ? anonymous : (layerPaths(names, path) ?? []);
+    if (inner === undefined || more.length > 0) return undefined;
+    this.layers.push(inner);
+    return inner;
+  }
+}
+
+/**
+ * What follows an `@layer`, known by its at-keyword decoded the way CSS reads it.
+ * @param prelude - An at-rule's prelude.
+ * @returns {string | undefined} The names as written, or undefined for any other at-rule.
+ */
+function layerNames(prelude: string): string | undefined {
+  const parts = AT_KEYWORD.exec(prelude)?.groups;
+  return identifier(parts?.name ?? "").toLowerCase() === "layer" ? (parts?.rest ?? "") : undefined;
+}
+
+/**
+ * Layer names the way CSS reads them: escapes decoded, names split at `,` and parts at `.`.
+ * Past {@link LAYER_DEPTH_LIMIT} the parts fold into the deepest layer kept, rules and all.
+ * @param text - The names after `@layer`, or inside `layer()`.
+ * @param outer - The layers they sit in.
+ * @returns {LayerPath[] | undefined} One full path per name, or undefined when one is no name.
+ */
+export function layerPaths(text: string, outer: LayerPath = []): LayerPath[] | undefined {
+  const names: string[][] = [[]];
+  for (const [token] of text.matchAll(NAME_TOKEN)) {
+    if (token === ",") names.push([]);
+    else names.at(-1)?.push(token);
+  }
+  const room = Math.max(0, LAYER_DEPTH_LIMIT - outer.length);
+  const paths: LayerPath[] = [];
+  for (const tokens of names) {
+    const parts = layerName(tokens);
+    if (parts === undefined) return undefined;
+    paths.push([...outer, ...parts.slice(0, room)]);
+  }
+  return paths;
+}
+
+/**
+ * One `<ident>` or dotted run of them, with nothing but whitespace around it.
+ * @param tokens - The name's tokens between commas.
+ * @returns {string[] | undefined} Its decoded parts, or undefined when CSS rejects it.
+ */
+function layerName(tokens: readonly string[]): string[] | undefined {
+  const first = tokens.findIndex((token) => !SPACE.test(token));
+  const last = tokens.findLastIndex((token) => !SPACE.test(token));
+  const inner = first === -1 ? [] : tokens.slice(first, last + 1);
+  if (inner.length === 0 || inner.some((token) => SPACE.test(token))) return undefined;
+  const parts = [""];
+  for (const token of inner) {
+    if (token === ".") parts.push("");
+    else parts.push(`${parts.pop() ?? ""}${token}`);
+  }
+  return parts.every((part) => IDENT.test(part)) ? parts.map(identifier) : undefined;
+}
+
+/**
+ * An identifier with its escapes decoded, so `\66 oo` and `foo` name the same layer.
+ * @param text - The identifier as written.
+ * @returns {string} Its value; NUL and code points no string can hold become U+FFFD.
+ */
+function identifier(text: string): string {
+  if (!text.includes("\\") && !text.includes("\u0000")) return text;
+  return text
+    .replaceAll(ESCAPE, (_escape, hex: string | undefined, character: string | undefined) => {
+      if (hex === undefined) return character ?? "";
+      const point = Number.parseInt(hex, 16);
+      const invalid = point === 0 || point > 0x10_ff_ff || (point >= 0xd8_00 && point <= 0xdf_ff);
+      return invalid ? "\uFFFD" : String.fromCodePoint(point);
+    })
+    .replaceAll("\u0000", "\uFFFD");
 }
 
 /**
@@ -211,9 +404,9 @@ export function stylesheetPreamble(css: string): StylesheetPreamble {
  */
 function statementPreamble(statement: string): StylesheetPreamble | undefined {
   if (/^@charset\b/iu.test(statement)) return [];
-  const names = /^@layer\s+(?<names>.+)$/isu.exec(statement)?.groups?.names;
-  if (names !== undefined) return [{ layers: names.split(",").map((name) => name.trim()) }];
-  return importPreamble(statement);
+  const names = layerNames(statement);
+  if (names === undefined || names.trim() === "") return importPreamble(statement);
+  return [{ layers: layerPaths(names) ?? [] }];
 }
 
 /**
@@ -237,8 +430,10 @@ function importPreamble(statement: string): StylesheetPreamble | undefined {
 function importOf(url: string, conditions: string): StylesheetImport | undefined {
   const bare = url.replaceAll(/^["']|["']$/gu, "");
   if (bare === "" || !forScreen(importMedia(conditions))) return undefined;
-  const layer = /^layer\b(?:\((?<name>[^)]*)\))?/iu.exec(conditions.trim());
-  return layer === null ? { url: bare } : { url: bare, layer: layer.groups?.name?.trim() ?? "" };
+  const layer = IMPORT_LAYER.exec(conditions.trim());
+  if (layer === null) return { url: bare };
+  const name = layer.groups?.name ?? "";
+  return { url: bare, layer: name.trim() === "" ? "" : name };
 }
 
 /**
@@ -251,7 +446,7 @@ function* leadingStatements(text: string): Generator<string> {
   while (atRuleAt(text, position)) {
     const end = preludeEnd(text, position, true);
     if (end === -1 || text[end] !== ";") return;
-    yield text.slice(position, end).trim();
+    yield text.slice(position, end).trimStart();
     position = end + 1;
   }
 }
@@ -262,7 +457,7 @@ function* leadingStatements(text: string): Generator<string> {
  * @returns {string} The media list alone.
  */
 function importMedia(conditions: string | undefined): string {
-  let text = (conditions ?? "").trim().replace(/^layer\b(?:\([^)]*\))?\s*/iu, "");
+  let text = (conditions ?? "").trim().replace(IMPORT_LAYER, "").trimStart();
   if (/^supports\(/iu.test(text)) text = text.slice(closingParen(text, text.indexOf("(")) + 1);
   return text.trim();
 }
@@ -307,20 +502,33 @@ function atRuleAt(text: string, position: number): boolean {
  * @param text - Stylesheet text without comments.
  * @param from - Where the prelude starts.
  * @param atRule - Whether it is an at-rule, which may end without a block.
+ * @param to - Where to stop looking.
  * @returns {number} Offset of the `{` or `;`, or -1 when neither comes.
  */
-function preludeEnd(text: string, from: number, atRule: boolean): number {
+function preludeEnd(text: string, from: number, atRule: boolean, to = text.length): number {
   let depth = 0;
   let quote = "";
-  for (let index = from; index < text.length; index += 1) {
-    const character = text[index] ?? "";
-    const quoted = quote !== "";
-    quote = quoteAfter(quote, character);
-    if (quoted || quote !== "") continue;
-    depth += NESTING[character] ?? 0;
-    if (depth <= 0 && endsPrelude(character, atRule)) return index;
+  for (let index = from; index < to; index += 1) {
+    const character = text.charAt(index);
+    if (character === "\\") index += 1;
+    else if (inString(quote, character)) {
+      quote = quoteAfter(quote, character);
+    } else {
+      depth += NESTING[character] ?? 0;
+      if (depth <= 0 && endsPrelude(character, atRule)) return index;
+    }
   }
   return -1;
+}
+
+/**
+ * Whether a character is inside a quoted string, or opens one.
+ * @param quote - The open quote, or an empty string.
+ * @param character - The character.
+ * @returns {boolean} True when the string's quote tracking takes it.
+ */
+function inString(quote: string, character: string): boolean {
+  return quote !== "" || character === '"' || character === "'";
 }
 
 function endsPrelude(character: string, atRule: boolean): boolean {
@@ -491,7 +699,7 @@ function matchingBrace(text: string, open: number): number {
   let quote = "";
   for (let index = open; index < text.length; index += 1) {
     const character = text[index] ?? "";
-    if (quote !== "" && character === "\\") {
+    if (character === "\\") {
       index += 1;
       continue;
     }
@@ -506,15 +714,17 @@ function matchingBrace(text: string, open: number): number {
 /** How braces move the nesting depth outside quotes. */
 const BRACES: Readonly<Record<string, number>> = { "{": 1, "}": -1 };
 
-function selectorRules(prelude: string, body: string, order: number): StyleRule[] {
+function selectorRules(prelude: string, body: string, order: number, path: LayerPath): StyleRule[] {
   if (body.includes("{")) return [];
   const declarations = Object.fromEntries(
     Object.entries(parseDeclarations(body)).filter(([property]) => READ_PROPERTIES.has(property)),
   );
   if (Object.keys(declarations).length === 0) return [];
-  return splitTopLevel(prelude, ",").flatMap(
-    (selector, index) => simpleRule(selector, declarations, order + index) ?? [],
-  );
+  const layered = path.length === 0 ? {} : { layerPath: path };
+  return splitTopLevel(prelude, ",").flatMap((selector, index) => {
+    const rule = simpleRule(selector, declarations, order + index);
+    return rule === undefined ? [] : [{ ...rule, ...layered }];
+  });
 }
 
 /**
