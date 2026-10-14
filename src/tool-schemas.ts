@@ -1,3 +1,5 @@
+/** Imports only import-free core modules, so `web --help` and a tool registration stay cheap. */
+
 import { Type, type TProperties } from "@agntn/tools";
 
 import {

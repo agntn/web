@@ -1,3 +1,5 @@
+/** Terminal-safe rendering for the Pi and OMP extensions. It imports Node, never either host. */
+
 import { stripVTControlCharacters } from "node:util";
 
 import stringWidth from "string-width";
