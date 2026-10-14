@@ -65,8 +65,9 @@ export interface Color {
 
 /** An at-rule ahead, past whitespace; sticky, so it tests one position. */
 const AT_RULE = /\s*@/uy;
-/** An `@layer` prelude, with the names it declares or the one its block opens. */
-const LAYER_RULE = /^@layer(?![\w-])\s*(?<names>.*)$/isu;
+/** An at-keyword, whose name may hold escapes and non-ASCII letters, and what follows it. */
+const AT_KEYWORD =
+  /^@(?<name>(?:[\w-]|\P{ASCII}|\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f]))+)(?<rest>.*)$/su;
 /** A layer name list token: an escape, a separator, whitespace, or a run of anything else. */
 const NAME_TOKEN = /\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f])?|[,.]|\s+|[^\\,.\s]+/giu;
 /** A CSS escape: up to six hex digits and one optional space, or any other character. */
@@ -262,7 +263,7 @@ class StylesheetReader {
    * @returns {number} Where the next one starts.
    */
   private statement(prelude: string, path: LayerPath, end: number): number {
-    const names = LAYER_RULE.exec(prelude)?.groups?.names ?? "";
+    const names = layerNames(prelude) ?? "";
     if (names.trim() !== "") this.layers.push(...layerPaths(names, path));
     return end + 1;
   }
@@ -296,7 +297,7 @@ class StylesheetReader {
    * @returns {LayerPath | undefined} Its path, or undefined for any other block.
    */
   private layerBlock(prelude: string, path: LayerPath): LayerPath | undefined {
-    const names = LAYER_RULE.exec(prelude)?.groups?.names;
+    const names = layerNames(prelude);
     if (names === undefined) return undefined;
     const anonymous = [[...path, `\u0000${this.anonymous++}`].slice(0, LAYER_DEPTH_LIMIT)];
     const [inner, ...more] = names.trim() === "" ? anonymous : layerPaths(names, path);
@@ -304,6 +305,16 @@ class StylesheetReader {
     this.layers.push(inner);
     return inner;
   }
+}
+
+/**
+ * What follows an `@layer`, known by its at-keyword decoded the way CSS reads it.
+ * @param prelude - An at-rule's prelude.
+ * @returns {string | undefined} The names as written, or undefined for any other at-rule.
+ */
+function layerNames(prelude: string): string | undefined {
+  const parts = AT_KEYWORD.exec(prelude)?.groups;
+  return identifier(parts?.name ?? "").toLowerCase() === "layer" ? (parts?.rest ?? "") : undefined;
 }
 
 /**
@@ -363,8 +374,8 @@ export function stylesheetPreamble(css: string): StylesheetPreamble {
  */
 function statementPreamble(statement: string): StylesheetPreamble | undefined {
   if (/^@charset\b/iu.test(statement)) return [];
-  const names = /^@layer\s+(?<names>.+)$/isu.exec(statement)?.groups?.names;
-  if (names === undefined) return importPreamble(statement);
+  const names = layerNames(statement);
+  if (names === undefined || names.trim() === "") return importPreamble(statement);
   return [{ layers: layerPaths(names) }];
 }
 

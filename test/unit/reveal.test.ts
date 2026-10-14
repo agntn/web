@@ -507,6 +507,17 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("knows @layer by its decoded at-keyword, not by its first five letters", () => {
+    const html = [
+      "<style>@l\\61 yer a { .escaped { display: none } } @layeré { .accent { display: none } }</style>",
+      "<p class=escaped>escaped</p><p class=accent>other at-rule</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .escaped", value: "escaped" }),
+    ]);
+  });
+
   it("applies untitled sheets and the first titled set only", () => {
     const html = [
       "<link rel=stylesheet title=Light href=light.css><link rel=stylesheet title=Dark href=dark.css>",
