@@ -7,7 +7,6 @@ import type {
 } from "../core/types.ts";
 import { Client } from "../core/client.ts";
 import { Provider } from "../core/provider.ts";
-import { sanitizeUrl } from "../core/redaction.ts";
 import {
   AuthError,
   HTTPError,
@@ -66,7 +65,11 @@ const LOGIN_SEGMENTS = new Set([
   "sign_in",
   "authwall",
   "servicelogin",
+  "wp-login",
 ]);
+
+/** A login page served as a file, like WordPress `wp-login.php` or a plain `signin.html`. */
+const PAGE_EXTENSION = /\.(?:php|html?|aspx?|jsp)$/;
 
 export class ContextProvider extends Provider {
   static readonly providerName = "context";
@@ -215,23 +218,24 @@ function timeoutParams(timeout?: number): Record<string, string> {
  * Context follows redirects, so a sign in wall comes back as a 200 with the login form.
  * @param requested - URL the caller asked for.
  * @param response - Scrape of the page Context ended on.
- * @throws {PageFetchError} When Context ended on a login page the caller didn't ask for.
+ * @throws {PageFetchError} When Context ended on a login page other than the requested one.
  */
 function rejectLoginRedirect(requested: string, response: Readonly<ContextScrapeResponse>): void {
   const landed = response.metadata.finalUrl || response.url;
-  if (isLoginPage(requested) || !isLoginPage(landed)) return;
-  const { origin, pathname } = new URL(landed);
-  throw new PageFetchError(
-    `Context.dev was sent to a login page: ${sanitizeUrl(origin + pathname)}`,
-  );
+  const samePage = pathSegments(landed).join("/") === pathSegments(requested).join("/");
+  if (samePage || !isLoginPage(landed)) return;
+  throw new PageFetchError(`Context.dev was sent to a login page on ${new URL(landed).origin}`);
 }
 
 function isLoginPage(url: string): boolean {
-  if (!URL.canParse(url)) return false;
-  return new URL(url).pathname
-    .toLowerCase()
-    .split("/")
-    .some((segment) => LOGIN_SEGMENTS.has(segment));
+  return pathSegments(url).some((segment) =>
+    LOGIN_SEGMENTS.has(segment.replace(PAGE_EXTENSION, "")),
+  );
+}
+
+function pathSegments(url: string): string[] {
+  if (!URL.canParse(url)) return [];
+  return new URL(url).pathname.toLowerCase().split("/").filter(Boolean);
 }
 
 function mapReadResult(

@@ -185,12 +185,30 @@ describe("Context login redirects", () => {
       attempts: ["jina", "context", "firecrawl"],
     });
     expect(response.failures[1]?.error).toBe(
-      "Context.dev was sent to a login page: https://old.reddit.com/login/",
+      "Context.dev was sent to a login page on https://old.reddit.com",
     );
   });
 
-  it("keeps a session in the login path out of the message", async () => {
-    contextBody = landedOn(thread, "https://sso.example.com/login/session=abc123?dest=x");
+  it.each([
+    [
+      "an article that mentions login",
+      "https://example.com/blog/login",
+      "https://example.com/sso/login",
+    ],
+    ["a WordPress login", thread, "https://example.com/wp-login.php?redirect_to=x"],
+    ["a sign in page", thread, "https://example.com/account/signin.html"],
+  ])("rejects %s redirected to a login page", async (_case, requested, finalUrl) => {
+    contextBody = landedOn(requested, finalUrl);
+
+    const error = await readUrlDetailed(requested, { provider: "context" }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(PageFetchError);
+  });
+
+  it("keeps a token in the login path out of the message", async () => {
+    contextBody = landedOn(thread, "https://sso.example.com/login/abc123?dest=x");
 
     const error = await readUrlDetailed(thread, { provider: "context" }).catch(
       (caught: unknown) => caught,
