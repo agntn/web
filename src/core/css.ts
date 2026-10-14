@@ -72,8 +72,9 @@ const AT_KEYWORD =
 const NAME_TOKEN = /\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f])?|[,.]|\s+|[^\\,.\s]+/giu;
 /** A whitespace token between names. */
 const SPACE = /^\s/u;
-/** An identifier opens with `--`, or a letter, `_`, non-ASCII or escape after an optional `-`. */
-const IDENT_START = /^(?:--|-?(?:[a-z_]|\P{ASCII}|\\))/iu;
+/** One whole CSS identifier: a valid start, then only name characters and escapes. */
+const IDENT =
+  /^(?:--|-?(?:[a-z_]|\P{ASCII}|\\[^\n\r\f]))(?:[\w-]|\P{ASCII}|\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f]))*$/iu;
 /** A CSS escape: up to six hex digits and one optional space, or any other character. */
 const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
 /** Layers nested deeper than this fold into their ancestor at this depth; no page needs more. */
@@ -361,7 +362,7 @@ function layerName(tokens: readonly string[]): string[] | undefined {
     if (token === ".") parts.push("");
     else parts.push(`${parts.pop() ?? ""}${token}`);
   }
-  return parts.every((part) => IDENT_START.test(part)) ? parts.map(identifier) : undefined;
+  return parts.every((part) => IDENT.test(part)) ? parts.map(identifier) : undefined;
 }
 
 /**

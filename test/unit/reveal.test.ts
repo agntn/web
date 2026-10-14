@@ -459,6 +459,7 @@ describe("revealHtml", () => {
     const html = [
       "<style>@layer a, b { .a { display: none } } @layer foo bar { .a { display: none } }",
       "@layer 1st { .a { display: none } } @layer a..b { .a { display: none } } @layer .a { .a { display: none } }",
+      "@layer foo#bar { .a { display: none } }",
       "</style><p class=a>shown</p>",
     ].join("\n");
 
