@@ -7,6 +7,7 @@ import {
   readFileSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,12 +27,13 @@ let packed = "";
  * it has started. An inherited WEB_DIST is dropped, so only `environment` sets it.
  * @param bin - Path to a `dist/cli.mjs`.
  * @param environment - Extra environment for the run.
- * @returns {Promise<string[]>} Every module URL the run loaded.
+ * @returns {Promise<{ loaded: string[]; stderr: string }>} Every module URL the run loaded, and
+ * what it wrote to stderr.
  */
-async function mcpLoads(
+async function mcpRun(
   bin: string,
   environment: Readonly<Record<string, string>> = {},
-): Promise<string[]> {
+): Promise<{ loaded: string[]; stderr: string }> {
   const { WEB_DIST: _inherited, ...inherited } = process.env;
   const pending = execute(process.execPath, ["--import", hook, bin, "mcp"], {
     cwd: root,
@@ -42,7 +44,20 @@ async function mcpLoads(
   const { stderr } = await pending;
   const report = /@loaded (\[.*\])/u.exec(stderr)?.[1];
   if (report === undefined) throw new Error(`the load hook reported nothing: ${stderr}`);
-  return JSON.parse(report) as string[];
+  return { loaded: JSON.parse(report) as string[], stderr };
+}
+
+/**
+ * Runs `mcp` like `mcpRun` and keeps only the loads.
+ * @param bin - Path to a `dist/cli.mjs`.
+ * @param environment - Extra environment for the run.
+ * @returns {Promise<string[]>} Every module URL the run loaded.
+ */
+async function mcpLoads(
+  bin: string,
+  environment: Readonly<Record<string, string>> = {},
+): Promise<string[]> {
+  return (await mcpRun(bin, environment)).loaded;
 }
 
 /**
@@ -95,6 +110,15 @@ describe("built bin", () => {
     expect(loaded).toContain(`${source}commands/mcp.ts`);
     expect(loaded).toContain(`${source}mcp.ts`);
     expect(loaded).not.toContain(pathToFileURL(join(copy, "dist/mcp.mjs")).href);
+  });
+
+  it("falls back to the bundle when src/ no longer exports serveMcp", async () => {
+    const copy = checkout();
+    writeFileSync(join(copy, "src/commands/mcp.ts"), "export async function serve() {}\n");
+    const { loaded, stderr } = await mcpRun(join(copy, "dist/cli.mjs"));
+    expect(loaded).toContain(pathToFileURL(join(copy, "dist/mcp.mjs")).href);
+    expect(stderr).toContain(`${join(copy, "src/commands/mcp.ts")} has no serveMcp`);
+    expect(stderr).toContain("vp run build");
   });
 
   it("keeps the bundle under WEB_DIST=1", async () => {
