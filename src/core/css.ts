@@ -70,6 +70,10 @@ const AT_KEYWORD =
   /^@(?<name>(?:[\w-]|\P{ASCII}|\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f]))+)(?<rest>.*)$/su;
 /** A layer name list token: an escape, a separator, whitespace, or a run of anything else. */
 const NAME_TOKEN = /\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f])?|[,.]|\s+|[^\\,.\s]+/giu;
+/** A whitespace token between names. */
+const SPACE = /^\s/u;
+/** An identifier opens with `--`, or a letter, `_`, non-ASCII or escape after an optional `-`. */
+const IDENT_START = /^(?:--|-?(?:[a-z_]|\P{ASCII}|\\))/iu;
 /** A CSS escape: up to six hex digits and one optional space, or any other character. */
 const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
 /** Layers nested deeper than this fold into their ancestor at this depth; no page needs more. */
@@ -266,7 +270,7 @@ class StylesheetReader {
    */
   private statement(prelude: string, path: LayerPath, end: number): number {
     const names = layerNames(prelude) ?? "";
-    if (names.trim() !== "") this.layers.push(...layerPaths(names, path));
+    if (names.trim() !== "") this.layers.push(...(layerPaths(names, path) ?? []));
     return end + 1;
   }
 
@@ -302,7 +306,7 @@ class StylesheetReader {
     const names = layerNames(prelude);
     if (names === undefined) return undefined;
     const anonymous = [[...path, `\u0000${this.anonymous++}`].slice(0, LAYER_DEPTH_LIMIT)];
-    const [inner, ...more] = names.trim() === "" ? anonymous : layerPaths(names, path);
+    const [inner, ...more] = names.trim() === "" ? anonymous : (layerPaths(names, path) ?? []);
     if (inner === undefined || more.length > 0) return undefined;
     this.layers.push(inner);
     return inner;
@@ -324,18 +328,40 @@ function layerNames(prelude: string): string | undefined {
  * Past {@link LAYER_DEPTH_LIMIT} the parts fold into the deepest layer kept, rules and all.
  * @param text - The names after `@layer`, or inside `layer()`.
  * @param outer - The layers they sit in.
- * @returns {LayerPath[]} One full path per name, outermost first.
+ * @returns {LayerPath[] | undefined} One full path per name, or undefined when one is no name.
  */
-export function layerPaths(text: string, outer: LayerPath = []): LayerPath[] {
-  const names: string[][] = [[""]];
+export function layerPaths(text: string, outer: LayerPath = []): LayerPath[] | undefined {
+  const names: string[][] = [[]];
   for (const [token] of text.matchAll(NAME_TOKEN)) {
-    const parts = names.at(-1) ?? [];
-    if (token === ",") names.push([""]);
-    else if (token === ".") parts.push("");
-    else if (!/^\s/u.test(token)) parts.push(`${parts.pop() ?? ""}${identifier(token)}`);
+    if (token === ",") names.push([]);
+    else names.at(-1)?.push(token);
   }
   const room = Math.max(0, LAYER_DEPTH_LIMIT - outer.length);
-  return names.map((parts) => [...outer, ...parts.slice(0, room)]);
+  const paths: LayerPath[] = [];
+  for (const tokens of names) {
+    const parts = layerName(tokens);
+    if (parts === undefined) return undefined;
+    paths.push([...outer, ...parts.slice(0, room)]);
+  }
+  return paths;
+}
+
+/**
+ * One `<ident>` or dotted run of them, with nothing but whitespace around it.
+ * @param tokens - The name's tokens between commas.
+ * @returns {string[] | undefined} Its decoded parts, or undefined when CSS rejects it.
+ */
+function layerName(tokens: readonly string[]): string[] | undefined {
+  const first = tokens.findIndex((token) => !SPACE.test(token));
+  const last = tokens.findLastIndex((token) => !SPACE.test(token));
+  const inner = first === -1 ? [] : tokens.slice(first, last + 1);
+  if (inner.length === 0 || inner.some((token) => SPACE.test(token))) return undefined;
+  const parts = [""];
+  for (const token of inner) {
+    if (token === ".") parts.push("");
+    else parts.push(`${parts.pop() ?? ""}${token}`);
+  }
+  return parts.every((part) => IDENT_START.test(part)) ? parts.map(identifier) : undefined;
 }
 
 /**
@@ -344,6 +370,7 @@ export function layerPaths(text: string, outer: LayerPath = []): LayerPath[] {
  * @returns {string} Its value; NUL and code points no string can hold become U+FFFD.
  */
 function identifier(text: string): string {
+  if (!text.includes("\\") && !text.includes("\u0000")) return text;
   return text
     .replaceAll(ESCAPE, (_escape, hex: string | undefined, character: string | undefined) => {
       if (hex === undefined) return character ?? "";
@@ -378,7 +405,7 @@ function statementPreamble(statement: string): StylesheetPreamble | undefined {
   if (/^@charset\b/iu.test(statement)) return [];
   const names = layerNames(statement);
   if (names === undefined || names.trim() === "") return importPreamble(statement);
-  return [{ layers: layerPaths(names) }];
+  return [{ layers: layerPaths(names) ?? [] }];
 }
 
 /**

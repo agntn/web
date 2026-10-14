@@ -512,10 +512,10 @@ class HiddenScanner {
     layer: string | undefined,
   ): void {
     const anonymous = [`\u0000${this.anonymousLayers++}`];
-    let own: LayerPath = [];
+    let own: LayerPath | undefined = [];
     if (entry.layer === "") own = anonymous;
-    else if (entry.layer !== undefined) own = layerPaths(entry.layer)[0] ?? [];
-    this.fileLinked(entry.url, chain, this.declareLayer(layer, own));
+    else if (entry.layer !== undefined) own = layerPaths(entry.layer)?.[0];
+    if (own !== undefined) this.fileLinked(entry.url, chain, this.declareLayer(layer, own));
   }
 
   /**

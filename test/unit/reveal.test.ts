@@ -455,14 +455,18 @@ describe("revealHtml", () => {
     ]);
   });
 
-  it("applies no rules from a layer block whose prelude lists several names", () => {
-    const html = "<style>@layer a, b { .a { display: none } }</style><p class=a>shown</p>";
+  it("applies no rules from a layer block whose name CSS rejects", () => {
+    const html = [
+      "<style>@layer a, b { .a { display: none } } @layer foo bar { .a { display: none } }",
+      "@layer 1st { .a { display: none } } @layer a..b { .a { display: none } } @layer .a { .a { display: none } }",
+      "</style><p class=a>shown</p>",
+    ].join("\n");
 
     expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
   });
 
   it("reads a layer block that never closes in one pass", () => {
-    const html = `<style>@layer a { ${"@layer b; ".repeat(300_000)}</style><p class=a>x</p>`;
+    const html = `<style>@layer a { ${"@x; ".repeat(300_000)}</style><p class=a>x</p>`;
 
     const started = performance.now();
     revealHtml(html);
