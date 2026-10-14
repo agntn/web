@@ -7,6 +7,7 @@ import {
   parseColor,
   parseDeclarations,
   parseStylesheet,
+  LAYER_DEPTH_LIMIT,
   layerPath,
   ruleKey,
   sameColor,
@@ -395,6 +396,8 @@ class HiddenScanner {
   private preferredTitle: string | undefined;
   /** Cascade layers by full name, each with the ones nested in it in the order they come up. */
   private readonly layers = new Map<string, string[]>([["", []]]);
+  /** How deep each layer sits, so imports can't nest past {@link LAYER_DEPTH_LIMIT} either. */
+  private readonly depths = new Map<string, number>([["", 0]]);
   /** Anonymous layers so far, which keeps each one apart. */
   private anonymousLayers = 0;
   /** Rules in filing order, ranked once every layer is known. */
@@ -510,22 +513,25 @@ class HiddenScanner {
   ): void {
     const anonymous = `\u0000${this.anonymousLayers++}`;
     const own = entry.layer === undefined ? [] : layerPath(entry.layer || anonymous);
-    if (own !== undefined) this.fileLinked(entry.url, chain, this.declareLayer(layer, own));
+    this.fileLinked(entry.url, chain, this.declareLayer(layer, own));
   }
 
   /**
    * Declare a layer nested in another, each part the first time it comes up.
    * @param outer - The full name of the layer it sits in, if any.
-   * @param path - Its name's parts.
+   * @param path - Its name's parts, folded past {@link LAYER_DEPTH_LIMIT}.
    * @returns {string | undefined} Its full name, or undefined outside any layer.
    */
   private declareLayer(outer: string | undefined, path: LayerPath): string | undefined {
     let name = outer ?? "";
-    for (const part of path) {
+    let depth = this.depths.get(name) ?? 0;
+    for (const part of path.slice(0, Math.max(0, LAYER_DEPTH_LIMIT - depth))) {
       const full = name === "" ? part : `${name}.${part}`;
+      depth += 1;
       if (!this.layers.has(full)) {
         this.layers.get(name)?.push(full);
         this.layers.set(full, []);
+        this.depths.set(full, depth);
       }
       name = full;
     }

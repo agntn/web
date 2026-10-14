@@ -470,14 +470,33 @@ describe("revealHtml", () => {
     expect(performance.now() - started).toBeLessThan(3_000);
   });
 
-  it("survives layer blocks nested far deeper than any sheet needs", () => {
+  it("still reads rules from layers nested far deeper than any sheet needs", () => {
     const depth = 20_000;
-    const css = `${"@layer x { ".repeat(depth)}.a { display: none }${" }".repeat(depth)}`;
-    const dotted = `@layer ${"x.".repeat(depth)}x { .a { display: none } }`;
-    const html = `<style>@layer x { .b { display: none } } ${css} ${dotted}</style><p class=a>deep</p><p class=b>b</p>`;
+    const nested = `${"@layer x { ".repeat(depth)}.a { display: none }${" }".repeat(depth)}`;
+    const dotted = `@layer ${"x.".repeat(depth)}x { .c { display: none } }`;
+    const html = `<style>${nested} ${dotted} @layer x { .b { display: none } }</style><p class=a>a</p><p class=b>b</p><p class=c>c</p>`;
 
     expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "a" }),
       expect.objectContaining({ reason: "display: none via .b", value: "b" }),
+      expect.objectContaining({ reason: "display: none via .c", value: "c" }),
+    ]);
+  });
+
+  it("keeps a layer open past a brace in a quoted selector", () => {
+    const html = `<style>@layer a { [data-x="}"] { display: block } .secret { display: none } }</style><p class=secret>key</p>`;
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+    ]);
+  });
+
+  it("takes an escaped comma as part of one layer name", () => {
+    const html =
+      "<style>@layer foo\\,bar { .secret { display: none } }</style><p class=secret>key</p>";
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
     ]);
   });
 
