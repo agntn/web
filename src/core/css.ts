@@ -83,8 +83,12 @@ export const LAYER_DEPTH_LIMIT = 32;
 const IMPORT = /^@import\s*(?:url\(\s*)?(?<url>"[^"]*"|'[^']*'|[^\s"')]+)\s*\)?\s*(?<media>.*)$/isu;
 /** An import's `layer` or `layer(name)`, where an escaped `)` stays in the name. */
 const IMPORT_LAYER = /^layer\b(?:\((?<name>(?:\\[\s\S]|[^)\\])*)\))?/iu;
-/** Media that hold on a screen of any size. */
-const SCREEN_MEDIA = /^(?:all|screen)?$/iu;
+/** A media query that names a type and nothing else, maybe after `not` or `only`. */
+const TYPE_QUERY = /^(?:(?<prefix>not|only)\s+)?(?<type>[a-z][\w-]*)$/iu;
+/** Words a media type can't be, so a query naming one turns into `not all`. */
+const NOT_A_TYPE = /^(?:and|layer|not|only|or)$/iu;
+/** Media types that hold on a screen of any size. */
+const SCREEN_TYPE = /^(?:all|screen)$/iu;
 const COMPOUND_SELECTOR = /^(?<tag>[a-z][\w-]*|\*)?(?<rest>(?:[.#][\w-]+)*)$/iu;
 const SELECTOR_PART = /[.#][\w-]+/gu;
 const COLOR_TOKEN = /#[\da-f]{3,8}\b|rgba?\([^)]{0,64}\)|\b[a-z]+\b/giu;
@@ -190,7 +194,7 @@ function shorthandColor(value: string): string {
 
 /**
  * Rules for one element, like `.secret` or `p#key`, at the top or inside `@layer` blocks.
- * Other at-rules are skipped: `@media` depends on a screen we lack.
+ * `@media` counts when it holds on every screen; `print`, a width or a preference gets skipped.
  * @param css - Content of a `<style>` element or a linked sheet.
  * @param firstOrder - Order of its first rule, after the rules of earlier stylesheets.
  * @returns {StylesheetBody} One rule per simple selector, in source order, and the layers named.
@@ -201,12 +205,12 @@ export function parseStylesheet(css: string, firstOrder = 0): StylesheetBody {
   return { rules: reader.rules, layers: reader.layers };
 }
 
-/** Walks a sheet block by block, stepping into `@layer` ones with a stack, not recursion. */
+/** Walks a sheet block by block; `@layer` and `@media` nest on a stack, not recursion. */
 class StylesheetReader {
   readonly rules: StyleRule[] = [];
   readonly layers: LayerPath[] = [];
   private anonymous = 0;
-  /** The layer blocks open at the reader, the innermost last. */
+  /** The layer path of each block open at the reader, the innermost last. */
   private readonly open: LayerPath[] = [];
   /** The next `}` from where the reader last looked, or -1; the reader only moves forward. */
   private nextClose = -2;
@@ -225,13 +229,13 @@ class StylesheetReader {
   }
 
   /**
-   * Read one statement, block or layer close.
+   * Read one statement, block or closing brace.
    * @param from - Where it starts.
    * @returns {number} Where the next one starts, or the text length when nothing follows.
    */
   private step(from: number): number {
     const path = this.open.at(-1) ?? [];
-    const close = path.length === 0 ? -1 : this.closeAfter(from);
+    const close = this.open.length === 0 ? -1 : this.closeAfter(from);
     const atRule = atRuleAt(this.text, from);
     const open = preludeEnd(this.text, from, atRule, close === -1 ? this.text.length : close);
     if (open === -1 && close !== -1) {
@@ -245,7 +249,7 @@ class StylesheetReader {
   }
 
   /**
-   * The next `}` outside quotes and escapes, which closes the innermost layer block.
+   * The next `}` outside quotes and escapes, which closes the innermost open block.
    * @param from - Where to look from.
    * @returns {number} Its offset, or -1 when none comes.
    */
@@ -270,20 +274,20 @@ class StylesheetReader {
    * @returns {number} Where the next one starts.
    */
   private statement(prelude: string, path: LayerPath, end: number): number {
-    const names = layerNames(prelude) ?? "";
+    const names = atRuleRest(prelude, "layer") ?? "";
     if (names.trim() !== "") this.layers.push(...(layerPaths(names, path) ?? []));
     return end + 1;
   }
 
   /**
-   * Take a style rule, or step into an `@layer` block; any other block gets skipped.
+   * Take a style rule, or step into an `@layer` or screen `@media` block; others get skipped.
    * @param prelude - The selector or at-rule before the `{`.
    * @param open - Offset of the `{`.
    * @param path - The layer blocks around it.
    * @returns {number} Where the next one starts.
    */
   private block(prelude: string, open: number, path: LayerPath): number {
-    const inner = this.layerBlock(prelude, path);
+    const inner = this.layerBlock(prelude, path) ?? screenBlock(prelude, path);
     if (inner !== undefined) {
       this.open.push(inner);
       return open + 1;
@@ -304,7 +308,7 @@ class StylesheetReader {
    * @returns {LayerPath | undefined} Its path, or undefined for any other block.
    */
   private layerBlock(prelude: string, path: LayerPath): LayerPath | undefined {
-    const names = layerNames(prelude);
+    const names = atRuleRest(prelude, "layer");
     if (names === undefined) return undefined;
     const anonymous = [[...path, `\u0000${this.anonymous++}`].slice(0, LAYER_DEPTH_LIMIT)];
     const [inner, ...more] = names.trim() === "" ? anonymous : (layerPaths(names, path) ?? []);
@@ -315,13 +319,25 @@ class StylesheetReader {
 }
 
 /**
- * What follows an `@layer`, known by its at-keyword decoded the way CSS reads it.
- * @param prelude - An at-rule's prelude.
- * @returns {string | undefined} The names as written, or undefined for any other at-rule.
+ * An `@media` block a screen applies keeps the layer around it, like a block that isn't there.
+ * @param prelude - The block's prelude.
+ * @param path - The layer blocks around it.
+ * @returns {LayerPath | undefined} The same path, or undefined for any other block.
  */
-function layerNames(prelude: string): string | undefined {
+function screenBlock(prelude: string, path: LayerPath): LayerPath | undefined {
+  const queries = atRuleRest(prelude, "media");
+  return queries !== undefined && forScreen(queries) ? path : undefined;
+}
+
+/**
+ * What follows an at-keyword, known by its name decoded the way CSS reads it.
+ * @param prelude - An at-rule's prelude.
+ * @param keyword - The at-rule's name in lowercase, without the `@`, like `layer`.
+ * @returns {string | undefined} The rest as written, or undefined for any other at-rule.
+ */
+function atRuleRest(prelude: string, keyword: string): string | undefined {
   const parts = AT_KEYWORD.exec(prelude)?.groups;
-  return identifier(parts?.name ?? "").toLowerCase() === "layer" ? (parts?.rest ?? "") : undefined;
+  return identifier(parts?.name ?? "").toLowerCase() === keyword ? (parts?.rest ?? "") : undefined;
 }
 
 /**
@@ -404,7 +420,7 @@ export function stylesheetPreamble(css: string): StylesheetPreamble {
  */
 function statementPreamble(statement: string): StylesheetPreamble | undefined {
   if (/^@charset\b/iu.test(statement)) return [];
-  const names = layerNames(statement);
+  const names = atRuleRest(statement, "layer");
   if (names === undefined || names.trim() === "") return importPreamble(statement);
   return [{ layers: layerPaths(names) ?? [] }];
 }
@@ -479,11 +495,24 @@ function closingParen(text: string, open: number): number {
 
 /**
  * Whether a media list holds on a screen of any size; a query with conditions depends on one.
- * @param media - A `media` attribute or the media list of an `@import`.
- * @returns {boolean} True for no media, `all` or `screen` in the list.
+ * @param media - A `media` attribute, or the media list of an `@import` or an `@media` block.
+ * @returns {boolean} True for no media at all, or one query in the list that holds.
  */
 export function forScreen(media: string | undefined): boolean {
-  return (media ?? "").split(",").some((query) => SCREEN_MEDIA.test(query.trim()));
+  const list = media ?? "";
+  return list.trim() === "" || list.split(",").some((query) => screenQuery(query.trim()));
+}
+
+/**
+ * One query of a list, read the way Media Queries 4 does: an empty one is `not all`.
+ * @param query - The query, trimmed.
+ * @returns {boolean} True for `all`, `screen`, `only screen` or `not print`.
+ */
+function screenQuery(query: string): boolean {
+  const parts = TYPE_QUERY.exec(query)?.groups;
+  const type = parts?.type ?? "";
+  if (type === "" || NOT_A_TYPE.test(type)) return false;
+  return (parts?.prefix?.toLowerCase() === "not") !== SCREEN_TYPE.test(type);
 }
 
 /**
