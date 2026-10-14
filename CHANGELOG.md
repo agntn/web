@@ -1,5 +1,40 @@
 # Changelog
 
+## v0.9.0
+
+[compare changes](https://github.com/agntn/web/compare/v0.8.0...v0.9.0)
+
+### 🚀 Enhancements
+
+- Reveal what a page hides ([#290](https://github.com/agntn/web/pull/290))
+- Read linked stylesheets in reveal ([#293](https://github.com/agntn/web/pull/293))
+- Read `@layer` blocks in reveal ([#298](https://github.com/agntn/web/pull/298))
+- Read `@media` blocks in reveal ([#310](https://github.com/agntn/web/pull/310))
+
+### 🩹 Fixes
+
+- **search:** Borrow the OMP 18.3+ Codex login ([#286](https://github.com/agntn/web/pull/286))
+- **context:** Skip login redirects ([#300](https://github.com/agntn/web/pull/300))
+- **cli:** Serve MCP from a stale dist ([#301](https://github.com/agntn/web/pull/301))
+
+### 💅 Refactors
+
+- ⚠️  Move the tools to `@agntn/tools` ([#288](https://github.com/agntn/web/pull/288))
+- **cli:** Drop `searchFirst` ([#302](https://github.com/agntn/web/pull/302))
+
+### 📖 Documentation
+
+- Slim down AGENTS.md ([#297](https://github.com/agntn/web/pull/297))
+
+#### ⚠️ Breaking Changes
+
+- ⚠️  Move the tools to `@agntn/tools` ([#288](https://github.com/agntn/web/pull/288))
+
+### ❤️ Contributors
+
+- Ori
+- Aeitwoen ([@aeitwoen](https://github.com/aeitwoen))
+
 ## v0.8.0
 
 [compare changes](https://github.com/agntn/web/compare/v0.7.5...v0.8.0)
