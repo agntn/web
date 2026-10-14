@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test"
 import {
   AuthError,
   HTTPError,
+  PageFetchError,
   PaymentError,
   ProviderFallbackError,
   createSearchProvider,
@@ -152,5 +153,71 @@ describe("Context credit exhaustion", () => {
 
     expect(error).toBeInstanceOf(AuthError);
     expect(isFallbackEligible(error, "jina", "read")).toBe(false);
+  });
+});
+
+describe("Context login redirects", () => {
+  const thread = "https://old.reddit.com/r/bitcoinpuzzles/comments/7m3wbs/this_animation/";
+  const login = `https://old.reddit.com/login/?reason=lor2&dest=${encodeURIComponent(thread)}`;
+
+  /* A 200 scrape of the page Context ended on, the way the Reddit read in #299 came back. */
+  function landedOn(requested: string, finalUrl: string): string {
+    return JSON.stringify({
+      success: true,
+      markdown: "# Te damos la bienvenida a Reddit",
+      url: requested,
+      metadata: { sourceUrl: requested, finalUrl, title: "Te damos la bienvenida a Reddit" },
+      cache_metadata: { status: "miss", age_ms: 0 },
+    });
+  }
+
+  beforeEach(() => {
+    contextStatus = 200;
+    contextBody = landedOn(thread, login);
+  });
+
+  it("moves on to the next reader when Context lands on a login page", async () => {
+    const response = await readUrlDetailed(thread);
+
+    expect(response).toMatchObject({
+      result: { content: "Article content" },
+      provider: "firecrawl",
+      attempts: ["jina", "context", "firecrawl"],
+    });
+    expect(response.failures[1]?.error).toBe(
+      "Context.dev was sent to a login page: https://old.reddit.com/login/",
+    );
+  });
+
+  it("keeps a session in the login path out of the message", async () => {
+    contextBody = landedOn(thread, "https://sso.example.com/login/session=abc123?dest=x");
+
+    const error = await readUrlDetailed(thread, { provider: "context" }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(PageFetchError);
+    expect(String(error)).not.toContain("abc123");
+  });
+
+  it("rejects an explicit read with PageFetchError", async () => {
+    const error = await readUrlDetailed(thread, { provider: "context" }).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toBeInstanceOf(PageFetchError);
+    expect(isFallbackEligible(error, "context", "read")).toBe(true);
+  });
+
+  it.each([
+    ["a login page the caller asked for", login, login],
+    ["an ordinary redirect", thread, "https://www.reddit.com/r/bitcoinpuzzles/"],
+    ["a path that only mentions logging in", thread, "https://example.com/blog/login-tips"],
+  ])("keeps %s", async (_case, requested, finalUrl) => {
+    contextBody = landedOn(requested, finalUrl);
+
+    const response = await readUrlDetailed(requested, { provider: "context" });
+
+    expect(response.result.url).toBe(finalUrl);
   });
 });

@@ -7,9 +7,11 @@ import type {
 } from "../core/types.ts";
 import { Client } from "../core/client.ts";
 import { Provider } from "../core/provider.ts";
+import { sanitizeUrl } from "../core/redaction.ts";
 import {
   AuthError,
   HTTPError,
+  PageFetchError,
   PaymentError,
   normalizeError,
   type WebError,
@@ -55,6 +57,17 @@ const CONTEXT_MAX_SEARCH_RESULTS = 100;
 const CONTEXT_MAX_TIMEOUT_MS = 300_000;
 const CONTEXT_READ_CLIENT_TIMEOUT_MS = 310_000;
 
+/** Path segments a logged out reader gets bounced to, from Reddit and GitHub to LinkedIn. */
+const LOGIN_SEGMENTS = new Set([
+  "login",
+  "log-in",
+  "signin",
+  "sign-in",
+  "sign_in",
+  "authwall",
+  "servicelogin",
+]);
+
 export class ContextProvider extends Provider {
   static readonly providerName = "context";
   static readonly defaultBaseURL = "https://api.context.dev/v1";
@@ -96,6 +109,7 @@ export class ContextProvider extends Provider {
         this.authHeaders(),
         options?.signal,
       );
+      rejectLoginRedirect(url, response);
       return mapReadResult(response, options?.format);
     } catch (error) {
       throw normalizeContextError(error);
@@ -195,6 +209,29 @@ function timeoutParams(timeout?: number): Record<string, string> {
   if (timeout === undefined) return {};
   const timeoutMs = Math.min(Math.max(Math.round(timeout * 1000), 1), CONTEXT_MAX_TIMEOUT_MS);
   return { timeoutMS: String(timeoutMs) };
+}
+
+/**
+ * Context follows redirects, so a sign in wall comes back as a 200 with the login form.
+ * @param requested - URL the caller asked for.
+ * @param response - Scrape of the page Context ended on.
+ * @throws {PageFetchError} When Context ended on a login page the caller didn't ask for.
+ */
+function rejectLoginRedirect(requested: string, response: Readonly<ContextScrapeResponse>): void {
+  const landed = response.metadata.finalUrl || response.url;
+  if (isLoginPage(requested) || !isLoginPage(landed)) return;
+  const { origin, pathname } = new URL(landed);
+  throw new PageFetchError(
+    `Context.dev was sent to a login page: ${sanitizeUrl(origin + pathname)}`,
+  );
+}
+
+function isLoginPage(url: string): boolean {
+  if (!URL.canParse(url)) return false;
+  return new URL(url).pathname
+    .toLowerCase()
+    .split("/")
+    .some((segment) => LOGIN_SEGMENTS.has(segment));
 }
 
 function mapReadResult(
