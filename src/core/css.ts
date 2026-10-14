@@ -72,9 +72,12 @@ const AT_KEYWORD =
 const NAME_TOKEN = /\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f])?|[,.]|\s+|[^\\,.\s]+/giu;
 /** A whitespace token between names. */
 const SPACE = /^\s/u;
-/** One whole CSS identifier: a valid start, then only name characters and escapes. */
+/**
+ * One whole CSS identifier: a valid start, then only name characters and escapes. A hex escape
+ * takes six digits or stops before the next one, so a near miss fails in one pass, not 2^n.
+ */
 const IDENT =
-  /^(?:--|-?(?:[a-z_]|\P{ASCII}|\\[^\n\r\f]))(?:[\w-]|\P{ASCII}|\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f]))*$/iu;
+  /^(?:--|-?(?:[a-z_]|\P{ASCII}|\\(?:(?:[\da-f]{6}|[\da-f]{1,5}(?![\da-f]))[ \t\n\r\f]?|[^\da-f\n\r\f])))(?:[\w-]|\P{ASCII}|\\(?:(?:[\da-f]{6}|[\da-f]{1,5}(?![\da-f]))[ \t\n\r\f]?|[^\da-f\n\r\f]))*$/iu;
 /** A CSS escape: up to six hex digits and one optional space, or any other character. */
 const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
 /** Layers nested deeper than this fold into their ancestor at this depth; no page needs more. */
@@ -83,12 +86,10 @@ export const LAYER_DEPTH_LIMIT = 32;
 const IMPORT = /^@import\s*(?:url\(\s*)?(?<url>"[^"]*"|'[^']*'|[^\s"')]+)\s*\)?\s*(?<media>.*)$/isu;
 /** An import's `layer` or `layer(name)`, where an escaped `)` stays in the name. */
 const IMPORT_LAYER = /^layer\b(?:\((?<name>(?:\\[\s\S]|[^)\\])*)\))?/iu;
-/** A media query that names a type and nothing else, maybe after `not` or `only`. */
-const TYPE_QUERY = /^(?:(?<prefix>not|only)\s+)?(?<type>[a-z][\w-]*)$/iu;
 /** Words a media type can't be, so a query naming one turns into `not all`. */
-const NOT_A_TYPE = /^(?:and|layer|not|only|or)$/iu;
+const NOT_A_TYPE = ["and", "layer", "not", "only", "or"];
 /** Media types that hold on a screen of any size. */
-const SCREEN_TYPE = /^(?:all|screen)$/iu;
+const SCREEN_TYPES = ["all", "screen"];
 const COMPOUND_SELECTOR = /^(?<tag>[a-z][\w-]*|\*)?(?<rest>(?:[.#][\w-]+)*)$/iu;
 const SELECTOR_PART = /[.#][\w-]+/gu;
 const COLOR_TOKEN = /#[\da-f]{3,8}\b|rgba?\([^)]{0,64}\)|\b[a-z]+\b/giu;
@@ -500,19 +501,57 @@ function closingParen(text: string, open: number): number {
  */
 export function forScreen(media: string | undefined): boolean {
   const list = media ?? "";
-  return list.trim() === "" || list.split(",").some((query) => screenQuery(query.trim()));
+  return list.trim() === "" || mediaQueries(list).some((words) => screenQuery(words));
 }
 
 /**
- * One query of a list, read the way Media Queries 4 does: an empty one is `not all`.
- * @param query - The query, trimmed.
- * @returns {boolean} True for `all`, `screen`, `only screen` or `not print`.
+ * A media list split into queries at top-level commas and into words at whitespace, escapes
+ * kept whole, so `(example, all,), speech` is two queries, as Media Queries 4 reads it.
+ * @param list - The media list as written.
+ * @returns {string[][]} Each query's words, raw.
  */
-function screenQuery(query: string): boolean {
-  const parts = TYPE_QUERY.exec(query)?.groups;
-  const type = parts?.type ?? "";
-  if (type === "" || NOT_A_TYPE.test(type)) return false;
-  return (parts?.prefix?.toLowerCase() === "not") !== SCREEN_TYPE.test(type);
+function mediaQueries(list: string): string[][] {
+  const queries: string[][] = [[]];
+  let word = "";
+  let depth = 0;
+  for (const [token] of `${list} `.matchAll(NAME_TOKEN)) {
+    depth = depthAfter(depth, token);
+    const split = token === "," && depth === 0;
+    if (!split && !SPACE.test(token)) {
+      word += token;
+      continue;
+    }
+    if (word !== "") queries.at(-1)?.push(word);
+    word = "";
+    if (split) queries.push([]);
+  }
+  return queries;
+}
+
+/**
+ * @param depth - Parentheses open before the token.
+ * @param token - One media list token; an escaped parenthesis opens nothing.
+ * @returns {number} Parentheses open after it, never below zero.
+ */
+function depthAfter(depth: number, token: string): number {
+  if (token.startsWith("\\")) return depth;
+  return Math.max(0, depth + token.split("(").length - token.split(")").length);
+}
+
+/**
+ * One query the way Media Queries 4 reads it; a width or a preference needs a screen we lack.
+ * @param words - The query's raw words.
+ * @returns {boolean} True for `all`, `screen`, `only screen` or `not print`, escapes and all.
+ */
+function screenQuery(words: readonly string[]): boolean {
+  if (words.length === 0 || words.length > 2 || !words.every((word) => IDENT.test(word))) {
+    return false;
+  }
+  const [prefix, type] = words.length === 2 ? words : ["", ...words];
+  const decoded = identifier(type ?? "").toLowerCase();
+  const keyword = identifier(prefix ?? "").toLowerCase();
+  if (NOT_A_TYPE.includes(decoded) || !["", "not", "only"].includes(keyword)) return false;
+  return (keyword === "not") !== SCREEN_TYPES.includes(decoded);
 }
 
 /**

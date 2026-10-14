@@ -551,9 +551,11 @@ describe("revealHtml", () => {
       "@media only screen { .e { display: none } } @media not print { .f { display: none } }",
       "@media print { .g { display: none } } @media (min-width: 600px) { .h { display: none } }",
       "@media screen and (min-width: 600px) { .i { display: none } } @media print, { .j { display: none } }",
-      "@media not screen { .k { display: none } } @media only { .l { display: none } }</style>",
+      "@media not screen { .k { display: none } } @media only { .l { display: none } }",
+      "@media (example, all,), speech { .m { display: none } }</style>",
       "<p class=a>a</p><p class=b>b</p><p class=c>c</p><p class=d>d</p><p class=e>e</p><p class=f>f</p>",
       "<p class=g>g</p><p class=h>h</p><p class=i>i</p><p class=j>j</p><p class=k>k</p><p class=l>l</p>",
+      "<p class=m>speech</p>",
     ].join("\n");
 
     expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual([
@@ -618,6 +620,35 @@ describe("revealHtml", () => {
 
     const started = performance.now();
     revealHtml(html);
+
+    expect(performance.now() - started).toBeLessThan(3_000);
+  });
+
+  it("decodes a media type the way CSS reads identifiers, and keeps layer out of it", () => {
+    const html = [
+      "<style>@media \\73 creen { .a { display: none } } @media \\6e ot print { .b { display: none } }",
+      "@media \\73creen { .c { display: none } } @media not layer { .d { display: none } }</style>",
+      "<style media='not \\70 rint'>.e { display: none }</style>",
+      "<p class=a>a</p><p class=b>b</p><p class=c>hex runs on</p><p class=d>layer</p><p class=e>e</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["a", "b", "e"]);
+  });
+
+  it("reads a layer name that opens with a hex escape", () => {
+    const html = "<style>@layer \\66 oo { .a { display: none } }</style><p class=a>escaped foo</p>";
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "escaped foo" }),
+    ]);
+  });
+
+  it("turns down a name of hex escapes that never ends well in one pass", () => {
+    const name = `a${"\\abcdef".repeat(200)}!`;
+    const html = `<style>@layer ${name} { .a { display: none } } @media ${name} { .a { display: none } }</style>`;
+
+    const started = performance.now();
+    revealHtml(`${html}<link rel=stylesheet media='${name}' href=a.css><p class=a>a</p>`);
 
     expect(performance.now() - started).toBeLessThan(3_000);
   });
