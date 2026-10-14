@@ -68,10 +68,16 @@ const AT_RULE = /\s*@/uy;
 /** An at-keyword, whose name may hold escapes and non-ASCII letters, and what follows it. */
 const AT_KEYWORD =
   /^@(?<name>(?:[\w-]|\P{ASCII}|\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f]))+)(?<rest>.*)$/su;
-/** A layer name list token: an escape, a separator, whitespace, or a run of anything else. */
-const NAME_TOKEN = /\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f])?|[,.]|\s+|[^\\,.\s]+/giu;
+/**
+ * A name list token: an escape, a separator, whitespace, or a run of anything else. Whitespace is
+ * CSS whitespace only, so a no-break space stays inside a name, as it does for a browser.
+ */
+const NAME_TOKEN =
+  /\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f])?|[,.]|[ \t\n\r\f]+|[^\\,. \t\n\r\f]+/giu;
 /** A whitespace token between names. */
-const SPACE = /^\s/u;
+const SPACE = /^[ \t\n\r\f]/u;
+/** Nothing but CSS whitespace. */
+const BLANK = /^[ \t\n\r\f]*$/u;
 /**
  * One whole CSS identifier: a valid start, then only name characters and escapes. A hex escape
  * takes six digits or stops before the next one, so a near miss fails in one pass, not 2^n.
@@ -501,17 +507,17 @@ function closingParen(text: string, open: number): number {
  */
 export function forScreen(media: string | undefined): boolean {
   const list = media ?? "";
-  return list.trim() === "" || mediaQueries(list).some((words) => screenQuery(words));
+  return BLANK.test(list) || mediaQueries(list).some((words) => screenQuery(words));
 }
 
 /**
  * A media list split into queries at top-level commas, outside quotes and parentheses, and
- * into words at whitespace, escapes kept whole. An empty query is `not all`, so it drops out.
+ * into words at CSS whitespace, escapes kept whole. An empty query is `not all` and adds nothing.
  * @param list - The media list as written.
  * @returns {string[][]} Each query's words, raw.
  */
 function mediaQueries(list: string): string[][] {
-  return splitTopLevel(list, ",").map((query) => {
+  return splitTopLevelRaw(list, ",").map((query) => {
     const words = [""];
     for (const [token] of query.matchAll(NAME_TOKEN)) {
       if (SPACE.test(token)) words.push("");
@@ -522,7 +528,8 @@ function mediaQueries(list: string): string[][] {
 }
 
 /**
- * One query the way Media Queries 4 reads it; a width or a preference needs a screen we lack.
+ * One query the way Media Queries 4 reads it. Any condition skips it whole, `not print and (...)`
+ * too: conditions need a screen we lack, and reading them right takes a parser this isn't.
  * @param words - The query's raw words.
  * @returns {boolean} True for `all`, `screen`, `only screen` or `not print`, escapes and all.
  */
@@ -706,8 +713,20 @@ function winner(
  * @returns {string[]} The parts, trimmed, empty ones left out.
  */
 function splitTopLevel(text: string, separator: string): string[] {
+  return splitTopLevelRaw(text, separator)
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/**
+ * The same split, parts as written, empty ones kept; a hex escape's space stays in the escape.
+ * @param text - Text to split.
+ * @param separator - One character.
+ * @returns {string[]} The parts, untrimmed.
+ */
+function splitTopLevelRaw(text: string, separator: string): string[] {
   const parts: string[] = [];
-  const masked = text.replaceAll(/\\[\s\S]/gu, (escape) => "_".repeat(escape.length));
+  const masked = text.replaceAll(ESCAPE, (escape) => "_".repeat(escape.length));
   let depth = 0;
   let quote = "";
   let start = 0;
@@ -722,7 +741,7 @@ function splitTopLevel(text: string, separator: string): string[] {
     }
   }
   parts.push(text.slice(start));
-  return parts.map((part) => part.trim()).filter((part) => part.length > 0);
+  return parts;
 }
 
 /** How parentheses move the nesting depth outside quotes. */

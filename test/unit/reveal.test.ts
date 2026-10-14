@@ -644,6 +644,17 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["screen after"]);
   });
 
+  it("splits media queries and layer names at CSS whitespace, never at a no-break space", () => {
+    const space = String.fromCodePoint(0xa0);
+    const html = [
+      `<style>@media not${space}print { .a { display: none } } @media screen${space} { .b { display: none } }`,
+      `@layer a${space}b { .c { display: none } } @media not print and (min-width: 600px) { .d { display: none } }</style>`,
+      "<p class=a>one word</p><p class=b>trailing</p><p class=c>layer</p><p class=d>condition</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["layer"]);
+  });
+
   it("reads a layer name that opens with a hex escape", () => {
     const html = "<style>@layer \\66 oo { .a { display: none } }</style><p class=a>escaped foo</p>";
 
