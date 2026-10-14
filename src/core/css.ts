@@ -76,6 +76,8 @@ const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
 export const LAYER_DEPTH_LIMIT = 32;
 /** `@import` with its URL, quoted or in `url()`, and the media list after it. */
 const IMPORT = /^@import\s*(?:url\(\s*)?(?<url>"[^"]*"|'[^']*'|[^\s"')]+)\s*\)?\s*(?<media>.*)$/isu;
+/** An import's `layer` or `layer(name)`, where an escaped `)` stays in the name. */
+const IMPORT_LAYER = /^layer\b(?:\((?<name>(?:\\[\s\S]|[^)\\])*)\))?/iu;
 /** Media that hold on a screen of any size. */
 const SCREEN_MEDIA = /^(?:all|screen)?$/iu;
 const COMPOUND_SELECTOR = /^(?<tag>[a-z][\w-]*|\*)?(?<rest>(?:[.#][\w-]+)*)$/iu;
@@ -400,8 +402,10 @@ function importPreamble(statement: string): StylesheetPreamble | undefined {
 function importOf(url: string, conditions: string): StylesheetImport | undefined {
   const bare = url.replaceAll(/^["']|["']$/gu, "");
   if (bare === "" || !forScreen(importMedia(conditions))) return undefined;
-  const layer = /^layer\b(?:\((?<name>[^)]*)\))?/iu.exec(conditions.trim());
-  return layer === null ? { url: bare } : { url: bare, layer: layer.groups?.name?.trim() ?? "" };
+  const layer = IMPORT_LAYER.exec(conditions.trim());
+  if (layer === null) return { url: bare };
+  const name = layer.groups?.name ?? "";
+  return { url: bare, layer: name.trim() === "" ? "" : name };
 }
 
 /**
@@ -425,7 +429,7 @@ function* leadingStatements(text: string): Generator<string> {
  * @returns {string} The media list alone.
  */
 function importMedia(conditions: string | undefined): string {
-  let text = (conditions ?? "").trim().replace(/^layer\b(?:\([^)]*\))?\s*/iu, "");
+  let text = (conditions ?? "").trim().replace(IMPORT_LAYER, "").trimStart();
   if (/^supports\(/iu.test(text)) text = text.slice(closingParen(text, text.indexOf("(")) + 1);
   return text.trim();
 }

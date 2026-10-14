@@ -507,6 +507,18 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("keeps an escaped space at the end of an imported layer's name", () => {
+    const url = "https://example.com/";
+    const stylesheets = {
+      "https://example.com/x.css": ".x { display: none }",
+      "https://example.com/y.css": ".x { display: block }",
+    };
+    const html =
+      "<style>@layer foo\\ , bar; @import 'x.css' layer(foo\\ ); @import 'y.css' layer(bar);</style><p class=x>bar wins</p>";
+
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([]);
+  });
+
   it("knows @layer by its decoded at-keyword, not by its first five letters", () => {
     const html = [
       "<style>@l\\61 yer a { .escaped { display: none } } @layeré { .accent { display: none } }</style>",
