@@ -66,7 +66,9 @@ export interface Color {
 /** An at-rule ahead, past whitespace; sticky, so it tests one position. */
 const AT_RULE = /\s*@/uy;
 /** An `@layer` prelude, with the names it declares or the one its block opens. */
-const LAYER_RULE = /^@layer(?![\w-])\s*(?<names>[^{;]*)$/isu;
+const LAYER_RULE = /^@layer(?![\w-])\s*(?<names>.*)$/isu;
+/** A CSS escape: up to six hex digits and one optional space, or any other character. */
+const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
 /** Layers nested deeper than this fold into their ancestor at this depth; no page needs more. */
 export const LAYER_DEPTH_LIMIT = 32;
 /** `@import` with its URL, quoted or in `url()`, and the media list after it. */
@@ -295,7 +297,8 @@ class StylesheetReader {
   private layerBlock(prelude: string, path: LayerPath): LayerPath | undefined {
     const name = LAYER_RULE.exec(prelude)?.groups?.names?.trim();
     if (name === undefined || splitUnescaped(name, ",").length > 1) return undefined;
-    const inner = layerPath(name === "" ? `\u0000${this.anonymous++}` : name, path);
+    const anonymous = [...path, `\u0000${this.anonymous++}`].slice(0, LAYER_DEPTH_LIMIT);
+    const inner = name === "" ? anonymous : layerPath(name, path);
     this.layers.push(inner);
     return inner;
   }
@@ -310,8 +313,24 @@ class StylesheetReader {
  */
 export function layerPath(name: string, outer: LayerPath = []): LayerPath {
   const room = Math.max(0, LAYER_DEPTH_LIMIT - outer.length);
-  const parts = splitUnescaped(name, ".", room).map((part) => part.trim());
+  const parts = splitUnescaped(name, ".", room).map((part) => identifier(part.trim()));
   return [...outer, ...parts];
+}
+
+/**
+ * An identifier with its escapes decoded, so `\66 oo` and `foo` name the same layer.
+ * @param text - The identifier as written.
+ * @returns {string} Its value; NUL and code points no string can hold become U+FFFD.
+ */
+function identifier(text: string): string {
+  return text
+    .replaceAll(ESCAPE, (_escape, hex: string | undefined, character: string | undefined) => {
+      if (hex === undefined) return character ?? "";
+      const point = Number.parseInt(hex, 16);
+      const invalid = point === 0 || point > 0x10_ff_ff || (point >= 0xd8_00 && point <= 0xdf_ff);
+      return invalid ? "\uFFFD" : String.fromCodePoint(point);
+    })
+    .replaceAll("\u0000", "\uFFFD");
 }
 
 /**
@@ -464,14 +483,26 @@ function preludeEnd(text: string, from: number, atRule: boolean, to = text.lengt
   let depth = 0;
   let quote = "";
   for (let index = from; index < to; index += 1) {
-    const character = text[index] ?? "";
-    const quoted = quote !== "";
-    quote = quoteAfter(quote, character);
-    if (quoted || quote !== "") continue;
-    depth += NESTING[character] ?? 0;
-    if (depth <= 0 && endsPrelude(character, atRule)) return index;
+    const character = text.charAt(index);
+    if (character === "\\") index += 1;
+    else if (inString(quote, character)) {
+      quote = quoteAfter(quote, character);
+    } else {
+      depth += NESTING[character] ?? 0;
+      if (depth <= 0 && endsPrelude(character, atRule)) return index;
+    }
   }
   return -1;
+}
+
+/**
+ * Whether a character is inside a quoted string, or opens one.
+ * @param quote - The open quote, or an empty string.
+ * @param character - The character.
+ * @returns {boolean} True when the string's quote tracking takes it.
+ */
+function inString(quote: string, character: string): boolean {
+  return quote !== "" || character === '"' || character === "'";
 }
 
 function endsPrelude(character: string, atRule: boolean): boolean {
@@ -642,7 +673,7 @@ function matchingBrace(text: string, open: number): number {
   let quote = "";
   for (let index = open; index < text.length; index += 1) {
     const character = text[index] ?? "";
-    if (quote !== "" && character === "\\") {
+    if (character === "\\") {
       index += 1;
       continue;
     }

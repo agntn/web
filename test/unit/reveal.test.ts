@@ -491,12 +491,18 @@ describe("revealHtml", () => {
     ]);
   });
 
-  it("takes an escaped comma as part of one layer name", () => {
-    const html =
-      "<style>@layer foo\\,bar { .secret { display: none } }</style><p class=secret>key</p>";
+  it("reads a layer name the way CSS spells identifiers, escapes and all", () => {
+    const html = [
+      "<style>@layer foo\\,bar { .comma { display: none } } @layer foo\\{bar { .brace { display: none } }",
+      "@layer foo, bar; @layer \\66 oo { .x { display: none } } @layer bar { .x { display: block } }",
+      "@layer a.b, z; @layer a\\.b { .y { display: none } } @layer z { .y { display: block } }</style>",
+      "<p class=comma>comma</p><p class=brace>brace</p><p class=x>escaped foo</p><p class=y>dot</p>",
+    ].join("\n");
 
     expect(ofKind(revealHtml(html), "hidden")).toEqual([
-      expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
+      expect.objectContaining({ reason: "display: none via .comma", value: "comma" }),
+      expect.objectContaining({ reason: "display: none via .brace", value: "brace" }),
+      expect.objectContaining({ reason: "display: none via .y", value: "dot" }),
     ]);
   });
 

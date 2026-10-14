@@ -394,7 +394,7 @@ class HiddenScanner {
   private readonly parsed = new Map<string, ParsedSheet>();
   private filings = 0;
   private preferredTitle: string | undefined;
-  /** Cascade layers by full name, each with the ones nested in it in the order they come up. */
+  /** Layers by full name, each part quoted so `a\.b` stays one, with its nested ones in order. */
   private readonly layers = new Map<string, string[]>([["", []]]);
   /** How deep each layer sits, so imports can't nest past {@link LAYER_DEPTH_LIMIT} either. */
   private readonly depths = new Map<string, number>([["", 0]]);
@@ -511,8 +511,10 @@ class HiddenScanner {
     chain: readonly string[],
     layer: string | undefined,
   ): void {
-    const anonymous = `\u0000${this.anonymousLayers++}`;
-    const own = entry.layer === undefined ? [] : layerPath(entry.layer || anonymous);
+    const anonymous = [`\u0000${this.anonymousLayers++}`];
+    let own: LayerPath = [];
+    if (entry.layer === "") own = anonymous;
+    else if (entry.layer !== undefined) own = layerPath(entry.layer);
     this.fileLinked(entry.url, chain, this.declareLayer(layer, own));
   }
 
@@ -526,7 +528,7 @@ class HiddenScanner {
     let name = outer ?? "";
     let depth = this.depths.get(name) ?? 0;
     for (const part of path.slice(0, Math.max(0, LAYER_DEPTH_LIMIT - depth))) {
-      const full = name === "" ? part : `${name}.${part}`;
+      const full = `${name}/${JSON.stringify(part)}`;
       depth += 1;
       if (!this.layers.has(full)) {
         this.layers.get(name)?.push(full);
