@@ -635,6 +635,15 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["a", "b", "e"]);
   });
 
+  it("keeps commas and parentheses inside a quoted string out of the media list", () => {
+    const html = [
+      `<style>@media (foo: "),screen,(") { .a { display: none } } @media (foo: "a,b"), screen { .b { display: none } }</style>`,
+      "<p class=a>quoted</p><p class=b>screen after</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["screen after"]);
+  });
+
   it("reads a layer name that opens with a hex escape", () => {
     const html = "<style>@layer \\66 oo { .a { display: none } }</style><p class=a>escaped foo</p>";
 

@@ -505,37 +505,20 @@ export function forScreen(media: string | undefined): boolean {
 }
 
 /**
- * A media list split into queries at top-level commas and into words at whitespace, escapes
- * kept whole, so `(example, all,), speech` is two queries, as Media Queries 4 reads it.
+ * A media list split into queries at top-level commas, outside quotes and parentheses, and
+ * into words at whitespace, escapes kept whole. An empty query is `not all`, so it drops out.
  * @param list - The media list as written.
  * @returns {string[][]} Each query's words, raw.
  */
 function mediaQueries(list: string): string[][] {
-  const queries: string[][] = [[]];
-  let word = "";
-  let depth = 0;
-  for (const [token] of `${list} `.matchAll(NAME_TOKEN)) {
-    depth = depthAfter(depth, token);
-    const split = token === "," && depth === 0;
-    if (!split && !SPACE.test(token)) {
-      word += token;
-      continue;
+  return splitTopLevel(list, ",").map((query) => {
+    const words = [""];
+    for (const [token] of query.matchAll(NAME_TOKEN)) {
+      if (SPACE.test(token)) words.push("");
+      else words.push(`${words.pop() ?? ""}${token}`);
     }
-    if (word !== "") queries.at(-1)?.push(word);
-    word = "";
-    if (split) queries.push([]);
-  }
-  return queries;
-}
-
-/**
- * @param depth - Parentheses open before the token.
- * @param token - One media list token; an escaped parenthesis opens nothing.
- * @returns {number} Parentheses open after it, never below zero.
- */
-function depthAfter(depth: number, token: string): number {
-  if (token.startsWith("\\")) return depth;
-  return Math.max(0, depth + token.split("(").length - token.split(")").length);
+    return words.filter((word) => word !== "");
+  });
 }
 
 /**
