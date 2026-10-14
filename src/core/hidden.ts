@@ -8,7 +8,7 @@ import {
   parseDeclarations,
   parseStylesheet,
   LAYER_DEPTH_LIMIT,
-  layerPath,
+  layerPaths,
   ruleKey,
   sameColor,
   stylesheetPreamble,
@@ -514,7 +514,7 @@ class HiddenScanner {
     const anonymous = [`\u0000${this.anonymousLayers++}`];
     let own: LayerPath = [];
     if (entry.layer === "") own = anonymous;
-    else if (entry.layer !== undefined) own = layerPath(entry.layer);
+    else if (entry.layer !== undefined) own = layerPaths(entry.layer)[0] ?? [];
     this.fileLinked(entry.url, chain, this.declareLayer(layer, own));
   }
 

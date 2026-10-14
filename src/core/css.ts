@@ -67,6 +67,8 @@ export interface Color {
 const AT_RULE = /\s*@/uy;
 /** An `@layer` prelude, with the names it declares or the one its block opens. */
 const LAYER_RULE = /^@layer(?![\w-])\s*(?<names>.*)$/isu;
+/** A layer name list token: an escape, a separator, whitespace, or a run of anything else. */
+const NAME_TOKEN = /\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f])?|[,.]|\s+|[^\\,.\s]+/giu;
 /** A CSS escape: up to six hex digits and one optional space, or any other character. */
 const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
 /** Layers nested deeper than this fold into their ancestor at this depth; no page needs more. */
@@ -229,7 +231,7 @@ class StylesheetReader {
       return close + 1;
     }
     if (open === -1) return this.text.length;
-    const prelude = this.text.slice(from, open).trim();
+    const prelude = this.text.slice(from, open).trimStart();
     if (this.text[open] === ";") return this.statement(prelude, path, open);
     return this.block(prelude, open, path);
   }
@@ -260,9 +262,8 @@ class StylesheetReader {
    * @returns {number} Where the next one starts.
    */
   private statement(prelude: string, path: LayerPath, end: number): number {
-    const names = LAYER_RULE.exec(prelude)?.groups?.names?.trim() ?? "";
-    if (names === "") return end + 1;
-    for (const name of splitUnescaped(names, ",")) this.layers.push(layerPath(name, path));
+    const names = LAYER_RULE.exec(prelude)?.groups?.names ?? "";
+    if (names.trim() !== "") this.layers.push(...layerPaths(names, path));
     return end + 1;
   }
 
@@ -295,26 +296,33 @@ class StylesheetReader {
    * @returns {LayerPath | undefined} Its path, or undefined for any other block.
    */
   private layerBlock(prelude: string, path: LayerPath): LayerPath | undefined {
-    const name = LAYER_RULE.exec(prelude)?.groups?.names?.trim();
-    if (name === undefined || splitUnescaped(name, ",").length > 1) return undefined;
-    const anonymous = [...path, `\u0000${this.anonymous++}`].slice(0, LAYER_DEPTH_LIMIT);
-    const inner = name === "" ? anonymous : layerPath(name, path);
+    const names = LAYER_RULE.exec(prelude)?.groups?.names;
+    if (names === undefined) return undefined;
+    const anonymous = [[...path, `\u0000${this.anonymous++}`].slice(0, LAYER_DEPTH_LIMIT)];
+    const [inner, ...more] = names.trim() === "" ? anonymous : layerPaths(names, path);
+    if (inner === undefined || more.length > 0) return undefined;
     this.layers.push(inner);
     return inner;
   }
 }
 
 /**
- * A layer name as its parts, so `a.b` names the layer `b` nested in `a`.
+ * Layer names the way CSS reads them: escapes decoded, names split at `,` and parts at `.`.
  * Past {@link LAYER_DEPTH_LIMIT} the parts fold into the deepest layer kept, rules and all.
- * @param name - The name as written.
- * @param outer - The layers it sits in.
- * @returns {LayerPath} The full path, outermost first.
+ * @param text - The names after `@layer`, or inside `layer()`.
+ * @param outer - The layers they sit in.
+ * @returns {LayerPath[]} One full path per name, outermost first.
  */
-export function layerPath(name: string, outer: LayerPath = []): LayerPath {
+export function layerPaths(text: string, outer: LayerPath = []): LayerPath[] {
+  const names: string[][] = [[""]];
+  for (const [token] of text.matchAll(NAME_TOKEN)) {
+    const parts = names.at(-1) ?? [];
+    if (token === ",") names.push([""]);
+    else if (token === ".") parts.push("");
+    else if (!/^\s/u.test(token)) parts.push(`${parts.pop() ?? ""}${identifier(token)}`);
+  }
   const room = Math.max(0, LAYER_DEPTH_LIMIT - outer.length);
-  const parts = splitUnescaped(name, ".", room).map((part) => identifier(part.trim()));
-  return [...outer, ...parts];
+  return names.map((parts) => [...outer, ...parts.slice(0, room)]);
 }
 
 /**
@@ -331,31 +339,6 @@ function identifier(text: string): string {
       return invalid ? "\uFFFD" : String.fromCodePoint(point);
     })
     .replaceAll("\u0000", "\uFFFD");
-}
-
-/**
- * Split at a separator outside escapes, since `foo\,bar` is one CSS name.
- * @param text - The text.
- * @param separator - One character.
- * @param limit - How many parts to keep at most.
- * @returns {string[]} The parts, as written.
- */
-function splitUnescaped(
-  text: string,
-  separator: string,
-  limit = Number.POSITIVE_INFINITY,
-): string[] {
-  const parts: string[] = [];
-  let start = 0;
-  for (let index = 0; index < text.length && parts.length < limit; index += 1) {
-    if (text[index] === "\\") index += 1;
-    else if (text[index] === separator) {
-      parts.push(text.slice(start, index));
-      start = index + 1;
-    }
-  }
-  if (parts.length < limit) parts.push(text.slice(start));
-  return parts;
 }
 
 /**
@@ -382,7 +365,7 @@ function statementPreamble(statement: string): StylesheetPreamble | undefined {
   if (/^@charset\b/iu.test(statement)) return [];
   const names = /^@layer\s+(?<names>.+)$/isu.exec(statement)?.groups?.names;
   if (names === undefined) return importPreamble(statement);
-  return [{ layers: splitUnescaped(names, ",").map((name) => layerPath(name)) }];
+  return [{ layers: layerPaths(names) }];
 }
 
 /**
@@ -420,7 +403,7 @@ function* leadingStatements(text: string): Generator<string> {
   while (atRuleAt(text, position)) {
     const end = preludeEnd(text, position, true);
     if (end === -1 || text[end] !== ";") return;
-    yield text.slice(position, end).trim();
+    yield text.slice(position, end).trimStart();
     position = end + 1;
   }
 }

@@ -495,8 +495,9 @@ describe("revealHtml", () => {
     const html = [
       "<style>@layer foo\\,bar { .comma { display: none } } @layer foo\\{bar { .brace { display: none } }",
       "@layer foo, bar; @layer \\66 oo { .x { display: none } } @layer bar { .x { display: block } }",
-      "@layer a.b, z; @layer a\\.b { .y { display: none } } @layer z { .y { display: block } }</style>",
-      "<p class=comma>comma</p><p class=brace>brace</p><p class=x>escaped foo</p><p class=y>dot</p>",
+      "@layer a.b, z; @layer a\\.b { .y { display: none } } @layer z { .y { display: block } }",
+      "@layer foo\\20, baz; @layer foo\\  { .z { display: none } } @layer baz { .z { display: block } }</style>",
+      "<p class=comma>comma</p><p class=brace>brace</p><p class=x>escaped foo</p><p class=y>dot</p><p class=z>space</p>",
     ].join("\n");
 
     expect(ofKind(revealHtml(html), "hidden")).toEqual([
