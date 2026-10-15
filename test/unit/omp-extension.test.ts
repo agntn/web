@@ -8,7 +8,7 @@ import type { ExtensionAPI, Theme, ToolDefinition } from "@oh-my-pi/pi-coding-ag
 import stringWidth from "string-width";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import webOmpExtension from "../../packages/omp/extensions/web.ts";
+import webOmpExtension from "../../extensions/omp/web.ts";
 import { resetDefaultClientForTests } from "../../src/core/client.ts";
 import { completedEvents, sse } from "../fixtures/codex.ts";
 import { builtinProviders, providerApiKeyEnvVar } from "../../src/core/providers.ts";
@@ -94,7 +94,7 @@ afterEach(() => {
 describe("OMP extension", () => {
   it("types against checkout source instead of the self package", () => {
     expect(
-      readFileSync(new URL("../../packages/omp/extensions/web.ts", import.meta.url), "utf8"),
+      readFileSync(new URL("../../extensions/omp/web.ts", import.meta.url), "utf8"),
     ).not.toMatch(/(?:from|import\()\s*["']@agntn\/web["']/u);
   });
 
@@ -107,8 +107,8 @@ describe("OMP extension", () => {
     };
     const { label, tools } = captureOmpExtension();
 
-    expect(manifest.omp.extensions).toEqual(["./packages/omp/extensions/web.ts"]);
-    expect(manifest.files).toContain("packages/omp/extensions");
+    expect(manifest.omp.extensions).toEqual(["./extensions/omp/web.ts"]);
+    expect(manifest.files).toContain("extensions/omp");
     expect(manifest.files).toContain("src/tui.ts");
     expect(label).toBe("Web");
     expect([...tools.keys()]).toEqual([

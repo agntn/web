@@ -26,8 +26,8 @@
   },
   "files": [
     "dist",
-    "packages/omp/extensions",
-    "packages/pi/extensions",
+    "extensions/omp",
+    "extensions/pi",
     "src/tool-titles.ts",
     "src/tui.ts"
   ],
@@ -127,12 +127,12 @@
   "packageManager": "pnpm@11.3.0",
   "omp": {
     "extensions": [
-      "./packages/omp/extensions/web.ts"
+      "./extensions/omp/web.ts"
     ]
   },
   "pi": {
     "extensions": [
-      "./packages/pi/extensions/*.ts"
+      "./extensions/pi/*.ts"
     ],
     "image": "https://web.agntn.dev/image.png"
   }

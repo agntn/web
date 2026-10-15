@@ -15,7 +15,7 @@ export function createSourceBuildId(projectRoot: string): string {
     "pnpm-workspace.yaml",
     ...globSync("tsconfig*.json", { cwd: projectRoot }),
     ...globSync("src/**/*.ts", { cwd: projectRoot }),
-    ...globSync("packages/pi/extensions/**/*.ts", { cwd: projectRoot }),
+    ...globSync("extensions/pi/**/*.ts", { cwd: projectRoot }),
   ].sort();
   const hash = createHash("sha256");
 

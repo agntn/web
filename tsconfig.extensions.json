@@ -12,6 +12,6 @@
     "declarationMap": false,
     "sourceMap": false
   },
-  "include": ["packages/omp/extensions/**/*.ts", "packages/pi/extensions/**/*.ts", "src/tui.ts"],
+  "include": ["extensions/omp/**/*.ts", "extensions/pi/**/*.ts", "src/tui.ts"],
   "exclude": ["node_modules", "dist"]
 }

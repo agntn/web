@@ -6,7 +6,7 @@ import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-age
 import { createJiti } from "jiti/static";
 import stringWidth from "string-width";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
-import webExtension, { resolveWebModuleUrl } from "../../packages/pi/extensions/web.ts";
+import webExtension, { resolveWebModuleUrl } from "../../extensions/pi/web.ts";
 import {
   builtinProviders,
   Provider,
@@ -45,7 +45,7 @@ describe("Pi extension", () => {
       fileURLToPath(new URL("../../src/index.ts", import.meta.url)),
     );
     expect(
-      readFileSync(new URL("../../packages/pi/extensions/web.ts", import.meta.url), "utf8"),
+      readFileSync(new URL("../../extensions/pi/web.ts", import.meta.url), "utf8"),
     ).not.toMatch(/(?:from|import\()\s*["']@agntn\/web["']/u);
   });
 
@@ -1447,7 +1447,7 @@ describe("Pi host loader", () => {
 async function registerThroughHostLoader(): Promise<Map<string, CapturedTool>> {
   const jiti = createJiti(import.meta.url, { moduleCache: false, tryNative: false });
   const extension = (await jiti.import(
-    fileURLToPath(new URL("../../packages/pi/extensions/web.ts", import.meta.url)),
+    fileURLToPath(new URL("../../extensions/pi/web.ts", import.meta.url)),
     { default: true },
   )) as typeof webExtension;
   const tools = new Map<string, CapturedTool>();
