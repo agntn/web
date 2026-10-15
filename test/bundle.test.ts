@@ -160,10 +160,9 @@ describe("bundled package", () => {
   it("loads the Pi and OMP extensions from the published files", async () => {
     const jiti = createJiti(import.meta.url, { moduleCache: false, tryNative: false });
     const load = (host: string) =>
-      jiti.import<(pi: unknown) => Promise<void>>(
-        join(packageDir, `packages/${host}/extensions/web.ts`),
-        { default: true },
-      );
+      jiti.import<(pi: unknown) => Promise<void>>(join(packageDir, `extensions/${host}/web.ts`), {
+        default: true,
+      });
 
     const piExtension = await load("pi");
     const piTools: string[] = [];

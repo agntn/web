@@ -4,22 +4,17 @@ import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerPiTools, type PiRenderers } from "@agntn/tools/pi";
 
-import type {
-  RenderedToolResult,
-  RenderOptions,
-  StatusTheme,
-  WebToolName,
-} from "../../../src/tui.ts";
-import type { ProviderStatus, SearchResult } from "../../../src/index.ts";
+import type { RenderedToolResult, RenderOptions, StatusTheme, WebToolName } from "../../src/tui.ts";
+import type { ProviderStatus, SearchResult } from "../../src/index.ts";
 
-type TuiModule = typeof import("../../../src/tui.ts");
-type WebModule = typeof import("../../../src/index.ts");
-type ToolsModule = typeof import("../../../src/tools.ts");
+type TuiModule = typeof import("../../src/tui.ts");
+type WebModule = typeof import("../../src/index.ts");
+type ToolsModule = typeof import("../../src/tools.ts");
 
 const DEFAULT_MAX_RESULTS = 10;
 
-const sourceModuleUrl = new URL("../../../src/index.ts", import.meta.url);
-const distributionModuleUrl = new URL("../../../dist/index.mjs", import.meta.url);
+const sourceModuleUrl = new URL("../../src/index.ts", import.meta.url);
+const distributionModuleUrl = new URL("../../dist/index.mjs", import.meta.url);
 let webModulePromise: Promise<WebModule> | undefined;
 
 /** @returns {string} Live source in a checkout, otherwise the built distribution module. */
@@ -41,8 +36,8 @@ function loadWeb(): Promise<WebModule> {
  * @returns {Promise<ToolsModule>} The module with `webTools`.
  */
 function loadTools(): Promise<ToolsModule> {
-  return existsSync(fileURLToPath(new URL("../../../src/tools.ts", import.meta.url)))
-    ? import("../../../src/tools.ts")
+  return existsSync(fileURLToPath(new URL("../../src/tools.ts", import.meta.url)))
+    ? import("../../src/tools.ts")
     : import("@agntn/web/tools");
 }
 
@@ -78,7 +73,7 @@ function statusRenderers(name: WebToolName, tui: Readonly<TuiModule>): PiRendere
  */
 export default async function webExtension(pi: ExtensionAPI): Promise<void> {
   const [tui, { webTools }] = await Promise.all([
-    import("../../../src/tui.ts") as Promise<TuiModule>,
+    import("../../src/tui.ts") as Promise<TuiModule>,
     loadTools(),
   ]);
   const tools = webTools();

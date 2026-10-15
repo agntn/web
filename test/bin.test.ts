@@ -82,7 +82,7 @@ function copyOf(parent: string, entries: readonly string[]): string {
 function checkout(): string {
   const copy = copyOf(tmpdir(), [
     "src",
-    "packages/pi/extensions",
+    "extensions/pi",
     "package.json",
     "pnpm-lock.yaml",
     "pnpm-workspace.yaml",
