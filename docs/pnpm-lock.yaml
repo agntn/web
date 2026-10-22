@@ -21,8 +21,8 @@ importers:
   .:
     dependencies:
       '@agntn/hashes':
-        specifier: 0.7.1
-        version: 0.7.1(ai@7.0.90(zod@4.5.4))(zod@4.5.4)
+        specifier: 0.7.2
+        version: 0.7.2(ai@7.0.90(zod@4.5.4))(zod@4.5.4)
       better-sqlite3:
         specifier: 12.11.1
         version: 12.11.1
@@ -57,13 +57,13 @@ importers:
 
 packages:
 
-  '@agntn/hashes@0.7.1':
-    resolution: {integrity: sha512-VspWveoZuOs7Qh0JI/+Wx3dV6sMdgbZNIANBjfvsnWJwH2sJETH9pyYO/fxponmz+Eco2dvpSfqLljwwVYP0dg==}
+  '@agntn/hashes@0.7.2':
+    resolution: {integrity: sha512-yrhws6tj5nNqnDXSTti+bIfqq4zEnt/3KPkYhduCHorX4U82UtaFulSf4tkvcCn8zmF1jVNnJH23NuOMOMFEWg==}
     engines: {node: '>=26'}
     hasBin: true
     peerDependencies:
-      '@earendil-works/pi-coding-agent': '>=0.87.1 <2'
-      '@oh-my-pi/pi-coding-agent': '>=18.4.2 <19'
+      '@earendil-works/pi-coding-agent': '>=0.84.2 <2'
+      '@oh-my-pi/pi-coding-agent': '>=18.0.0 <19'
       ai: '>=7.0.0'
     peerDependenciesMeta:
       '@earendil-works/pi-coding-agent':
@@ -8083,7 +8083,7 @@ packages:
 
 snapshots:
 
-  '@agntn/hashes@0.7.1(ai@7.0.90(zod@4.5.4))(zod@4.5.4)':
+  '@agntn/hashes@0.7.2(ai@7.0.90(zod@4.5.4))(zod@4.5.4)':
     dependencies:
       '@agntn/tools': 0.2.4(@modelcontextprotocol/server@2.2.0)(ai@7.0.90(zod@4.5.4))(zod@4.5.4)
       '@modelcontextprotocol/server': 2.2.0
