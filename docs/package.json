@@ -10,6 +10,7 @@
     "deploy": "vp run build && vp exec wrangler deploy"
   },
   "dependencies": {
+    "@agntn/hashes": "0.7.2",
     "better-sqlite3": "12.11.1",
     "docus": "5.13.0",
     "nuxt": "4.5.2",

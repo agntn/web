@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { sha256 } from "@agntn/hashes/sha2";
 
 /**
  * Seal continuation state into a compact token: every field as base64url, then one tag.
@@ -51,7 +51,7 @@ export function openContinuation(
  * @returns {string} Base64url digest, 22 characters.
  */
 export function fingerprint(value: string): string {
-  return createHash("sha256").update(value).digest().subarray(0, 16).toString("base64url");
+  return Buffer.from(sha256(Buffer.from(value)).subarray(0, 16)).toString("base64url");
 }
 
 function continuationTag(domain: string, fields: readonly string[], request: string): string {

@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 /**
  * Hashes every shipped TypeScript source plus the package and build contracts.
+ * Stays on `node:crypto`: `docs/nuxt.config.ts` loads it where no npm package resolves.
  * @param {string} projectRoot - Absolute package root.
  * @returns {string} Twelve hexadecimal characters from the source SHA-256.
  */
