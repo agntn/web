@@ -79,6 +79,7 @@
     "docs:build": "vp -C docs run build"
   },
   "dependencies": {
+    "@agntn/hashes": "0.7.1",
     "@agntn/tools": "0.2.4",
     "@modelcontextprotocol/server": "2.2.0",
     "string-width": "8.2.2",

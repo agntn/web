@@ -21,6 +21,9 @@ importers:
 
   .:
     dependencies:
+      '@agntn/hashes':
+        specifier: 0.7.1
+        version: 0.7.1(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)
       '@agntn/tools':
         specifier: 0.2.4
         version: 0.2.4(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@modelcontextprotocol/server@2.2.0)(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)
@@ -81,6 +84,22 @@ importers:
         version: 0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)
 
 packages:
+
+  '@agntn/hashes@0.7.1':
+    resolution: {integrity: sha512-VspWveoZuOs7Qh0JI/+Wx3dV6sMdgbZNIANBjfvsnWJwH2sJETH9pyYO/fxponmz+Eco2dvpSfqLljwwVYP0dg==}
+    engines: {node: '>=26'}
+    hasBin: true
+    peerDependencies:
+      '@earendil-works/pi-coding-agent': '>=0.87.1 <2'
+      '@oh-my-pi/pi-coding-agent': '>=18.4.2 <19'
+      ai: '>=7.0.0'
+    peerDependenciesMeta:
+      '@earendil-works/pi-coding-agent':
+        optional: true
+      '@oh-my-pi/pi-coding-agent':
+        optional: true
+      ai:
+        optional: true
 
   '@agntn/ox@0.1.0':
     resolution: {integrity: sha512-bYyCMczypvi/bxDgK1gOFhOnGFAqTNnTTWl+yIocaP68wsfGtwZwxN9Rld1bMcLXRVlO9PJCl7EASqToz8dOVw==}
@@ -3154,6 +3173,18 @@ packages:
     resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
 
 snapshots:
+
+  '@agntn/hashes@0.7.1(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)':
+    dependencies:
+      '@agntn/tools': 0.2.4(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@modelcontextprotocol/server@2.2.0)(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)
+      '@modelcontextprotocol/server': 2.2.0
+    optionalDependencies:
+      '@earendil-works/pi-coding-agent': 1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6)
+      '@oh-my-pi/pi-coding-agent': 18.2.11
+      ai: 7.0.142(zod@4.3.6)
+    transitivePeerDependencies:
+      - h3-mcp
+      - zod
 
   '@agntn/ox@0.1.0(oxfmt@0.68.0(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)))(oxlint-tsgolint@7.0.2002)(oxlint@1.83.0(oxlint-tsgolint@7.0.2002)(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0)))':
     dependencies:
