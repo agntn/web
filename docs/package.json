@@ -12,9 +12,9 @@
   "dependencies": {
     "@agntn/hashes": "0.7.2",
     "better-sqlite3": "12.11.1",
-    "docus": "5.13.0",
-    "nuxt": "4.5.2",
-    "zod": "4.5.4"
+    "docus": "5.15.0",
+    "nuxt": "4.6.2",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@iconify-json/lucide": "1.2.144",
@@ -22,7 +22,7 @@
     "@iconify-json/vscode-icons": "1.2.89",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "wrangler": "4.128.0"
+    "wrangler": "4.151.3"
   },
   "packageManager": "pnpm@11.3.0"
 }
