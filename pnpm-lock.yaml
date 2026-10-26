@@ -23,10 +23,10 @@ importers:
     dependencies:
       '@agntn/hashes':
         specifier: 0.7.2
-        version: 0.7.2(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)
+        version: 0.7.2(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.150(zod@4.3.6))(zod@4.3.6)
       '@agntn/tools':
         specifier: 0.2.4
-        version: 0.2.4(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@modelcontextprotocol/server@2.2.0)(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)
+        version: 0.2.4(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@modelcontextprotocol/server@2.2.0)(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.150(zod@4.3.6))(zod@4.3.6)
       '@modelcontextprotocol/server':
         specifier: 2.2.0
         version: 2.2.0
@@ -59,8 +59,8 @@ importers:
         specifier: 26.6.5
         version: 26.6.5
       ai:
-        specifier: 7.0.142
-        version: 7.0.142(zod@4.3.6)
+        specifier: 7.0.150
+        version: 7.0.150(zod@4.3.6)
       changelogen:
         specifier: 0.6.2
         version: 0.6.2
@@ -133,20 +133,20 @@ packages:
       zod:
         optional: true
 
-  '@ai-sdk/gateway@4.0.115':
-    resolution: {integrity: sha512-Xn+gDWM4Ti2FzYmxhlZtjEuGBGZlOYaQMpwcVRSN4c9qCMUszD5F5TAbkxgLV/tHKeMfEX+WEuTCl6Kkj2r73A==}
+  '@ai-sdk/gateway@4.0.123':
+    resolution: {integrity: sha512-IC6w1vADmRyOfB7Kl9A7348p5pazYodb2humlQAahSJSBW9MGCoafbM8h8+rgukYBSV8gjcZoAxPxPX5RQK8mw==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@5.0.61':
-    resolution: {integrity: sha512-Y+Z3539UXw0ctFDNepTtG23VqBQHr2A6yI2qUxvQcg75DJYgJoD2F9U2Vp5OgQjX7lxto1BLgFtKuOhzrr52vQ==}
+  '@ai-sdk/provider-utils@5.0.67':
+    resolution: {integrity: sha512-EUzV6GXutGcesWKOY8tRKgijfuv1LUBpqAquMh5k0n74NCjDbca5d5ZG12qhVtM2X5UwM4B2ZMP2XpnAwZlA8Q==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider@4.0.28':
-    resolution: {integrity: sha512-6ThcmkJQXSMlBrf6mirIjUUS04Q5/kApbYTOzd5lZfYXLa1XPpnDLxP/G96/DKc00fDIUOW9S2ls0mSzb0+l9w==}
+  '@ai-sdk/provider@4.0.33':
+    resolution: {integrity: sha512-C6ylMuAXjgqKJllp6ODIJwUltK/tm3ZmIj4V2fqENP3Y8gif2DyeJSsTcDwFrXppgEKcrBisi/BWx2tYeoeCAw==}
     engines: {node: '>=22'}
 
   '@anthropic-ai/sdk@0.129.0':
@@ -852,12 +852,14 @@ packages:
   '@opentelemetry/sdk-trace-base@2.10.0':
     resolution: {integrity: sha512-GuYQQT7QD2EeO8lcZLRQzcbOyhqAzL+6WWTKTU9mSUBYBazkEDl+VrQcXQhbB08OWM9anD1aHleVadzulpOaUQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.10.0':
     resolution: {integrity: sha512-GZK/G6oZyBLGlH1pUgeDch7D91KoHd2uotUGIkWCPi9GI5T9X0p4L7nNAMDR1BQjkRYoDqo+ddfVx9t5Uhys+Q==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -1951,8 +1953,8 @@ packages:
     resolution: {integrity: sha512-TQf59BsZnytt8GdJKLPfUZ54g/iaUL2OWDSFCCvMOhsHduDQxO8xC4PNeyIkVcA5KwL2phPSv0douC0fgWzmnA==}
     engines: {node: '>= 20'}
 
-  ai@7.0.142:
-    resolution: {integrity: sha512-Tifni6/6nNhCu4GnFEeYYR7CGmJ3Yhm44SGxYrOupqP2aaZwmGGiiB5Zx4hiauJR0AWimcXULejDT+Qsj+SHOQ==}
+  ai@7.0.150:
+    resolution: {integrity: sha512-ZTgHXBTJf2ad0elG2HWhbNTUGPaYy8e5pzK4A8LP/dDa48bvIRi8Iv1/bQhklFmFssosajAjCsAZrieBUa+hYA==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -3174,14 +3176,14 @@ packages:
 
 snapshots:
 
-  '@agntn/hashes@0.7.2(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)':
+  '@agntn/hashes@0.7.2(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.150(zod@4.3.6))(zod@4.3.6)':
     dependencies:
-      '@agntn/tools': 0.2.4(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@modelcontextprotocol/server@2.2.0)(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)
+      '@agntn/tools': 0.2.4(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@modelcontextprotocol/server@2.2.0)(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.150(zod@4.3.6))(zod@4.3.6)
       '@modelcontextprotocol/server': 2.2.0
     optionalDependencies:
       '@earendil-works/pi-coding-agent': 1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6)
       '@oh-my-pi/pi-coding-agent': 18.2.11
-      ai: 7.0.142(zod@4.3.6)
+      ai: 7.0.150(zod@4.3.6)
     transitivePeerDependencies:
       - h3-mcp
       - zod
@@ -3192,31 +3194,31 @@ snapshots:
       oxlint: 1.83.0(oxlint-tsgolint@7.0.2002)(vite-plus@0.3.3(@opentelemetry/api@1.9.1)(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.0))
       oxlint-tsgolint: 7.0.2002
 
-  '@agntn/tools@0.2.4(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@modelcontextprotocol/server@2.2.0)(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.142(zod@4.3.6))(zod@4.3.6)':
+  '@agntn/tools@0.2.4(@earendil-works/pi-coding-agent@1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6))(@modelcontextprotocol/server@2.2.0)(@oh-my-pi/pi-coding-agent@18.2.11)(ai@7.0.150(zod@4.3.6))(zod@4.3.6)':
     optionalDependencies:
       '@earendil-works/pi-coding-agent': 1.0.2(@aws-sdk/credential-provider-node@3.972.83)(@smithy/signature-v4@5.7.3)(ws@8.21.3)(zod@4.3.6)
       '@modelcontextprotocol/server': 2.2.0
       '@oh-my-pi/pi-coding-agent': 18.2.11
-      ai: 7.0.142(zod@4.3.6)
+      ai: 7.0.150(zod@4.3.6)
       zod: 4.3.6
 
-  '@ai-sdk/gateway@4.0.115(zod@4.3.6)':
+  '@ai-sdk/gateway@4.0.123(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/provider': 4.0.28
-      '@ai-sdk/provider-utils': 5.0.61(zod@4.3.6)
+      '@ai-sdk/provider': 4.0.33
+      '@ai-sdk/provider-utils': 5.0.67(zod@4.3.6)
       '@vercel/oidc': 3.2.0
       zod: 4.3.6
 
-  '@ai-sdk/provider-utils@5.0.61(zod@4.3.6)':
+  '@ai-sdk/provider-utils@5.0.67(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/provider': 4.0.28
+      '@ai-sdk/provider': 4.0.33
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.1
       undici: 7.30.0
       zod: 4.3.6
 
-  '@ai-sdk/provider@4.0.28':
+  '@ai-sdk/provider@4.0.33':
     dependencies:
       json-schema: 0.4.0
 
@@ -4707,11 +4709,11 @@ snapshots:
 
   agent-base@9.0.0: {}
 
-  ai@7.0.142(zod@4.3.6):
+  ai@7.0.150(zod@4.3.6):
     dependencies:
-      '@ai-sdk/gateway': 4.0.115(zod@4.3.6)
-      '@ai-sdk/provider': 4.0.28
-      '@ai-sdk/provider-utils': 5.0.61(zod@4.3.6)
+      '@ai-sdk/gateway': 4.0.123(zod@4.3.6)
+      '@ai-sdk/provider': 4.0.33
+      '@ai-sdk/provider-utils': 5.0.67(zod@4.3.6)
       zod: 4.3.6
 
   ansi-regex@5.0.1: {}
