@@ -1662,6 +1662,15 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("ignores </desc> from the HTML inside it, as a browser does", () => {
+    const hidden = ofKind(
+      revealHtml("<svg style=display:none><desc><span>a</desc></svg>b"),
+      "hidden",
+    );
+
+    expect(hidden.map(({ value }) => value)).toEqual(["ab"]);
+  });
+
   it.each([
     ["foreignObject", "<svg><foreignObject>%</foreignObject></svg>"],
     ["desc", "<svg><desc>%</desc></svg>"],
