@@ -1274,6 +1274,35 @@ describe("revealHtml", () => {
     expect(invisible[2]?.reason).toBe('variation selectors carry "key"');
   });
 
+  it("puts an invisible character on its source line, not the decoded one", () => {
+    const html = [
+      "<p>&#10;a&ZeroWidthSpace;b</p>",
+      "<p title='&#xA;c&#8203;d'>x</p>",
+      "<p",
+      "  title='e&#8203;f'>y&#10;",
+      `z${ZWSP}</p>`,
+    ].join("\n");
+
+    const invisible = ofKind(revealHtml(html), "invisible");
+
+    expect(invisible.map(({ line, element }) => [line, element])).toEqual([
+      [1, "p"],
+      [2, "p"],
+      [4, "p"],
+      [5, "p"],
+    ]);
+  });
+
+  it("finds the source line of many referenced characters in one pass", () => {
+    const written = "a&#8203;".repeat(10_000);
+
+    const started = cpuNow();
+    const findings = revealHtml(`<p title="${written}">${written}</p>`);
+
+    expect(cpuNow() - started).toBeLessThan(3_000);
+    expect(ofKind(findings, "invisible")).toHaveLength(20_000);
+  });
+
   it("decodes a numeric reference without its semicolon, as browsers do", () => {
     const invisible = ofKind(revealHtml("<p>key&#8203word and &#x200Cmore</p>"), "invisible");
 

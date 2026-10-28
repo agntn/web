@@ -2,6 +2,10 @@
 export interface HtmlAttribute {
   readonly name: string;
   readonly value: string;
+  /** The value before decoding, so a finding in it can point at its own source line. */
+  readonly written: string;
+  /** Offset of {@link written} in the source, past any opening quote. */
+  readonly start: number;
 }
 
 /** Text between tags, raw: character references stay as written. */
@@ -142,23 +146,61 @@ export function* prescanHtml(html: string): Generator<HtmlToken> {
  */
 export function decodeCharacterReferences(text: string, attribute = false): string {
   if (!text.includes("&")) return text;
-  return text.replaceAll(
-    attribute ? ATTRIBUTE_REFERENCE : CHARACTER_REFERENCE,
-    (
-      reference: string,
-      hex: string | undefined,
-      decimal: string | undefined,
-      named: string | undefined,
-      legacy: string | undefined,
-    ) => {
-      const name = named ?? legacy;
-      if (name !== undefined) {
-        return Object.hasOwn(NAMED_REFERENCES, name) ? NAMED_REFERENCES[name]! : reference;
-      }
-      const codePoint = Number.parseInt(hex ?? decimal ?? "", hex === undefined ? 10 : 16);
-      return isScalarValue(codePoint) ? String.fromCodePoint(codePoint) : reference;
-    },
-  );
+  return text.replaceAll(attribute ? ATTRIBUTE_REFERENCE : CHARACTER_REFERENCE, decodeReference);
+}
+
+/**
+ * Where characters of decoded text were written, since `&#10;` is one line of source, not two.
+ * @param written - Text or an attribute value as written.
+ * @param indexes - Ascending offsets in what {@link decodeCharacterReferences} makes of it.
+ * @param attribute - Whether it was decoded as an attribute value.
+ * @returns {number[]} An offset in `written` per index; a character a reference made gets its `&`.
+ */
+export function writtenOffsets(
+  written: string,
+  indexes: readonly number[],
+  attribute = false,
+): number[] {
+  const references = written.matchAll(attribute ? ATTRIBUTE_REFERENCE : CHARACTER_REFERENCE);
+  let match = references.next().value;
+  let decoded = 0;
+  let from = 0;
+  return indexes.map((index) => {
+    for (; match !== undefined; match = references.next().value) {
+      const literalEnd = decoded + match.index - from;
+      if (index < literalEnd) break;
+      const [reference, hex, decimal, named, legacy] = match;
+      const end = literalEnd + decodeReference(reference, hex, decimal, named, legacy).length;
+      if (index < end) return match.index;
+      decoded = end;
+      from = match.index + reference.length;
+    }
+    return from + index - decoded;
+  });
+}
+
+/**
+ * The text one character reference stands for.
+ * @param reference - The reference as written.
+ * @param hex - Digits of a hexadecimal reference.
+ * @param decimal - Digits of a decimal reference.
+ * @param named - A name closed with `;`.
+ * @param legacy - A legacy name written without `;`.
+ * @returns {string} What a reader sees; an unknown or out of range reference stays as written.
+ */
+function decodeReference(
+  reference: string,
+  hex: string | undefined,
+  decimal: string | undefined,
+  named: string | undefined,
+  legacy: string | undefined,
+): string {
+  const name = named ?? legacy;
+  if (name !== undefined) {
+    return Object.hasOwn(NAMED_REFERENCES, name) ? NAMED_REFERENCES[name]! : reference;
+  }
+  const codePoint = Number.parseInt(hex ?? decimal ?? "", hex === undefined ? 10 : 16);
+  return isScalarValue(codePoint) ? String.fromCodePoint(codePoint) : reference;
 }
 
 /**
@@ -383,29 +425,28 @@ class AttributeReader {
     const nameEnd = endOf(this.html, "attributeName", nameStart + 1);
     const name = this.html.slice(nameStart, nameEnd).toLowerCase();
     this.position = this.skipSpace(nameEnd);
-    let value = "";
+    let value = { written: "", start: this.position };
     if (this.html[this.position] === "=") {
       this.position = this.skipSpace(this.position + 1);
       value = this.value();
     }
     if (this.seen.has(name)) return;
     this.seen.add(name);
-    this.attributes.push({ name, value: decodeCharacterReferences(value, true) });
+    this.attributes.push({ name, value: decodeCharacterReferences(value.written, true), ...value });
   }
 
-  private value(): string {
+  private value(): { written: string; start: number } {
     const quote = this.html[this.position];
     if (quote === '"' || quote === "'") {
-      const close = this.html.indexOf(quote, this.position + 1);
+      const start = this.position + 1;
+      const close = this.html.indexOf(quote, start);
       const end = close === -1 ? this.html.length : close;
-      const value = this.html.slice(this.position + 1, end);
       this.position = Math.min(this.html.length, end + 1);
-      return value;
+      return { written: this.html.slice(start, end), start };
     }
-    const end = endOf(this.html, "unquotedValue", this.position);
-    const value = this.html.slice(this.position, end);
-    this.position = end;
-    return value;
+    const start = this.position;
+    this.position = endOf(this.html, "unquotedValue", start);
+    return { written: this.html.slice(start, this.position), start };
   }
 
   private skipSpace(from: number): number {

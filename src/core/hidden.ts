@@ -30,6 +30,7 @@ import {
   type HtmlStartTag,
   type HtmlText,
   type HtmlToken,
+  writtenOffsets,
 } from "./html.ts";
 import { hiddenKinds, type HiddenKind } from "./hidden-kinds.ts";
 import { clip } from "./text.ts";
@@ -652,6 +653,16 @@ interface Hold {
   readonly depth: number;
 }
 
+/** Where a text came from, so a finding in it lands on the line the page wrote it on. */
+interface CharacterSource {
+  /** The text before its character references were decoded; left out, nothing was. */
+  readonly written?: string;
+  /** Whether it was decoded as an attribute value. */
+  readonly attribute?: boolean;
+  /** Whether it opens the document, where a byte order mark is no finding. */
+  readonly documentStart?: boolean;
+}
+
 /** Walks the tokens once with the stack of open elements. */
 class HiddenScanner {
   private readonly lines: number[];
@@ -968,7 +979,9 @@ class HiddenScanner {
     const place = { label: labelOf(tag), line: this.lineOf(tag.start) };
     const foreign = this.elements.foreignAt(tag.name);
     if (!foreign) this.tallyAttributes(tag, place);
-    for (const { value } of tag.attributes) this.characters(value, place.line, place.label);
+    for (const { value, written, start } of tag.attributes) {
+      this.characters(value, this.lineOf(start), place.label, { written, attribute: true });
+    }
     this.headFinding(tag, place);
     this.elements.push(this.element(tag, place, foreign));
     if (tag.name === "slot" && !foreign) this.fileSlot(tag);
@@ -1165,7 +1178,10 @@ class HiddenScanner {
     const line = this.lineOf(token.start);
     if (this.rawText(token.text, line)) return;
     const text = decodeCharacterReferences(token.text);
-    this.characters(text, line, this.stack.at(-1)?.label, token.start === 0);
+    this.characters(text, line, this.stack.at(-1)?.label, {
+      written: token.text,
+      documentStart: token.start === 0,
+    });
     this.textRecord(line, text)?.add(text);
   }
 
@@ -1302,15 +1318,17 @@ class HiddenScanner {
     text: string,
     line: number,
     element: string | undefined,
-    documentStart = false,
+    source: Readonly<CharacterSource> = {},
   ): void {
-    for (const { index, run } of invisibleRuns(text, documentStart)) {
-      const finding = invisibleFinding(
-        text,
-        index,
-        run,
-        line + countNewlines(text.slice(0, index)),
-      );
+    const { written, attribute, documentStart = false } = source;
+    const runs = invisibleRuns(text, documentStart);
+    if (runs.length === 0) return;
+    const indexes = runs.map(({ index }) => index);
+    const offsets = written === undefined ? indexes : writtenOffsets(written, indexes, attribute);
+    const starts = lineStarts(written ?? text);
+    for (const [position, { index, run }] of runs.entries()) {
+      const at = line - 1 + lineAt(starts, offsets[position]!);
+      const finding = invisibleFinding(text, index, run, at);
       this.findings.push(element === undefined ? finding : { ...finding, element });
     }
   }
@@ -1726,14 +1744,6 @@ function marked(text: string): string {
 
 function codePoint(character: string): string {
   return `U+${(character.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}`;
-}
-
-function countNewlines(text: string): number {
-  let count = 0;
-  for (let index = text.indexOf("\n"); index !== -1; index = text.indexOf("\n", index + 1)) {
-    count += 1;
-  }
-  return count;
 }
 
 /**
