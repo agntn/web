@@ -447,16 +447,19 @@ class AttributeReader {
   }
 
   /**
+   * Only a slash between attributes closes the tag, since `data-x=2/>` keeps its slash in the value.
    * @returns {{ attributes: HtmlAttribute[]; selfClosing: boolean; end: number } | undefined} The
    * attributes and the offset after `>`, or undefined when the source ends inside the tag.
    */
   read(): { attributes: HtmlAttribute[]; selfClosing: boolean; end: number } | undefined {
+    let slash = -1;
     while (this.position < this.html.length) {
       const character = this.html[this.position]!;
       if (character === ">") {
-        const selfClosing = this.html[this.position - 1] === "/";
+        const selfClosing = slash === this.position - 1;
         return { attributes: this.attributes, selfClosing, end: this.position + 1 };
       }
+      if (character === "/") slash = this.position;
       if (SPACE.test(character) || character === "/") this.position += 1;
       else this.attribute();
     }
