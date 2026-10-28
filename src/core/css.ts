@@ -712,16 +712,28 @@ function winner(
 }
 
 /**
- * Text without CSS whitespace at its ends; `trim()` would take a no-break space along with it.
+ * Text without CSS whitespace at its ends, except a space an escape holds, as in `@layer x\ `.
  * @param text - The text.
- * @returns {string} The text, trimmed.
+ * @returns {string} The text, trimmed; `trim()` would take a no-break space along with it.
  */
 export function trimmed(text: string): string {
   let start = 0;
   let end = text.length;
   while (start < end && SPACE.test(text.charAt(start))) start += 1;
-  while (end > start && SPACE.test(text.charAt(end - 1))) end -= 1;
+  while (end > start && SPACE.test(text.charAt(end - 1)) && !escaped(text, end - 1)) end -= 1;
   return text.slice(start, end);
+}
+
+/**
+ * Whether an odd run of backslashes stands right before a character, which makes it an escape.
+ * @param text - The text.
+ * @param index - Offset of the character.
+ * @returns {boolean} True when the character is escaped.
+ */
+function escaped(text: string, index: number): boolean {
+  let backslashes = 0;
+  while (text.charAt(index - backslashes - 1) === "\\") backslashes += 1;
+  return backslashes % 2 === 1;
 }
 
 /**

@@ -674,6 +674,15 @@ describe("revealHtml", () => {
     expect(ofKind(findings, "camouflage")).toEqual([]);
   });
 
+  it("keeps an escaped space at the end of a layer name", () => {
+    const html = [
+      "<style>@layer x\\ { .a { display: none } } @layer y\\\\ { .b { display: none } }",
+      "@layer z\\ ; .c { display: none }</style><p class=a>a</p><p class=b>b</p><p class=c>c</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["a", "b", "c"]);
+  });
+
   it("splits class and rel lists and trims a link type at ASCII whitespace only, as HTML does", () => {
     const space = String.fromCodePoint(0xa0);
     const url = "https://example.com/";
