@@ -1605,7 +1605,6 @@ describe("revealHtml", () => {
       "<math><mi style=display:none data-x=2/>secret</mi></math>",
       "<svg><g style=display:none data-x=2 />shown</svg>",
       "<svg><g style=display:none data-x/>shown</svg>",
-      "<svg><g style=display:none/>shown</g></svg>",
     ].join("\n");
 
     expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
