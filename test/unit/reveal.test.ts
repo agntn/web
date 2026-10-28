@@ -1625,6 +1625,52 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("keeps a paragraph or list item open past SVG and MathML that hold HTML", () => {
+    const html = [
+      "<p hidden>a<svg><foreignObject><section>b</section></foreignObject></svg>c</p>",
+      "<p hidden>d<math><mi><section>e</section></mi></math>f</p>",
+      "<ul><li hidden>g<svg><desc><li>h</li></desc></svg>i</li></ul>",
+      "<dl><dd hidden>j<math><annotation-xml encoding=text/html><dt>k</dt></annotation-xml></math>l",
+      "</dd></dl><p hidden>m<svg><foreignObject></p>n</foreignObject></svg>o</p>",
+      "<section hidden>p<math><mtext></section>q</mtext></math>r</section>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [1, "abc"],
+      [2, "def"],
+      [3, "ghi"],
+      [4, "jkl"],
+      [5, "mno"],
+      [6, "pqr"],
+    ]);
+  });
+
+  it("lets table tags, </template> and </p> reach past SVG and MathML", () => {
+    const html = [
+      "<table><tr><td hidden>a<svg><foreignObject><td>b</td></foreignObject></svg></td></tr></table>",
+      "<table><tr><td hidden>c<math><mi></td><td>d</td></tr></table>",
+      "<svg style=display:none><g></p>e",
+      "<template><svg><foreignObject></template><p hidden>f</p>",
+      "<svg style=display:none><foreignObject><div></svg>g",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [1, "a"],
+      [2, "c"],
+      [4, "f"],
+      [5, "g"],
+    ]);
+  });
+
+  it("ignores </desc> from the HTML inside it, as a browser does", () => {
+    const hidden = ofKind(
+      revealHtml("<svg style=display:none><desc><span>a</desc></svg>b"),
+      "hidden",
+    );
+
+    expect(hidden.map(({ value }) => value)).toEqual(["ab"]);
+  });
+
   it.each([
     ["foreignObject", "<svg><foreignObject>%</foreignObject></svg>"],
     ["desc", "<svg><desc>%</desc></svg>"],
