@@ -2,18 +2,14 @@ import { resolve } from "node:path";
 import { createSourceBuildId } from "../src/build-id.ts";
 import { webTheme } from "./shiki-theme";
 
-/** Bundled from the checkout's sources: a deploy needs neither dist/ nor the root node_modules. */
+/** Bundled from the checkout's sources: no dist/, and its imports resolve from the root. */
 const librarySource = resolve(import.meta.dirname, "../src");
 
 export default defineNuxtConfig({
   extends: ["docus"],
-  /** The repo root is its own pnpm workspace; Nuxt must not treat it as this site's. */
-  workspaceDir: import.meta.dirname,
-  /** Workers Builds installs docs/ alone: docs/package.json lists each npm import of `../src`. */
   alias: {
     "@agntn/web": resolve(librarySource, "index.ts"),
   },
-  /** Both would otherwise resolve from the root workspace. */
   devtools: { enabled: false },
   telemetry: false,
   site: {

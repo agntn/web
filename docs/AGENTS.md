@@ -1,6 +1,8 @@
 # docs/
 
-Cloudflare Workers Builds deploys this site to web.agntn.dev with `docs` as the root directory. It installs `docs/` and nothing else, which is why the library comes from `../src` (see `nuxt.config.ts`).
+Cloudflare Workers Builds deploys this site to web.agntn.dev with `docs` as the root directory. Its `pnpm install` walks up to the root lockfile and installs the whole workspace. So a bare import in `../src` resolves from the root, same as on your machine.
+
+Nothing builds `dist/` there, which is why the library comes from `../src` (see `nuxt.config.ts`).
 
 Resources on the Cloudflare account, bound by id in `wrangler.jsonc`:
 

@@ -79,26 +79,26 @@
     "docs:build": "vp -C docs run build"
   },
   "dependencies": {
-    "@agntn/hashes": "0.7.2",
-    "@agntn/tools": "0.2.4",
-    "@modelcontextprotocol/server": "2.2.0",
-    "string-width": "8.2.2",
-    "zod": "4.3.6"
+    "@agntn/hashes": "catalog:deps",
+    "@agntn/tools": "catalog:deps",
+    "@modelcontextprotocol/server": "catalog:deps",
+    "string-width": "catalog:deps",
+    "zod": "catalog:deps"
   },
   "devDependencies": {
-    "@agntn/ox": "0.1.0",
-    "@earendil-works/pi-coding-agent": "1.0.2",
-    "@earendil-works/pi-tui": "1.0.2",
-    "@modelcontextprotocol/client": "2.2.0",
-    "@oh-my-pi/omptype": "18.2.11",
-    "@oh-my-pi/pi-coding-agent": "18.2.11",
-    "@types/node": "26.6.5",
-    "ai": "7.0.142",
-    "changelogen": "0.6.2",
-    "jiti": "2.7.0",
-    "obuild": "0.4.45",
-    "typebox": "1.1.39",
-    "typescript": "7.0.2",
+    "@agntn/ox": "catalog:dev",
+    "@earendil-works/pi-coding-agent": "catalog:dev",
+    "@earendil-works/pi-tui": "catalog:dev",
+    "@modelcontextprotocol/client": "catalog:dev",
+    "@oh-my-pi/omptype": "catalog:dev",
+    "@oh-my-pi/pi-coding-agent": "catalog:dev",
+    "@types/node": "catalog:dev",
+    "ai": "catalog:dev",
+    "changelogen": "catalog:dev",
+    "jiti": "catalog:dev",
+    "obuild": "catalog:dev",
+    "typebox": "catalog:dev",
+    "typescript": "catalog:dev",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   },
@@ -125,7 +125,7 @@
   "engines": {
     "node": ">=26"
   },
-  "packageManager": "pnpm@11.3.0",
+  "packageManager": "pnpm@12.15.0",
   "omp": {
     "extensions": [
       "./extensions/omp/web.ts"
