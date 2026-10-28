@@ -690,6 +690,32 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("applies nothing from inside a template until a script clones it", () => {
+    const url = "https://example.com/";
+    const html = [
+      "<template><base href=https://cdn.example/><style title=Other>.a { display: none }</style>",
+      "<link rel=stylesheet href=t.css><template></template><style>.b { display: none }</style></template>",
+      "<style title=Main>.c { display: none }</style><link rel=stylesheet href=page.css>",
+      "</svg><svg><template><style>.d { display: none }</style></template></svg>",
+      "<svg/><template><style>.e { display: none }</style></template>",
+      "<p class=a>a</p><p class=b>b</p><p class=c>c</p><p class=d>d</p><p class=e>e</p>",
+    ].join("\n");
+    const unstyled = [
+      "</template><template><link rel=stylesheet href=t.css><style>@import 'i.css';</style></template>",
+      "<span style='color:#fff'>white</span>",
+    ].join("");
+
+    expect(linkedStylesheets(html, { url })).toEqual(["https://example.com/page.css"]);
+    expect(ofKind(revealHtml(html, { url }), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .c", value: "c" }),
+      expect.objectContaining({ reason: "display: none via .d", value: "d" }),
+    ]);
+    expect(linkedStylesheets(unstyled, { url })).toEqual([]);
+    expect(ofKind(revealHtml(unstyled), "camouflage")).toEqual([
+      expect.objectContaining({ value: "white" }),
+    ]);
+  });
+
   it("names the sheets a screen applies, each once, and ends an import cycle", () => {
     const html = [
       "<link rel=stylesheet href=a.css><link rel='alternate stylesheet' href=alt.css>",

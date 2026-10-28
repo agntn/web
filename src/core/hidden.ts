@@ -28,6 +28,7 @@ import {
   type HtmlEndTag,
   type HtmlStartTag,
   type HtmlText,
+  type HtmlToken,
 } from "./html.ts";
 import { hiddenKinds, type HiddenKind } from "./hidden-kinds.ts";
 import { clip } from "./text.ts";
@@ -313,6 +314,12 @@ interface Pending {
   readonly finding: HiddenFinding;
 }
 
+/** HTML templates and SVG or MathML elements still open, as loosely as the walk tracks them. */
+interface Nesting {
+  readonly templates: number;
+  readonly foreign: number;
+}
+
 /** A linked sheet's imports, resolved, its rules and the layers its body names. */
 interface ParsedSheet {
   readonly preamble: StylesheetPreamble;
@@ -434,16 +441,20 @@ class HiddenScanner {
     );
   }
 
-  /** Stylesheet rules, the `<base>` URL and whether a stylesheet is linked, before the walk. */
+  /** Sheet rules, the `<base>` URL and any linked sheet, before the walk; templates hold none. */
   private prepare(): void {
     let inStyle = false;
+    let nesting: Nesting = { templates: 0, foreign: 0 };
     for (const token of tokenizeHtml(this.html)) {
       if (token.kind === "text" && inStyle) {
         this.fileSheet(token.text);
         if (/@import\b/iu.test(token.text)) this.assumeDefaults = false;
       }
-      inStyle = token.kind === "start" && token.name === "style" && this.styleApplies(token);
-      if (token.kind === "start") this.prepareTag(token);
+      inStyle = false;
+      nesting = nestingAfter(nesting, token);
+      if (token.kind !== "start" || nesting.templates > 0) continue;
+      inStyle = token.name === "style" && this.styleApplies(token);
+      this.prepareTag(token);
     }
     this.rankRules();
   }
@@ -988,6 +999,23 @@ function linkApplies(tag: HtmlStartTag): boolean {
   const type = attribute(tag, "type")?.split(";")[0]?.trim().toLowerCase() ?? "";
   const css = type === "" || type === "text/css";
   return css && attribute(tag, "disabled") === undefined && forScreen(attribute(tag, "media"));
+}
+
+/**
+ * Only an HTML template walls its content off; inside SVG or MathML it's just another element.
+ * @param open - What is open before the token.
+ * @param token - The next token.
+ * @returns {Nesting} What is open after it; a stray end tag closes nothing.
+ */
+function nestingAfter(open: Nesting, token: HtmlToken): Nesting {
+  if (token.kind !== "start" && token.kind !== "end") return open;
+  const closes = token.kind === "end";
+  if (token.name === "svg" || token.name === "math") {
+    const step = closes ? -1 : Number(!token.selfClosing);
+    return { ...open, foreign: Math.max(open.foreign + step, 0) };
+  }
+  if (token.name !== "template" || open.foreign > 0) return open;
+  return { ...open, templates: Math.max(open.templates + (closes ? -1 : 1), 0) };
 }
 
 function fieldType(tag: HtmlStartTag): string {
