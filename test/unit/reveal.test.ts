@@ -58,6 +58,12 @@ function tagged(text: string): string {
   ).join("");
 }
 
+/* CPU milliseconds this worker has burned. Wall time also counts the queue on a busy machine. */
+function cpuNow(): number {
+  const { user, system } = process.cpuUsage();
+  return (user + system) / 1_000;
+}
+
 /* Bytes of UTF-8 text carried by variation selectors after a visible character. */
 function selectors(text: string): string {
   return Array.from(new TextEncoder().encode(text), (byte) =>
@@ -478,10 +484,10 @@ describe("revealHtml", () => {
   it("reads a layer block that never closes in one pass", () => {
     const html = `<style>@layer a { ${"@x; ".repeat(300_000)}</style><p class=a>x</p>`;
 
-    const started = performance.now();
+    const started = cpuNow();
     revealHtml(html);
 
-    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(cpuNow() - started).toBeLessThan(3_000);
   });
 
   it("still reads rules from layers nested far deeper than any sheet needs", () => {
@@ -618,10 +624,10 @@ describe("revealHtml", () => {
   it("reads an @media block that never closes in one pass", () => {
     const html = `<style>@media screen { ${"@x; ".repeat(300_000)}</style><p class=a>x</p>`;
 
-    const started = performance.now();
+    const started = cpuNow();
     revealHtml(html);
 
-    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(cpuNow() - started).toBeLessThan(3_000);
   });
 
   it("decodes a media type the way CSS reads identifiers, and keeps layer out of it", () => {
@@ -708,10 +714,10 @@ describe("revealHtml", () => {
     const name = `a${"\\abcdef".repeat(200)}!`;
     const html = `<style>@layer ${name} { .a { display: none } } @media ${name} { .a { display: none } }</style>`;
 
-    const started = performance.now();
+    const started = cpuNow();
     revealHtml(`${html}<link rel=stylesheet media='${name}' href=a.css><p class=a>a</p>`);
 
-    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(cpuNow() - started).toBeLessThan(3_000);
   });
 
   it("applies untitled sheets and the first titled set only", () => {
@@ -783,10 +789,10 @@ describe("revealHtml", () => {
     const deep = `${"<template><svg>".repeat(16_000)}${"</template>".repeat(16_000)}`;
     const html = `${deep}<style>.a { display: none }</style><p class=a>x</p>`;
 
-    const started = performance.now();
+    const started = cpuNow();
     const findings = revealHtml(html);
 
-    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(cpuNow() - started).toBeLessThan(3_000);
     expect(ofKind(findings, "hidden")).toEqual([
       expect.objectContaining({ reason: "display: none via .a", value: "x" }),
     ]);
@@ -832,10 +838,10 @@ describe("revealHtml", () => {
     stylesheets["https://example.com/9.css"] = ".secret { display: none }";
     const html = "<link rel=stylesheet href=0.css><p class=secret>key</p>";
 
-    const started = performance.now();
+    const started = cpuNow();
     const findings = revealHtml(html, { url: "https://example.com/", stylesheets });
 
-    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(cpuNow() - started).toBeLessThan(1_000);
     expect(ofKind(findings, "hidden")).toEqual([
       expect.objectContaining({ reason: "display: none via .secret", value: "key" }),
     ]);
@@ -973,10 +979,10 @@ describe("revealHtml", () => {
     ["an unclosed rgb()", `<p style="background:${"rgb(".repeat(60_000)}">x</p>`],
     ["unclosed CSS comments", `<style>${"/*".repeat(60_000)}</style>`],
   ])("stays linear on %s", (_label, html) => {
-    const started = performance.now();
+    const started = cpuNow();
     revealHtml(html);
 
-    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(cpuNow() - started).toBeLessThan(3_000);
   });
 
   it("keeps a processing instruction that is not the XML declaration as a comment", () => {
