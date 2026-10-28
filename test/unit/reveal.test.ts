@@ -721,6 +721,19 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("tracks templates nested far deeper than any page needs in one pass", () => {
+    const deep = `${"<template><svg>".repeat(16_000)}${"</template>".repeat(16_000)}`;
+    const html = `${deep}<style>.a { display: none }</style><p class=a>x</p>`;
+
+    const started = performance.now();
+    const findings = revealHtml(html);
+
+    expect(performance.now() - started).toBeLessThan(3_000);
+    expect(ofKind(findings, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .a", value: "x" }),
+    ]);
+  });
+
   it("names the sheets a screen applies, each once, and ends an import cycle", () => {
     const html = [
       "<link rel=stylesheet href=a.css><link rel='alternate stylesheet' href=alt.css>",

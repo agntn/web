@@ -440,15 +440,15 @@ class HiddenScanner {
   /** Sheet rules, the `<base>` URL and any linked sheet, before the walk; templates hold none. */
   private prepare(): void {
     let inStyle = false;
-    let nesting: readonly string[] = [];
+    const nesting = new Nesting();
     for (const token of tokenizeHtml(this.html)) {
       if (token.kind === "text" && inStyle) {
         this.fileSheet(token.text);
         if (/@import\b/iu.test(token.text)) this.assumeDefaults = false;
       }
       inStyle = false;
-      nesting = nestingAfter(nesting, token);
-      if (token.kind !== "start" || nesting[0] === "template") continue;
+      nesting.step(token);
+      if (token.kind !== "start" || nesting.inert) continue;
       inStyle = token.name === "style" && this.styleApplies(token);
       this.prepareTag(token);
     }
@@ -997,18 +997,46 @@ function linkApplies(tag: HtmlStartTag): boolean {
   return css && attribute(tag, "disabled") === undefined && forScreen(attribute(tag, "media"));
 }
 
-/**
- * Only an HTML template walls its content off; inside SVG or MathML it's just another element.
- * @param open - Templates and SVG or MathML elements open before the token, outermost first.
- * @param token - The next token.
- * @returns {readonly string[]} Those open after it, closed the way the walk's `end` closes them.
- */
-function nestingAfter(open: readonly string[], token: HtmlToken): readonly string[] {
-  if ((token.kind !== "start" && token.kind !== "end") || !NESTING.has(token.name)) return open;
-  const index = open.lastIndexOf(token.name);
-  if (token.kind === "end") return index === -1 ? open : open.slice(0, index);
-  const foreign = token.name !== "template" || open.some((name) => name !== "template");
-  return foreign && token.selfClosing ? open : [...open, token.name];
+/** Templates and SVG or MathML elements open in the source, closed the way the walk closes them. */
+class Nesting {
+  private readonly stack: string[] = [];
+  private readonly counts = new Map<string, number>();
+
+  /** @returns {boolean} Whether what comes next sits in an HTML template, out of the page. */
+  get inert(): boolean {
+    return this.stack[0] === "template";
+  }
+
+  /**
+   * Only an HTML template walls its content off; inside SVG or MathML it's just another element.
+   * @param token - The next token.
+   */
+  step(token: HtmlToken): void {
+    if ((token.kind !== "start" && token.kind !== "end") || !NESTING.has(token.name)) return;
+    if (token.kind === "end") this.close(token.name);
+    else if (!token.selfClosing || !this.foreignAt(token.name)) this.push(token.name);
+  }
+
+  private foreignAt(name: string): boolean {
+    return name !== "template" || this.count("svg") + this.count("math") > 0;
+  }
+
+  private push(name: string): void {
+    this.stack.push(name);
+    this.counts.set(name, this.count(name) + 1);
+  }
+
+  private close(name: string): void {
+    if (this.count(name) === 0) return;
+    for (let popped = this.stack.pop(); popped !== undefined; popped = this.stack.pop()) {
+      this.counts.set(popped, this.count(popped) - 1);
+      if (popped === name) return;
+    }
+  }
+
+  private count(name: string): number {
+    return this.counts.get(name) ?? 0;
+  }
 }
 
 function fieldType(tag: HtmlStartTag): string {
