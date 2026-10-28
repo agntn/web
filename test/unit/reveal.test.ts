@@ -1598,6 +1598,22 @@ describe("revealHtml", () => {
     expect(ofKind(findings, "hidden")).toEqual([]);
   });
 
+  it("leaves SVG and MathML open when /> ends an unquoted value", () => {
+    const html = [
+      "<svg><g style=display:none data-x=2/>secret</g></svg>",
+      "<svg><g style=display:none data-x=/>secret</g></svg>",
+      "<math><mi style=display:none data-x=2/>secret</mi></math>",
+      "<svg><g style=display:none data-x=2 />shown</svg>",
+      "<svg><g style=display:none data-x/>shown</svg>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [1, "secret"],
+      [2, "secret"],
+      [3, "secret"],
+    ]);
+  });
+
   it("lets a tag like <p> close the SVG it opens in", () => {
     const html = [
       "<svg><g><p><![CDATA[x]]></p></g></svg>",
