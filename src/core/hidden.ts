@@ -578,18 +578,24 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
   }
 
   /**
-   * Close whatever a start tag ends without saying so.
+   * Close whatever an HTML start tag ends without saying so; one in SVG or MathML ends nothing.
    * @param tag - The tag about to open.
    * @returns {boolean} False for a second `<html>`, `<head>` or `<body>`, which opens nothing.
    */
   opens(tag: HtmlStartTag): boolean {
     const { name } = tag;
     this.breakOut(tag);
+    if (this.namespaceAt(name) !== "html") return true;
+    this.closeImplied(name);
+    return !SINGLETON_ELEMENTS.has(name) || !this.isOpen(name);
+  }
+
+  /** @param name - An HTML tag that may end an open list item, cell, `<p>` or heading. */
+  private closeImplied(name: string): void {
     const rule = Object.hasOwn(IMPLIED_END, name) ? IMPLIED_END[name] : undefined;
     if (rule !== undefined) this.closeWithin(rule.closes, rule.scope);
     if (CLOSES_PARAGRAPH.has(name)) this.closeWithin(["p"], PARAGRAPH_SCOPE);
     if (HEADINGS.has(name) && HEADINGS.has(this.items.at(-1)?.name ?? "")) this.pop();
-    return !SINGLETON_ELEMENTS.has(name) || !this.isOpen(name);
   }
 
   /**

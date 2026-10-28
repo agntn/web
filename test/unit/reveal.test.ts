@@ -1586,6 +1586,20 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("lets no SVG or MathML tag close a paragraph or a table cell", () => {
+    const html = [
+      "<p hidden>a<svg><xmp/></svg>b</p>",
+      "<p hidden>c<math><address/></math>d</p>",
+      "<table><tr><td hidden>e<svg><td/></svg>f</td></tr></table>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [1, "ab"],
+      [2, "cd"],
+      [3, "ef"],
+    ]);
+  });
+
   it.each([
     ["foreignObject", "<svg><foreignObject>%</foreignObject></svg>"],
     ["desc", "<svg><desc>%</desc></svg>"],
