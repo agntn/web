@@ -1,4 +1,12 @@
-import { ESCAPE, HEX_COLOR, identifier, validValue } from "./css-values.ts";
+import {
+  ESCAPE,
+  HEX_COLOR,
+  identifier,
+  inString,
+  NESTING,
+  quoteAfter,
+  validValue,
+} from "./css-values.ts";
 
 /** One declared value and where it came from: the element's `style`, or a rule's selector. */
 export interface Declaration {
@@ -567,16 +575,6 @@ function preludeEnd(text: string, from: number, atRule: boolean, to = text.lengt
   return -1;
 }
 
-/**
- * Whether a character is inside a quoted string, or opens one.
- * @param quote - The open quote, or an empty string.
- * @param character - The character.
- * @returns {boolean} True when the string's quote tracking takes it.
- */
-function inString(quote: string, character: string): boolean {
-  return quote !== "" || character === '"' || character === "'";
-}
-
 function endsPrelude(character: string, atRule: boolean): boolean {
   return character === "{" || (atRule && character === ";");
 }
@@ -754,20 +752,6 @@ function splitTopLevelRaw(text: string, separator: string): string[] {
   }
   parts.push(text.slice(start));
   return parts;
-}
-
-/** How parentheses move the nesting depth outside quotes. */
-const NESTING: Readonly<Record<string, number>> = { "(": 1, ")": -1 };
-
-/**
- * The quote a splitter is inside after one more character.
- * @param quote - The open quote, or an empty string.
- * @param character - The next character.
- * @returns {string} The open quote after it.
- */
-function quoteAfter(quote: string, character: string): string {
-  if (quote !== "") return character === quote ? "" : quote;
-  return character === '"' || character === "'" ? character : "";
 }
 
 /**

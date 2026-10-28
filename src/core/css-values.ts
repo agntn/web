@@ -84,6 +84,8 @@ const IMAGE_FUNCTIONS = names(
     "repeating-radial-gradient repeating-conic-gradient gradient image image-set cross-fade " +
     "element paint",
 );
+/** How parentheses move the nesting depth outside quotes. */
+export const NESTING: Readonly<Record<string, number>> = { "(": 1, ")": -1 };
 /** What splits `background` besides whitespace: its layers, and the `/` before a size. */
 const BACKGROUND_DELIMITERS = ",/";
 
@@ -119,15 +121,15 @@ const GRAMMARS: Readonly<Record<string, Grammar>> = {
 export function validValue(property: string, value: string): boolean {
   const grammar = Object.hasOwn(GRAMMARS, property) ? GRAMMARS[property] : undefined;
   if (grammar === undefined) return true;
-  if (SUBSTITUTION.test(value.toLowerCase())) return true;
   const parts = words(value, property === "background" ? BACKGROUND_DELIMITERS : "");
+  if (parts.some((part) => SUBSTITUTION.test(part))) return true;
   if (parts.length === 1 && CSS_WIDE.has(parts[0] ?? "")) return true;
   return parts.length > 0 && grammar(parts);
 }
 
 /**
- * A value split outside parentheses and escapes, then each word decoded, so `red\9` stays one
- * word with a tab in it, the way a browser reads it before throwing it away.
+ * A value split outside parentheses, strings and escapes, then each word decoded, so `red\9`
+ * stays one word with a tab in it, the way a browser reads it before throwing it away.
  * @param value - The value as written.
  * @param delimiters - Characters that split it besides CSS whitespace.
  * @returns {string[]} Its words.
@@ -135,16 +137,16 @@ export function validValue(property: string, value: string): boolean {
 function words(value: string, delimiters: string): string[] {
   const result: string[] = [];
   let depth = 0;
+  let quote = "";
   let start = 0;
   for (let index = 0; index <= value.length; index += 1) {
     const character = value.charAt(index);
     if (character === "\\") index = escapeEnd(value, index) - 1;
-    else if (character === "(") depth += 1;
-    else if (character === ")") depth = Math.max(0, depth - 1);
+    else if (inString(quote, character)) quote = quoteAfter(quote, character);
     else if (depth === 0 && splits(character, delimiters)) {
       if (index > start) result.push(identifier(value.slice(start, index)).toLowerCase());
       start = index + 1;
-    }
+    } else depth = Math.max(0, depth + (NESTING[character] ?? 0));
   }
   return result;
 }
@@ -158,6 +160,27 @@ function words(value: string, delimiters: string): string[] {
 function escapeEnd(value: string, index: number): number {
   ESCAPE_AT.lastIndex = index;
   return ESCAPE_AT.test(value) ? ESCAPE_AT.lastIndex : index + 1;
+}
+
+/**
+ * The quote a splitter is inside after one more character.
+ * @param quote - The open quote, or an empty string.
+ * @param character - The next character.
+ * @returns {string} The open quote after it.
+ */
+export function quoteAfter(quote: string, character: string): string {
+  if (quote !== "") return character === quote ? "" : quote;
+  return character === '"' || character === "'" ? character : "";
+}
+
+/**
+ * Whether a character is inside a quoted string, or opens one.
+ * @param quote - The open quote, or an empty string.
+ * @param character - The character.
+ * @returns {boolean} True when the string's quote tracking takes it.
+ */
+export function inString(quote: string, character: string): boolean {
+  return quote !== "" || character === '"' || character === "'";
 }
 
 function splits(character: string, delimiters: string): boolean {

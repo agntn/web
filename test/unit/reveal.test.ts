@@ -221,9 +221,11 @@ describe("revealHtml", () => {
     ]);
   });
 
-  it("still lets a layered background undo the one before it", () => {
-    const html =
-      "<body bgcolor=#000><span style='color:#fff;background:#fff;background:url(a.png) no-repeat center / cover, linear-gradient(#000, #111) #000'>x</span>";
+  it.each([
+    "url(a.png) no-repeat center / cover, linear-gradient(#000, #111) #000",
+    'url("hero(.png") #000',
+  ])("still lets background:%s undo the one before it", (value) => {
+    const html = `<body bgcolor=#000><span style='color:#fff;background:#fff;background:${value}'>x</span>`;
 
     expect(ofKind(revealHtml(html), "camouflage")).toEqual([]);
   });
@@ -235,6 +237,7 @@ describe("revealHtml", () => {
     ["display:none", "display:INHERIT"],
     ["display:none", String.raw`display:bl\6f ck`],
     ["visibility:hidden", "visibility:VISIBLE"],
+    ["visibility:hidden", String.raw`visibility:v\61 r(--shown, visible)`],
     ["opacity:0", "opacity:50%"],
     ["opacity:0", "opacity:calc(1 / 2)"],
     ["font-size:0", "font-size:clamp(1rem, 2vw, 3rem)"],
