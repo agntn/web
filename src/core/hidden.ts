@@ -166,7 +166,7 @@ const VISIBLE_VALUES: Readonly<Record<string, RegExp>> = {
 const FIELD_ELEMENTS = new Set(["input", "select", "textarea", "button"]);
 /** Raw text a browser never draws: code, and the fallbacks for frames and plugins. */
 const UNDRAWN_ELEMENTS = new Set(["script", "style", "iframe", "noembed", "noframes", "title"]);
-/** Start tags that close an open `<p>` in standards mode; a quirks page keeps `<table>` in it. */
+/** Start tags that close an open `<p>`. `<table>` does it in quirks mode too, unlike browsers. */
 const CLOSES_PARAGRAPH = new Set([
   "address",
   "article",
