@@ -655,6 +655,47 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["layer"]);
   });
 
+  it("keeps a no-break space inside the CSS token it touches", () => {
+    const space = String.fromCodePoint(0xa0);
+    const html = [
+      `<style>${space}@layer x { .a { display: none } } .b${space}{ display: none } .c { display:${space}none }`,
+      `.d { ${space}display: none } .e { clip: rect(0${space}0 0 0); position: absolute }`,
+      `.f { display: none !${space}important } .f { display: block }`,
+      "\t@layer y { .g { display: none } } .h\n{ display: none } .i { display:\tnone }</style>",
+      `<div style='background:#000'><span style='background:#fff${space};color:#fff'>hex</span>`,
+      `<span style='background:rgb(255${space}255 255);color:#fff'>rgb</span>`,
+      "<span style='background:dark-white;color:#fff'>word</span></div>",
+      "<p class=a>a</p><p class=b>b</p><p class=c>c</p><p class=d>d</p><p class=e>e</p>",
+      "<p class=f>f</p><p class=g>g</p><p class=h>h</p><p class=i>i</p>",
+    ].join("\n");
+    const findings = revealHtml(html);
+
+    expect(ofKind(findings, "hidden").map(({ value }) => value)).toEqual(["g", "h", "i"]);
+    expect(ofKind(findings, "camouflage")).toEqual([]);
+  });
+
+  it("keeps an escaped space at the end of a layer name", () => {
+    const html = [
+      "<style>@layer x\\ { .a { display: none } } @layer y\\\\ { .b { display: none } }",
+      "@layer z\\ ; .c { display: none }</style><p class=a>a</p><p class=b>b</p><p class=c>c</p>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["a", "b", "c"]);
+  });
+
+  it("splits class and rel lists and trims a link type at ASCII whitespace only, as HTML does", () => {
+    const space = String.fromCodePoint(0xa0);
+    const url = "https://example.com/";
+    const html = [
+      `<link rel='${space}stylesheet' href=a.css><link rel=stylesheet type='text/css${space}' href=b.css>`,
+      "<link rel='\tstylesheet ' type=' text/css ' href=c.css>",
+      `<style>.a { display: none } .b { display: none }</style><p class='a${space}'>a</p><p class='x\tb'>b</p>`,
+    ].join("\n");
+
+    expect(linkedStylesheets(html, { url })).toEqual(["https://example.com/c.css"]);
+    expect(ofKind(revealHtml(html, { url }), "hidden").map(({ value }) => value)).toEqual(["b"]);
+  });
+
   it("reads a layer name that opens with a hex escape", () => {
     const html = "<style>@layer \\66 oo { .a { display: none } }</style><p class=a>escaped foo</p>";
 
