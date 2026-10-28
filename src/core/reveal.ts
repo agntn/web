@@ -16,6 +16,7 @@ import {
   type HiddenFinding,
   type Stylesheet,
 } from "./hidden.ts";
+import { prescanHtml, type HtmlAttribute } from "./html.ts";
 import { sanitizeUrl } from "./redaction.ts";
 import { clip } from "./text.ts";
 import type { ExecutionOptions } from "./types.ts";
@@ -518,22 +519,31 @@ function charsetOf(contentType: string, head: string): string {
 }
 
 /**
- * The charset a `<meta>` names, read like the HTML prescan, which steps over comments and tags.
+ * The charset the first `<meta>` outside a comment names, the way the HTML prescan finds it.
  * @param head - The start of the body, read as single bytes.
- * @returns {string | undefined} The label, or undefined when no `<meta>` outside a comment has one.
+ * @returns {string | undefined} The label, or undefined when no `<meta>` names one.
  */
 function metaCharset(head: string): string | undefined {
-  const tags = /<!--|<meta[^>]+charset\s*=\s*["']?(?<label>[\w.:-]+)|<[!/?a-z][^>]*>/giu;
-  for (let match = tags.exec(head); match !== null; match = tags.exec(head)) {
-    const label = match.groups?.label;
+  for (const token of prescanHtml(head)) {
+    if (token.kind !== "start" || token.name !== "meta") continue;
+    const label = charsetOfMeta(token.attributes);
     if (label !== undefined) return label;
-    if (match[0] === "<!--") {
-      const end = head.indexOf("-->", match.index + 2);
-      if (end === -1) return undefined;
-      tags.lastIndex = end + 3;
-    }
   }
   return undefined;
+}
+
+/**
+ * A `charset`, or a `content` charset when `http-equiv` says it is the content type.
+ * @param attributes - The attributes of one `<meta>`.
+ * @returns {string | undefined} The label, or undefined when the tag names none.
+ */
+function charsetOfMeta(attributes: readonly HtmlAttribute[]): string | undefined {
+  const value = (name: string): string | undefined =>
+    attributes.find((attribute) => attribute.name === name)?.value.trim();
+  const charset = value("charset");
+  if (charset !== undefined && charset !== "") return charset;
+  if (value("http-equiv")?.toLowerCase() !== "content-type") return undefined;
+  return CHARSET.exec(value("content") ?? "")?.groups?.label;
 }
 
 function decoder(label: string): TextDecoder {
