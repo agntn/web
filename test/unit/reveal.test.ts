@@ -690,6 +690,23 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("reads a <style> as CSS only when its type is missing, empty or text/css", () => {
+    const url = "https://example.com/";
+    const html = [
+      "<style type=text/template title=Dark>@import 'tpl.css'; .a { display: none }</style>",
+      "<style type=text/less>.b { display: none }</style><style type=' text/css'>.c { display: none }</style>",
+      "<style type='text/css; charset=utf-8'>.f { display: none }</style>",
+      "<style type=''>.d { display: none }</style><style type=TEXT/CSS title=Light>.e { display: none }</style>",
+      "<p class=a>a</p><p class=b>b</p><p class=c>c</p><p class=d>d</p><p class=e>e</p><p class=f>f</p>",
+    ].join("\n");
+
+    expect(linkedStylesheets(html, { url })).toEqual([]);
+    expect(ofKind(revealHtml(html, { url }), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .d", value: "d" }),
+      expect.objectContaining({ reason: "display: none via .e", value: "e" }),
+    ]);
+  });
+
   it("applies nothing from inside a template until a script clones it", () => {
     const url = "https://example.com/";
     const html = [

@@ -605,6 +605,7 @@ class HiddenScanner {
   }
 
   private styleApplies(tag: HtmlStartTag): boolean {
+    if (!styleIsCss(tag)) return false;
     return forScreen(attribute(tag, "media")) && this.inPreferredSet(attribute(tag, "title"));
   }
 
@@ -995,6 +996,16 @@ function linkApplies(tag: HtmlStartTag): boolean {
   const type = attribute(tag, "type")?.split(";")[0]?.trim().toLowerCase() ?? "";
   const css = type === "" || type === "text/css";
   return css && attribute(tag, "disabled") === undefined && forScreen(attribute(tag, "media"));
+}
+
+/**
+ * Whether HTML reads a `<style>` as CSS: no type, an empty one or `text/css`, nothing trimmed.
+ * @param tag - The `<style>` start tag.
+ * @returns {boolean} Stricter than a link: even `text/css; charset=utf-8` stays out.
+ */
+function styleIsCss(tag: HtmlStartTag): boolean {
+  const type = attribute(tag, "type");
+  return type === undefined || type === "" || type.toLowerCase() === "text/css";
 }
 
 /** Templates and SVG or MathML elements open in the source, closed the way the walk closes them. */
