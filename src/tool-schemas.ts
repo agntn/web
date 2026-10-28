@@ -133,7 +133,8 @@ function readOptionProperties() {
     ),
     continuation: Type.Optional(
       Type.String({
-        description: "Opaque token returned by a truncated read.",
+        description:
+          "Token from a truncated read. Send it back with that read's url, format, maxTokens, selectors, timeout and noCache.",
         maxLength: MAX_READ_CONTINUATION_LENGTH,
       }),
     ),

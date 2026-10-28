@@ -1,5 +1,10 @@
 import type { ReadOptions, ReadResult } from "./types.ts";
-import { fingerprint, openContinuation, sealContinuation } from "./continuation.ts";
+import {
+  continuationFields,
+  fingerprint,
+  openContinuation,
+  sealContinuation,
+} from "./continuation.ts";
 import {
   EmptyUrlError,
   InvalidReadContinuationError,
@@ -229,9 +234,7 @@ async function continueRead(
   pageFields: Readonly<PageFields>,
 ): Promise<ReadUrlDetailedResult> {
   const payload = decodeContinuation(continuation, readRequest(url, readOptions));
-  if (requestedProvider !== "auto" && requestedProvider !== payload.requestedProvider) {
-    throw new InvalidReadContinuationError();
-  }
+  if (!continuesWith(requestedProvider, payload)) throw otherReadProvider(payload.provider);
 
   const provider = resolveReadProviderName(payload.provider);
   const ignoredOptions =
@@ -528,11 +531,40 @@ function encodeContinuation(payload: Readonly<ReadContinuationPayload>, request:
   );
 }
 
+/**
+ * The provider asked for first, the one that served an automatic read, or none at all.
+ * @param requestedProvider - Provider of the continued read, `auto` when unset.
+ * @param payload - State the token carries.
+ * @returns {boolean} `true` when the token continues under this provider.
+ */
+function continuesWith(
+  requestedProvider: string,
+  payload: Readonly<ReadContinuationPayload>,
+): boolean {
+  if (requestedProvider === "auto" || requestedProvider === payload.requestedProvider) return true;
+  return payload.requestedProvider === "auto" && requestedProvider === payload.provider;
+}
+
+/**
+ * The tag is no signature, so a provider the registry doesn't know stays out of the message.
+ * @param provider - Provider the token says served the first read.
+ * @returns {InvalidReadContinuationError} Error naming the provider when it is a real reader.
+ */
+function otherReadProvider(provider: string): InvalidReadContinuationError {
+  if (!readProviders().includes(provider)) return new InvalidReadContinuationError();
+  return new InvalidReadContinuationError(
+    `Read continuation belongs to provider "${provider}": pass that provider or leave provider unset`,
+  );
+}
+
 function decodeContinuation(token: string, request: string): ReadContinuationPayload {
-  const fields =
-    token.length <= MAX_READ_CONTINUATION_LENGTH
-      ? openContinuation(READ_CONTINUATION, token, 4, request)
-      : undefined;
+  if (token.length > MAX_READ_CONTINUATION_LENGTH) throw new InvalidReadContinuationError();
+  const fields = openContinuation(READ_CONTINUATION, token, 4, request);
+  if (!fields && continuationFields(token, 4)) {
+    throw new InvalidReadContinuationError(
+      "Read continuation doesn't match this read: send it back unchanged, with the url, format, maxTokens, targetSelector, removeSelector, timeout and noCache of the read that returned it",
+    );
+  }
   const [provider, requestedProvider, offset, contentFingerprint] = fields ?? [];
   if (!provider || !requestedProvider || !offset || !contentFingerprint) {
     throw new InvalidReadContinuationError();

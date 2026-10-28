@@ -642,6 +642,80 @@ describe("readUrl", () => {
     expect(readFromContext).toHaveBeenCalledTimes(2);
   });
 
+  it("accepts the reader that served an automatic read for its continuation", async () => {
+    registerReader("jina", paymentRequired);
+    registerReader("context", async (url) => ({ url, content: "abcdef" }));
+    process.env.CONTEXT_DEV_API_KEY = "test-key";
+
+    const first = await readUrlDetailed("https://example.com", { maxChars: 3 });
+    const second = await readUrlDetailed("https://example.com", {
+      provider: first.provider,
+      maxChars: 3,
+      continuation: first.result.continuation,
+    });
+
+    expect(second).toMatchObject({
+      result: { content: "def", truncated: false },
+      requestedProvider: "auto",
+      provider: "context",
+    });
+  });
+
+  it("names the provider a continuation belongs to", async () => {
+    const providerName = `pinned-reader-${Math.random().toString(36).slice(2)}`;
+    registerReader(providerName, async (url) => ({ url, content: "abcdef" }));
+    registerReader("other-reader", async (url) => ({ url, content: "abcdef" }));
+    const first = await readUrl("https://example.com", { provider: providerName, maxChars: 3 });
+
+    await expect(
+      readUrl("https://example.com", {
+        provider: "other-reader",
+        maxChars: 3,
+        continuation: first.continuation,
+      }),
+    ).rejects.toThrow(`continuation belongs to provider "${providerName}"`);
+  });
+
+  it("names no provider the registry doesn't know", async () => {
+    const providerName = `gone-reader-${Math.random().toString(36).slice(2)}`;
+    registerReader(providerName, async (url) => ({ url, content: "abcdef" }));
+    registerReader("other-reader", async (url) => ({ url, content: "abcdef" }));
+    const first = await readUrl("https://example.com", { provider: providerName, maxChars: 3 });
+    readerCleanups.splice(-2, 1)[0]?.();
+
+    await expect(
+      readUrl("https://example.com", {
+        provider: "other-reader",
+        maxChars: 3,
+        continuation: first.continuation,
+      }),
+    ).rejects.toThrow(/^Invalid read continuation token$/u);
+  });
+
+  it("says which options a continuation needs back unchanged", async () => {
+    const providerName = `options-reader-${Math.random().toString(36).slice(2)}`;
+    registerReader(providerName, async (url) => ({ url, content: "abcdef" }));
+    const first = await readUrl("https://example.com", { provider: providerName, maxChars: 3 });
+
+    const changed = readUrl("https://example.com", {
+      provider: providerName,
+      format: "text",
+      maxChars: 3,
+      continuation: first.continuation,
+    });
+
+    await expect(changed).rejects.toThrow(InvalidReadContinuationError);
+    await expect(changed).rejects.toThrow(
+      "url, format, maxTokens, targetSelector, removeSelector, timeout and noCache",
+    );
+  });
+
+  it("keeps the plain refusal for a token that was never one", async () => {
+    await expect(
+      readUrl("https://example.com", { maxChars: 3, continuation: "not-a-token" }),
+    ).rejects.toThrow(/^Invalid read continuation token$/u);
+  });
+
   it("keeps a continuation short enough for an agent to copy back", async () => {
     registerReader("short-token-reader", async (url) => ({ url, content: "a".repeat(100_000) }));
 
