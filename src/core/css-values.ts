@@ -113,7 +113,7 @@ const GRAMMARS: Readonly<Record<string, Grammar>> = {
 
 /**
  * Whether a browser keeps a declaration, for the properties a reveal reads; any other passes.
- * When in doubt it passes, so a value the reveal can't judge never undoes one it can.
+ * When in doubt it passes: dropping a value a browser keeps would bring back the one before it.
  * @param property - The property, lowercase.
  * @param value - Its value without `!important`.
  * @returns {boolean} False when a browser throws the declaration away.
