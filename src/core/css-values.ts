@@ -128,27 +128,69 @@ export function validValue(property: string, value: string): boolean {
 }
 
 /**
- * A value split outside parentheses, strings and escapes, then each word decoded, so `red\9`
- * stays one word with a tab in it, the way a browser reads it before throwing it away.
+ * A value split into its top-level component values, then each one decoded, so `red\9` stays
+ * one word with a tab in it, the way a browser reads it before throwing it away.
  * @param value - The value as written.
  * @param delimiters - Characters that split it besides CSS whitespace.
  * @returns {string[]} Its words.
  */
 function words(value: string, delimiters: string): string[] {
-  const result: string[] = [];
-  let depth = 0;
-  let quote = "";
-  let start = 0;
-  for (let index = 0; index <= value.length; index += 1) {
-    const character = value.charAt(index);
-    if (character === "\\") index = escapeEnd(value, index) - 1;
-    else if (inString(quote, character)) quote = quoteAfter(quote, character);
-    else if (depth === 0 && splits(character, delimiters)) {
-      if (index > start) result.push(identifier(value.slice(start, index)).toLowerCase());
-      start = index + 1;
-    } else depth = Math.max(0, depth + (NESTING[character] ?? 0));
+  return new ComponentValues(value, delimiters).read();
+}
+
+/**
+ * Walks a value the way CSS Syntax does: a closed block ends a word even without a space after
+ * it, as in `url(a.png)#000`, and the end of the value closes any string or block left open.
+ */
+class ComponentValues {
+  private readonly words: string[] = [];
+  private readonly value: string;
+  private readonly delimiters: string;
+  private depth = 0;
+  private quote = "";
+  private start = 0;
+
+  constructor(value: string, delimiters: string) {
+    this.value = value;
+    this.delimiters = delimiters;
   }
-  return result;
+
+  read(): string[] {
+    for (let index = 0; index < this.value.length; index += 1) index = this.step(index);
+    this.cut(this.value.length, `${this.quote}${")".repeat(this.depth)}`);
+    return this.words;
+  }
+
+  /**
+   * Take one character, or a whole escape.
+   * @param index - Its offset.
+   * @returns {number} Offset of the last character taken.
+   */
+  private step(index: number): number {
+    const character = this.value.charAt(index);
+    if (character === "\\") return escapeEnd(this.value, index) - 1;
+    if (inString(this.quote, character)) this.quote = quoteAfter(this.quote, character);
+    else if (this.depth === 0 && splits(character, this.delimiters)) this.cut(index, "", 1);
+    else {
+      this.depth = Math.max(0, this.depth + (NESTING[character] ?? 0));
+      if (this.depth === 0 && character === ")") this.cut(index + 1, "");
+    }
+    return index;
+  }
+
+  /**
+   * End the word at an offset, if it has anything in it.
+   * @param end - Where it ends.
+   * @param closers - What the end of the value adds to close it.
+   * @param skip - Characters after it that belong to no word.
+   */
+  private cut(end: number, closers: string, skip = 0): void {
+    if (end > this.start) {
+      const word = this.value.slice(this.start, end) + closers;
+      this.words.push(identifier(word).toLowerCase());
+    }
+    this.start = end + skip;
+  }
 }
 
 /**
