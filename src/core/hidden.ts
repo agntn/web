@@ -165,15 +165,7 @@ const VISIBLE_VALUES: Readonly<Record<string, RegExp>> = {
 };
 const FIELD_ELEMENTS = new Set(["input", "select", "textarea", "button"]);
 /** Raw text a browser never draws: code, and the fallbacks for frames and plugins. */
-const UNDRAWN_ELEMENTS = new Set([
-  "script",
-  "style",
-  "iframe",
-  "noembed",
-  "noframes",
-  "xmp",
-  "title",
-]);
+const UNDRAWN_ELEMENTS = new Set(["script", "style", "iframe", "noembed", "noframes", "title"]);
 /** Start tags that close an open `<p>`, the way the HTML tree builder does. */
 const CLOSES_PARAGRAPH = new Set([
   "address",
@@ -205,6 +197,7 @@ const CLOSES_PARAGRAPH = new Set([
   "section",
   "table",
   "ul",
+  "xmp",
 ]);
 const PARAGRAPH_SCOPE = [
   "applet",
@@ -585,18 +578,24 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
   }
 
   /**
-   * Close whatever a start tag ends without saying so.
+   * Close whatever an HTML start tag ends without saying so; one in SVG or MathML ends nothing.
    * @param tag - The tag about to open.
    * @returns {boolean} False for a second `<html>`, `<head>` or `<body>`, which opens nothing.
    */
   opens(tag: HtmlStartTag): boolean {
     const { name } = tag;
     this.breakOut(tag);
+    if (this.namespaceAt(name) !== "html") return true;
+    this.closeImplied(name);
+    return !SINGLETON_ELEMENTS.has(name) || !this.isOpen(name);
+  }
+
+  /** @param name - An HTML tag that may end an open list item, cell, `<p>` or heading. */
+  private closeImplied(name: string): void {
     const rule = Object.hasOwn(IMPLIED_END, name) ? IMPLIED_END[name] : undefined;
     if (rule !== undefined) this.closeWithin(rule.closes, rule.scope);
     if (CLOSES_PARAGRAPH.has(name)) this.closeWithin(["p"], PARAGRAPH_SCOPE);
     if (HEADINGS.has(name) && HEADINGS.has(this.items.at(-1)?.name ?? "")) this.pop();
-    return !SINGLETON_ELEMENTS.has(name) || !this.isOpen(name);
   }
 
   /**
@@ -1264,9 +1263,11 @@ class HiddenScanner {
   private text(token: HtmlText): void {
     const line = this.lineOf(token.start);
     if (this.rawText(token, line)) return;
-    const text = token.cdata ? token.text : decodeCharacterReferences(token.text);
-    const source = token.cdata ? {} : { written: token.text };
-    this.characters(text, line, this.stack.at(-1)?.label, {
+    const top = this.stack.at(-1);
+    const asWritten = token.cdata === true || (top?.name === "xmp" && !top.foreign);
+    const text = asWritten ? token.text : decodeCharacterReferences(token.text);
+    const source = asWritten ? {} : { written: token.text };
+    this.characters(text, line, top?.label, {
       ...source,
       documentStart: token.start === 0,
     });
