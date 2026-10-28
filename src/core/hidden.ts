@@ -88,6 +88,24 @@ const SHEET_FILINGS_LIMIT = 50;
 /** Rules kept across every shadow root, so a page of components can't take a budget each. */
 const SHADOW_RULE_LIMIT = 50 * RULE_LIMIT;
 
+/** SVG elements whose children are HTML again. The tokenizer lowercases `foreignObject`. */
+const SVG_HTML_POINTS = new Set(["foreignobject", "desc", "title"]);
+/** MathML text elements, whose children are HTML but for {@link MATH_GLYPHS}. */
+const MATH_TEXT_POINTS = new Set(["mi", "mo", "mn", "ms", "mtext"]);
+const MATH_GLYPHS = new Set(["mglyph", "malignmark"]);
+/** The `encoding` values that make an `annotation-xml` hold HTML. */
+const ANNOTATION_HTML = new Set(["text/html", "application/xhtml+xml"]);
+/** What a tag like `<p>` closes before it opens: SVG and MathML that hold no HTML. */
+const FOREIGN_CONTENT = new Set<Content>(["svg", "math", "annotation"]);
+/** HTML tags that close the SVG or MathML they open in, and `<font>` with any of these. */
+const BREAKOUT_TAGS = new Set(
+  (
+    "b big blockquote body br center code dd div dl dt em embed h1 h2 h3 h4 h5 h6 head hr i img " +
+    "li listing menu meta nobr ol p pre ruby s small span strong strike sub sup table tt u ul var"
+  ).split(" "),
+);
+const FONT_BREAKOUT = ["color", "face", "size"];
+
 const VOID_ELEMENTS = new Set([
   "area",
   "base",
@@ -359,11 +377,21 @@ const DEFAULT_PAGE: Paint = {
   source: "the default white page",
 };
 
+/** Where an element belongs: HTML, or the SVG and MathML islands that follow XML rules. */
+type Namespace = "html" | "svg" | "math";
+
+/**
+ * What an element's children open as. `mathText` keeps only `mglyph` and `malignmark` MathML,
+ * and `annotation` is an `annotation-xml` without HTML, which still lets an `<svg>` in.
+ */
+type Content = Namespace | "mathText" | "annotation";
+
 /** An element the walk is inside, with what it inherits. */
 interface OpenElement {
   readonly name: string;
   readonly label: string;
   readonly foreign: boolean;
+  readonly content: Content;
   readonly hidden: HiddenText | undefined;
   readonly color: Paint | undefined;
   readonly background: Paint | undefined;
@@ -541,7 +569,7 @@ export function invisibleCharacters(text: string): HiddenFinding[] {
  * paragraphs, lists, options, tables and headings; the rest of its error recovery is out of scope.
  * The sheet pass keeps one too, so both agree on every shadow root.
  */
-class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
+class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content: Content }>> {
   readonly items: T[] = [];
   /** Open elements by name, so a tag nothing matches costs nothing however deep the stack. */
   private readonly open = new Map<string, number>();
@@ -555,10 +583,12 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
 
   /**
    * Close whatever a start tag ends without saying so.
-   * @param name - The tag about to open.
+   * @param tag - The tag about to open.
    * @returns {boolean} False for a second `<html>`, `<head>` or `<body>`, which opens nothing.
    */
-  opens(name: string): boolean {
+  opens(tag: HtmlStartTag): boolean {
+    const { name } = tag;
+    this.breakOut(tag);
     const rule = Object.hasOwn(IMPLIED_END, name) ? IMPLIED_END[name] : undefined;
     if (rule !== undefined) this.closeWithin(rule.closes, rule.scope);
     if (CLOSES_PARAGRAPH.has(name)) this.closeWithin(["p"], PARAGRAPH_SCOPE);
@@ -568,12 +598,19 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
 
   /**
    * SVG and MathML follow XML rules: no HTML attributes to judge, and `/>` closes an element.
-   * CDATA sections and `foreignObject` going back to HTML are not modeled.
    * @param name - The tag about to open.
-   * @returns {boolean} Whether it opens inside, or as, foreign content.
+   * @returns {Namespace} The namespace it opens in.
    */
-  foreignAt(name: string): boolean {
-    return this.items.at(-1)?.foreign === true || name === "svg" || name === "math";
+  namespaceAt(name: string): Namespace {
+    return namespaceIn(this.items.at(-1)?.content ?? "html", name);
+  }
+
+  /**
+   * @returns {boolean} Whether the current element is SVG or MathML, where a `<![CDATA[` opens
+   * text, right inside a `foreignObject` too.
+   */
+  inForeignContent(): boolean {
+    return this.items.at(-1)?.foreign === true;
   }
 
   /**
@@ -625,6 +662,12 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
     if (element === undefined) return;
     this.open.set(element.name, (this.open.get(element.name) ?? 1) - 1);
     this.closed(element);
+  }
+
+  /** @param tag - A tag like `<p>`, which pops SVG and MathML down to whatever holds HTML. */
+  private breakOut(tag: HtmlStartTag): void {
+    if (!breaksOut(tag)) return;
+    while (FOREIGN_CONTENT.has(this.items.at(-1)?.content ?? "html")) this.pop();
   }
 
   private isOpen(name: string): boolean {
@@ -762,7 +805,7 @@ class HiddenScanner {
   private *walkOrder(): Generator<HtmlToken> {
     const holds: Hold[] = [];
     let index = -1;
-    for (const token of tokenizeHtml(this.html)) {
+    for (const token of tokenizeHtml(this.html, (offset) => this.nesting.sections.has(offset))) {
       index += 1;
       const hold = holds.at(-1);
       if (hold !== undefined && index < hold.move.template) {
@@ -809,7 +852,7 @@ class HiddenScanner {
     let inStyle = false;
     let index = -1;
     const nesting = new Nesting();
-    for (const token of tokenizeHtml(this.html)) {
+    for (const token of tokenizeHtml(this.html, (offset) => nesting.cdataAt(offset))) {
       index += 1;
       if (token.kind === "text" && inStyle) {
         this.fileSheet(token.text);
@@ -986,21 +1029,23 @@ class HiddenScanner {
   }
 
   private start(tag: HtmlStartTag): void {
-    if (!this.elements.opens(tag.name)) return;
+    if (!this.elements.opens(tag)) return;
     const place = { label: labelOf(tag), line: this.lineOf(tag.start) };
-    const foreign = this.elements.foreignAt(tag.name);
+    const namespace = this.elements.namespaceAt(tag.name);
+    const foreign = namespace !== "html";
     if (!foreign) this.tallyAttributes(tag, place);
     for (const { value, written, start } of tag.attributes) {
       this.characters(value, this.lineOf(start), place.label, { written, attribute: true });
     }
     this.headFinding(tag, place);
-    this.elements.push(this.element(tag, place, foreign));
+    this.elements.push(this.element(tag, place, namespace));
     if (tag.name === "slot" && !foreign) this.fileSlot(tag);
     if (FIELD_ELEMENTS.has(tag.name)) this.field(tag, place);
     this.elements.settle(tag, foreign);
   }
 
-  private element(tag: HtmlStartTag, place: Place, foreign: boolean): OpenElement {
+  private element(tag: HtmlStartTag, place: Place, namespace: Namespace): OpenElement {
+    const foreign = namespace !== "html";
     const shadowRoot = this.shadowRootAt(tag, place, foreign);
     if (shadowRoot !== undefined) return shadowRoot;
     const parent = this.stack.at(-1);
@@ -1018,6 +1063,7 @@ class HiddenScanner {
       name: tag.name,
       label: place.label,
       foreign,
+      content: contentOf(tag, namespace),
       hidden,
       color,
       background,
@@ -1065,6 +1111,7 @@ class HiddenScanner {
       ...(styles.assumeDefaults ? {} : ownSheets),
       name: tag.name,
       label: place.label,
+      content: "html",
       owned: [],
       styles,
       slots,
@@ -1193,9 +1240,10 @@ class HiddenScanner {
   private text(token: HtmlText): void {
     const line = this.lineOf(token.start);
     if (this.rawText(token.text, line)) return;
-    const text = decodeCharacterReferences(token.text);
+    const text = token.cdata ? token.text : decodeCharacterReferences(token.text);
+    const source = token.cdata ? {} : { written: token.text };
     this.characters(text, line, this.stack.at(-1)?.label, {
-      written: token.text,
+      ...source,
       documentStart: token.start === 0,
     });
     this.textRecord(line, text)?.add(text);
@@ -1365,6 +1413,42 @@ function closesAtOnce(tag: HtmlStartTag, foreign: boolean): boolean {
 }
 
 /**
+ * @param tag - A start tag.
+ * @returns {boolean} Whether it closes SVG or MathML when it opens in them.
+ */
+function breaksOut(tag: HtmlStartTag): boolean {
+  if (tag.name !== "font") return BREAKOUT_TAGS.has(tag.name);
+  return FONT_BREAKOUT.some((name) => attribute(tag, name) !== undefined);
+}
+
+/**
+ * @param content - What the parent's children open as.
+ * @param name - The tag about to open.
+ * @returns {Namespace} Its namespace; inside SVG, even a `<math>` stays SVG.
+ */
+function namespaceIn(content: Content, name: string): Namespace {
+  if (content === "svg" || content === "math") return content;
+  if (name === "svg" || name === "math") return name;
+  if (content === "annotation" || (content === "mathText" && MATH_GLYPHS.has(name))) return "math";
+  return "html";
+}
+
+/**
+ * Children of `foreignObject`, `desc`, an SVG `title` and an HTML `annotation-xml` are HTML again.
+ * @param tag - Its start tag.
+ * @param namespace - The namespace it opened in.
+ * @returns {Content} What its children open as.
+ */
+function contentOf(tag: HtmlStartTag, namespace: Namespace): Content {
+  if (namespace === "svg") return SVG_HTML_POINTS.has(tag.name) ? "html" : "svg";
+  if (namespace === "html") return "html";
+  if (MATH_TEXT_POINTS.has(tag.name)) return "mathText";
+  if (tag.name !== "annotation-xml") return "math";
+  const encoding = attribute(tag, "encoding")?.toLowerCase() ?? "";
+  return ANNOTATION_HTML.has(encoding) ? "html" : "annotation";
+}
+
+/**
  * Why an element and everything in it stays out of sight.
  * @param tag - The start tag.
  * @param declarations - Its winning declarations.
@@ -1437,6 +1521,7 @@ function styleIsCss(tag: HtmlStartTag): boolean {
 interface Nested {
   readonly name: string;
   readonly foreign: boolean;
+  readonly content: Content;
   readonly kind: "inert" | "shadow" | "other";
   /** Token index of its start tag. */
   readonly index: number;
@@ -1458,6 +1543,8 @@ interface Move {
 class Nesting {
   /** Hosts by token index, the ones with light DOM ahead of their shadow root's template. */
   readonly moves = new Map<number, Move>();
+  /** Offsets of the `<![CDATA[` that open a section, so the walk splits the page the same way. */
+  readonly sections = new Set<number>();
   /** Hosts by the offset of their shadow root's template. */
   private readonly hosts = new Map<number, Nested>();
   private readonly elements = new ElementStack<Nested>((element) => {
@@ -1486,7 +1573,7 @@ class Nesting {
     this.index = index;
     if (token.kind === "end") this.elements.end(token.name);
     else if (token.kind === "text") this.request("");
-    else if (token.kind === "start" && this.elements.opens(token.name)) this.open(token);
+    else if (token.kind === "start" && this.elements.opens(token)) this.open(token);
   }
 
   /**
@@ -1500,6 +1587,16 @@ class Nesting {
     return name === "" ? host.asksDefault : host.asksNamed?.has(name) === true;
   }
 
+  /**
+   * @param offset - Offset of a `<![CDATA[`, met after every token ahead of it has been stepped.
+   * @returns {boolean} Whether it opens a section, which then gets filed in {@link sections}.
+   */
+  cdataAt(offset: number): boolean {
+    if (!this.elements.inForeignContent()) return false;
+    this.sections.add(offset);
+    return true;
+  }
+
   /** @param last - Index of the page's last token, where the end of the file closes the rest. */
   finish(last: number): void {
     this.index = last;
@@ -1511,7 +1608,8 @@ class Nesting {
    * @param tag - The start tag.
    */
   private open(tag: HtmlStartTag): void {
-    const foreign = this.elements.foreignAt(tag.name);
+    const namespace = this.elements.namespaceAt(tag.name);
+    const foreign = namespace !== "html";
     const host = this.elements.items.at(-1)?.index;
     let kind: Nested["kind"] = "other";
     if (tag.name === "template" && !foreign)
@@ -1519,6 +1617,7 @@ class Nesting {
     const element: Nested = {
       name: tag.name,
       foreign,
+      content: contentOf(tag, namespace),
       kind,
       index: this.index,
       asksDefault: false,
