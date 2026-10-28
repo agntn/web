@@ -993,6 +993,8 @@ describe("revealHtml", () => {
     const html = [
       "<div><template shadowrootmode=open><link rel=stylesheet href=s.css>",
       "<span style='color:#fff'>linked</span></template></div>",
+      "<div style='color:#fff'><template shadowrootmode=open><link rel=stylesheet href=s.css>",
+      "host</template></div>",
       "<div><template shadowrootmode=open><span style='color:#fff'>plain</span></template></div>",
       "<span style='color:#fff'>page</span>",
     ].join("");
@@ -1001,6 +1003,28 @@ describe("revealHtml", () => {
       "plain",
       "page",
     ]);
+  });
+
+  it("keeps a host's own camouflage in a shadow root with sheets of its own", () => {
+    const html = [
+      "<div style='color:red;background:red'><template shadowrootmode=open>",
+      "<link rel=stylesheet href=s.css><span>secret</span></template></div>",
+    ].join("");
+
+    expect(ofKind(revealHtml(html), "camouflage")).toEqual([
+      expect.objectContaining({ value: "secret" }),
+    ]);
+  });
+
+  it("closes no list item across a template", () => {
+    const url = "https://example.com/";
+    const html = [
+      "<ul><li><template><li><style>.x { display: none }</style><link rel=stylesheet href=t.css>",
+      "</li></template></li></ul><p class=x>visible</p>",
+    ].join("");
+
+    expect(linkedStylesheets(html, { url })).toEqual([]);
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
   });
 
   it("hides a shadow root along with its host", () => {

@@ -566,7 +566,8 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
   }
 
   /**
-   * Close the nearest open element named in `closes`, unless a `scope` element sits above it.
+   * Close the nearest open element named in `closes`, unless a `scope` element or, as in every
+   * HTML scope, a `<template>` sits above it.
    * @param closes - Elements the start tag ends.
    * @param scope - Elements that keep them open.
    */
@@ -579,7 +580,7 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
         while (this.items.length > index) this.pop();
         return;
       }
-      if (scope.includes(name)) return;
+      if (name === "template" || scope.includes(name)) return;
     }
   }
 }
@@ -882,11 +883,10 @@ class HiddenScanner {
     const host = this.stack.at(-1);
     if (host === undefined || !this.elements.attachesShadowRoot(tag, foreign)) return undefined;
     const styles = this.shadows.get(tag.start) ?? new TreeStyles();
-    const ownSheets = {
-      color: unlessDefault(host.color, DEFAULT_TEXT),
-      background: unlessDefault(host.background, DEFAULT_PAGE),
-      camouflage: undefined,
-    };
+    const color = unlessDefault(host.color, DEFAULT_TEXT);
+    const background = unlessDefault(host.background, DEFAULT_PAGE);
+    const defaulted = color !== host.color || background !== host.background;
+    const ownSheets = { color, background, camouflage: defaulted ? undefined : host.camouflage };
     return {
       ...host,
       ...(styles.assumeDefaults ? {} : ownSheets),
