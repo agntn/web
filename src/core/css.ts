@@ -1,3 +1,5 @@
+import { ESCAPE, HEX_COLOR, identifier, validValue } from "./css-values.ts";
+
 /** One declared value and where it came from: the element's `style`, or a rule's selector. */
 export interface Declaration {
   readonly value: string;
@@ -86,8 +88,6 @@ const IMPORTANT = /![ \t\n\r\f]*important$/iu;
  */
 const IDENT =
   /^(?:--|-?(?:[a-z_]|\P{ASCII}|\\(?:(?:[\da-f]{6}|[\da-f]{1,5}(?![\da-f]))[ \t\n\r\f]?|[^\da-f\n\r\f])))(?:[\w-]|\P{ASCII}|\\(?:(?:[\da-f]{6}|[\da-f]{1,5}(?![\da-f]))[ \t\n\r\f]?|[^\da-f\n\r\f]))*$/iu;
-/** A CSS escape: up to six hex digits and one optional space, or any other character. */
-const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
 /** Layers nested deeper than this fold into their ancestor at this depth; no page needs more. */
 export const LAYER_DEPTH_LIMIT = 32;
 /** `@import` with its URL, quoted or in `url()`, and the media list after it. */
@@ -127,7 +127,6 @@ const READ_PROPERTIES = new Set([
   "visibility",
   "width",
 ]);
-const HEX_COLOR = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/iu;
 const RGB_COLOR = /^rgba?\((?<body>[^)]*)\)$/iu;
 const ZERO_LENGTH = /^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[a-z]+|%)?$/iu;
 const FAR_OFF = /^-(?<amount>\d+(?:\.\d+)?)px$/iu;
@@ -181,6 +180,7 @@ export function parseDeclarations(text: string, source?: string): Record<string,
     const raw = trimmed(part.slice(colon + 1));
     const important = IMPORTANT.test(raw);
     const value = important ? trimmed(raw.replace(IMPORTANT, "")) : raw;
+    if (!validValue(property, value)) continue;
     const declaration = { value, important, ...(source === undefined ? {} : { source }) };
     declarations[property] = winner(declarations[property], declaration);
     if (property === "background") {
@@ -394,23 +394,6 @@ function layerName(tokens: readonly string[]): string[] | undefined {
 }
 
 /**
- * An identifier with its escapes decoded, so `\66 oo` and `foo` name the same layer.
- * @param text - The identifier as written.
- * @returns {string} Its value; NUL and code points no string can hold become U+FFFD.
- */
-function identifier(text: string): string {
-  if (!text.includes("\\") && !text.includes("\u0000")) return text;
-  return text
-    .replaceAll(ESCAPE, (_escape, hex: string | undefined, character: string | undefined) => {
-      if (hex === undefined) return character ?? "";
-      const point = Number.parseInt(hex, 16);
-      const invalid = point === 0 || point > 0x10_ff_ff || (point >= 0xd8_00 && point <= 0xdf_ff);
-      return invalid ? "\uFFFD" : String.fromCodePoint(point);
-    })
-    .replaceAll("\u0000", "\uFFFD");
-}
-
-/**
  * A sheet's screen imports and `@layer` names, read before its first rule, as a browser does.
  * @param css - Stylesheet text.
  * @returns {StylesheetPreamble} Imports with URLs as written, unresolved, and layer statements.
@@ -601,7 +584,6 @@ function endsPrelude(character: string, atRule: boolean): boolean {
 /**
  * The cascade for one element: matching rules by layer, then specificity, then its `style`.
  * Layered rules lose to unlayered ones, and win once both sides are `!important`.
- * Values aren't validated per property, so a later invalid one still wins; that's out of scope.
  * @param rulesFor - The page's rules filed under one key, from {@link ruleKey}.
  * @param element - Tag, id and classes of the element.
  * @param inline - Declarations of its `style` attribute.
