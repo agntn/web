@@ -695,10 +695,14 @@ describe("revealHtml", () => {
     const html = [
       "<template><base href=https://cdn.example/><style title=Other>.a { display: none }</style>",
       "<link rel=stylesheet href=t.css><template></template><style>.b { display: none }</style></template>",
-      "<style title=Main>.c { display: none }</style><link rel=stylesheet href=page.css>",
+      "<template><svg></template><style title=Main>.c { display: none }</style>",
+      "<link rel=stylesheet href=page.css>",
       "</svg><svg><template><style>.d { display: none }</style></template></svg>",
       "<svg/><template><style>.e { display: none }</style></template>",
+      "<template/><style>.f { display: none }</style></template>",
+      "<template><svg><template/></template><style>.g { display: none }</style>",
       "<p class=a>a</p><p class=b>b</p><p class=c>c</p><p class=d>d</p><p class=e>e</p>",
+      "<p class=f>f</p><p class=g>g</p>",
     ].join("\n");
     const unstyled = [
       "</template><template><link rel=stylesheet href=t.css><style>@import 'i.css';</style></template>",
@@ -709,6 +713,7 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html, { url }), "hidden")).toEqual([
       expect.objectContaining({ reason: "display: none via .c", value: "c" }),
       expect.objectContaining({ reason: "display: none via .d", value: "d" }),
+      expect.objectContaining({ reason: "display: none via .g", value: "g" }),
     ]);
     expect(linkedStylesheets(unstyled, { url })).toEqual([]);
     expect(ofKind(revealHtml(unstyled), "camouflage")).toEqual([
