@@ -176,7 +176,7 @@ Missing your favourite engine? Extend `Provider`, implement `search`, `read` or 
 ## 🛠️ Development
 
 ```bash
-vp install
+vp install       # installs the library and docs
 vp check         # format, lint and type-check
 vp test
 vp run build     # obuild, straight into dist/

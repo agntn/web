@@ -35,3 +35,5 @@ Test what a caller sees, not how many times something got called. No external se
 ## Dependencies
 
 Fewer is better. A browser, a crawler or a heavy runtime is the cue for a separate package, see the top. The package is ESM only, with no CJS shims, `as any` or `@ts-ignore`.
+
+Versions live in the root `deps` and `dev` catalogs, so one line moves the library and docs together. Nothing is hoisted now, so docs must list every package it imports in `docs/package.json`. Hoisting used to hide the gaps. `test/unit/docs-dependencies.test.ts` names what you forgot.

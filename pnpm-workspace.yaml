@@ -1,10 +1,16 @@
+packages:
+  - docs
+
 allowBuilds:
   "@google/genai": false
+  better-sqlite3: true
   esbuild: true
   koffi: false
   onnxruntime-node: false
   protobufjs: false
   sharp: false
+  vue-demi: true
+  workerd: true
 
 minimumReleaseAgeExclude:
   - "@agntn/*"
@@ -13,6 +19,46 @@ catalog:
   vite: npm:@voidzero-dev/vite-plus-core@0.3.3
   vitest: 4.1.12
   vite-plus: 0.3.3
+
+# One version per name for the library and docs/, which bundles the library from ../src.
+catalogs:
+  deps:
+    "@agntn/hashes": 0.7.2
+    "@agntn/tools": 0.2.4
+    "@modelcontextprotocol/server": 2.2.0
+    better-sqlite3: 12.11.1
+    docus: 5.15.0
+    nitropack: 2.13.5
+    nuxt: 4.6.3
+    ohash: 2.0.12
+    string-width: 8.2.2
+    ufo: 1.6.4
+    zod: 4.3.6
+  dev:
+    "@agntn/ox": 0.1.0
+    "@earendil-works/pi-coding-agent": 1.0.2
+    "@earendil-works/pi-tui": 1.0.2
+    "@iconify-json/lucide": 1.2.147
+    "@iconify-json/simple-icons": 1.2.100
+    "@iconify-json/vscode-icons": 1.2.92
+    "@modelcontextprotocol/client": 2.2.0
+    "@nuxt/content": 3.16.2
+    "@nuxt/ui": 4.12.0
+    "@oh-my-pi/omptype": 18.2.11
+    "@oh-my-pi/pi-coding-agent": 18.2.11
+    "@types/node": 26.6.5
+    "@vueuse/core": 15.0.0
+    ai: 7.0.142
+    changelogen: 0.6.2
+    jiti: 2.7.0
+    obuild: 0.4.45
+    shiki: 4.5.0
+    typebox: 1.1.39
+    typescript: 7.0.2
+    wrangler: 4.128.0
+
+cleanupUnusedCatalogs: true
+
 overrides:
   vite@*: "catalog:"
   vitest@*: "catalog:"
@@ -23,3 +69,6 @@ peerDependencyRules:
   allowedVersions:
     vite: "*"
     vitest: "*"
+
+# Keeps pnpm 12's env document out of the lockfile. GitHub reads that one as zero dependencies.
+pmOnFail: ignore
