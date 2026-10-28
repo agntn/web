@@ -227,19 +227,29 @@ const PARAGRAPH_SCOPE = [
   "template",
 ];
 
+/** Special elements a list item never closes past, minus `search`, which Chromium 156 passes. */
+const LIST_ITEM_SCOPE = new Set(
+  (
+    "applet article aside blockquote button center dd details dir dl dt fieldset figcaption figure " +
+    "footer form h1 h2 h3 h4 h5 h6 header hgroup li listing main marquee menu nav noscript object ol " +
+    "pre section select summary table ul"
+  ).split(" "),
+);
+
 /** A start tag ends an open element of its group unless the group's holder is nearer. */
 interface ImpliedEnd {
   readonly closes: readonly string[];
-  readonly scope: readonly string[];
+  /** Left out for list items, which stop at {@link LIST_ITEM_SCOPE} instead. */
+  readonly scope?: readonly string[];
   /** Table scope, the only one that looks past {@link SCOPE_FENCES}. */
   readonly table?: boolean;
 }
 
 const PARAGRAPH_END: ImpliedEnd = { closes: ["p"], scope: PARAGRAPH_SCOPE };
 const IMPLIED_END: Readonly<Record<string, ImpliedEnd>> = {
-  li: { closes: ["li"], scope: ["ul", "ol", "menu"] },
-  dt: { closes: ["dt", "dd"], scope: ["dl"] },
-  dd: { closes: ["dt", "dd"], scope: ["dl"] },
+  li: { closes: ["li"] },
+  dt: { closes: ["dt", "dd"] },
+  dd: { closes: ["dt", "dd"] },
   option: { closes: ["option"], scope: ["select", "datalist", "optgroup"] },
   tr: { closes: ["tr", "td", "th"], scope: ["table", "tbody", "thead", "tfoot"], table: true },
   td: { closes: ["td", "th"], scope: ["tr", "table"], table: true },
@@ -721,7 +731,7 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
    * @param rule - What the start tag closes and what keeps it open.
    */
   private closeWithin(rule: ImpliedEnd): void {
-    const { closes, scope } = rule;
+    const { closes } = rule;
     if (!closes.some((name) => this.isOpen(name))) return;
     const bottom = Math.max(0, this.items.length - SCOPE_SCAN_LIMIT);
     for (let index = this.items.length - 1; index >= bottom; index -= 1) {
@@ -730,7 +740,7 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
         while (this.items.length > index) this.pop();
         return;
       }
-      if (fences(element, rule.table === true) || scope.includes(element.name)) return;
+      if (holds(rule, element)) return;
     }
   }
 }
@@ -1832,6 +1842,21 @@ function fences(
   table: boolean,
 ): boolean {
   return walledOff(element) || (!table && element.foreign && SCOPE_FENCES.has(element.content));
+}
+
+/**
+ * @param rule - An implied end.
+ * @param element - An open element between the tag and what it may close.
+ * @returns {boolean} Whether the element keeps everything below it open.
+ */
+function holds(
+  rule: ImpliedEnd,
+  element: Readonly<{ name: string; foreign: boolean; content: Content }>,
+): boolean {
+  if (fences(element, rule.table === true)) return true;
+  return rule.scope === undefined
+    ? LIST_ITEM_SCOPE.has(element.name)
+    : rule.scope.includes(element.name);
 }
 
 /**
