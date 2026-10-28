@@ -49,7 +49,6 @@ catalogs:
     "@types/node": 26.6.5
     "@vueuse/core": 15.0.0
     ai: 7.0.142
-    changelogen: 0.6.2
     jiti: 2.7.0
     obuild: 0.4.45
     shiki: 4.5.0

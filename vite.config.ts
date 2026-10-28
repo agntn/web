@@ -7,7 +7,7 @@ export default defineConfig({
   fmt: {
     ...oxfmt,
     /** Page fixtures stay byte for byte as the server sent them. */
-    ignorePatterns: ["dist", "coverage", "docs", "CHANGELOG.md", "test/fixtures/**/*.html"],
+    ignorePatterns: ["dist", "coverage", "docs", "test/fixtures/**/*.html"],
   },
   lint: {
     ...oxlint,
