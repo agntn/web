@@ -1541,6 +1541,85 @@ describe("revealHtml", () => {
       "[CDATA[c]]",
     ]);
   });
+
+  it("reads CDATA in SVG and MathML as text, references as written", () => {
+    const html = [
+      "<svg><text><![CDATA[a",
+      `${ZWSP}b &#8203; <i>]]></text></svg>`,
+      "<math><mi><![CDATA[m]]></mi></math><p><![CDATA[c]]></p>",
+      "<svg><foreignObject><![CDATA[direct]]><div><![CDATA[nested]]></div></foreignObject></svg>",
+      "<svg style='display:none'><text><![CDATA[secret]]></text></svg>",
+    ].join("\n");
+
+    const findings = revealHtml(html);
+
+    expect(ofKind(findings, "comment").map(({ value }) => value)).toEqual([
+      "[CDATA[c]]",
+      "[CDATA[nested]]",
+    ]);
+    expect(
+      ofKind(findings, "invisible").map(({ line, element, codePoints }) => [
+        line,
+        element,
+        codePoints?.[0],
+      ]),
+    ).toEqual([[2, "text", "U+200B"]]);
+    expect(ofKind(findings, "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [5, "secret"],
+    ]);
+  });
+
+  it.each([
+    ["foreignObject", "<svg><foreignObject>%</foreignObject></svg>"],
+    ["desc", "<svg><desc>%</desc></svg>"],
+    ["mtext", "<math><mtext>%</mtext></math>"],
+    [
+      "annotation-xml with HTML",
+      "<math><annotation-xml encoding=TEXT/HTML>%</annotation-xml></math>",
+    ],
+  ])("reads %s as HTML, where /> closes nothing", (_, template) => {
+    const html = template.replace("%", "<div style='display:none'/>secret");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["secret"]);
+  });
+
+  it("keeps XML rules around the HTML that SVG and MathML hold", () => {
+    const html = [
+      "<svg><foreignObject><p data-key='1'>x</p><svg><g data-key='2'/>y</svg></foreignObject></svg>",
+      "<math><mtext><mglyph style='display:none'/>shown</mtext></math>",
+      "<math><annotation-xml><svg><g style='display:none'/>shown</svg></annotation-xml></math>",
+    ].join("\n");
+
+    const findings = revealHtml(html);
+
+    expect(ofKind(findings, "attribute").map(({ name, value }) => [name, value])).toEqual([
+      ["data-key", "1"],
+    ]);
+    expect(ofKind(findings, "hidden")).toEqual([]);
+  });
+
+  it("lets a tag like <p> close the SVG it opens in", () => {
+    const html = [
+      "<svg><g><p><![CDATA[x]]></p></g></svg>",
+      "<svg><g><div style='display:none'/>secret</div></g></svg>",
+      "<svg><font data-key='2'/></svg><svg><font color=red data-key='1'>x</font></svg>",
+    ].join("\n");
+
+    const findings = revealHtml(html);
+
+    expect(ofKind(findings, "comment").map(({ value }) => value)).toEqual(["[CDATA[x]]"]);
+    expect(ofKind(findings, "hidden").map(({ value }) => value)).toEqual(["secret"]);
+    expect(ofKind(findings, "attribute").map(({ name, value }) => [name, value])).toEqual([
+      ["data-key", "1"],
+    ]);
+  });
+
+  it("keeps markup in a CDATA section out of the stylesheets too", () => {
+    const html = "<svg><text><![CDATA[1 > 0 <link rel=stylesheet href=x.css>]]></text></svg>";
+
+    expect(linkedStylesheets(html, { url: "https://example.com/" })).toEqual([]);
+    expect(ofKind(revealHtml(html), "link")).toEqual([]);
+  });
 });
 
 /* One answer of the test server. */

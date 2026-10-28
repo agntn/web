@@ -13,9 +13,14 @@ export interface HtmlText {
   readonly kind: "text";
   readonly start: number;
   readonly text: string;
+  /** Set for a CDATA section, whose references a reader sees as written, never decoded. */
+  readonly cdata?: true;
 }
 
-/** A comment, a `<?...>` or a `<!...>` other than the doctype: all three stay comments. */
+/**
+ * A comment, a `<?...>` or a `<!...>` other than the doctype: all three stay comments, but in SVG
+ * and MathML a `<![CDATA[` opens text.
+ */
 export interface HtmlComment {
   readonly kind: "comment";
   readonly start: number;
@@ -61,6 +66,8 @@ const ENDS = {
 } as const;
 const SPACE = /[\t\n\f\r ]/u;
 const ASCII_LETTER = /[A-Za-z]/u;
+const CDATA_OPEN = "<![CDATA[";
+const CDATA_CLOSE = "]]>";
 /** Markup that opens like a comment but is a declaration a reveal has no use for. */
 const DECLARATIONS: Readonly<Record<string, RegExp>> = {
   "!": /^doctype\b/iu,
@@ -120,13 +127,26 @@ const NAMED_REFERENCES: Readonly<Record<string, string>> = {
   euro: "\u20AC",
 };
 
+/** How a pass reads the source: the tree walk, or the encoding prescan. */
+interface TokenizerMode {
+  /** Whether a script, a style and the like hold text up to their own end tag. */
+  readonly rawText: boolean;
+  /** Whether the `<![CDATA[` at this offset opens a section, which only SVG and MathML do. */
+  readonly cdataAt: (offset: number) => boolean;
+}
+
 /**
  * Split HTML into tokens like a browser does; whatever opens no markup is text.
  * @param html - The page source.
+ * @param cdataAt - Whether a `<![CDATA[` at that offset sits in SVG or MathML. Only the tree
+ * knows, and it has seen every token ahead of it by the time it's asked.
  * @yields {HtmlToken} Tokens in source order, a few at a time, never the whole page as a list.
  */
-export function* tokenizeHtml(html: string): Generator<HtmlToken> {
-  yield* new Tokenizer(html, true).run();
+export function* tokenizeHtml(
+  html: string,
+  cdataAt: (offset: number) => boolean = () => false,
+): Generator<HtmlToken> {
+  yield* new Tokenizer(html, { rawText: true, cdataAt }).run();
 }
 
 /**
@@ -135,7 +155,7 @@ export function* tokenizeHtml(html: string): Generator<HtmlToken> {
  * @yields {HtmlToken} Tokens in source order, with no element read as raw text.
  */
 export function* prescanHtml(html: string): Generator<HtmlToken> {
-  yield* new Tokenizer(html, false).run();
+  yield* new Tokenizer(html, { rawText: false, cdataAt: () => false }).run();
 }
 
 /**
@@ -254,13 +274,15 @@ function isScalarValue(codePoint: number): boolean {
 class Tokenizer {
   private readonly html: string;
   private readonly rawText: boolean;
+  private readonly cdataAt: (offset: number) => boolean;
   private readonly tokens: HtmlToken[] = [];
   private position = 0;
   private textStart = 0;
 
-  constructor(html: string, rawText: boolean) {
+  constructor(html: string, mode: TokenizerMode) {
     this.html = html;
-    this.rawText = rawText;
+    this.rawText = mode.rawText;
+    this.cdataAt = mode.cdataAt;
   }
 
   *run(): Generator<HtmlToken> {
@@ -282,6 +304,8 @@ class Tokenizer {
   private markup(): boolean {
     const next = this.html[this.position + 1] ?? "";
     if (this.html.startsWith("<!--", this.position)) return this.comment();
+    if (this.html.startsWith(CDATA_OPEN, this.position) && this.cdataAt(this.position))
+      return this.cdata();
     if (next === "!" || next === "?") return this.bogusComment(next);
     if (next === "/") return this.endTag();
     if (ASCII_LETTER.test(next)) return this.startTag();
@@ -296,6 +320,24 @@ class Tokenizer {
     const end = close === -1 ? this.html.length : close;
     const after = abrupt ? bodyStart + abrupt[0].length : Math.min(this.html.length, end + 3);
     this.emit({ kind: "comment", start, text: this.html.slice(bodyStart, end) }, after);
+    return true;
+  }
+
+  /**
+   * A CDATA section is text up to `]]>`, or to the end of the source, with nothing decoded.
+   * @returns {boolean} Always true.
+   */
+  private cdata(): boolean {
+    const start = this.position;
+    const textStart = start + CDATA_OPEN.length;
+    const close = this.html.indexOf(CDATA_CLOSE, textStart);
+    const end = close === -1 ? this.html.length : close;
+    this.flushText(start);
+    if (end > textStart) {
+      const text = this.html.slice(textStart, end);
+      this.tokens.push({ kind: "text", start: textStart, text, cdata: true });
+    }
+    this.position = this.textStart = Math.min(this.html.length, end + CDATA_CLOSE.length);
     return true;
   }
 
