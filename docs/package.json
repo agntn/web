@@ -3,17 +3,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nuxt dev --extends docus",
-    "build": "NUXT_SITE_URL=https://web.agntn.dev nuxt build --extends docus",
-    "generate": "NUXT_SITE_URL=https://web.agntn.dev nuxt generate --extends docus",
-    "preview": "nuxt preview --extends docus",
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
     "deploy": "vp run build && vp exec wrangler deploy"
   },
   "dependencies": {
     "@agntn/hashes": "0.7.2",
     "better-sqlite3": "12.11.1",
-    "docus": "5.13.0",
-    "nuxt": "4.5.2",
+    "docus": "5.15.0",
+    "nitropack": "2.13.5",
+    "nuxt": "4.6.3",
     "zod": "4.5.4"
   },
   "devDependencies": {

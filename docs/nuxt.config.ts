@@ -20,8 +20,40 @@ export default defineNuxtConfig({
     url: "https://web.agntn.dev",
     name: "@agntn/web",
   },
+  /** The explorer has no markdown twin, so agents get the page itself, not a `/raw` 404. */
+  agentDiscovery: {
+    excludePrefixes: { extend: ["/explorer"] },
+  },
+  /** Docus lists `content/` only, so the explorer page comes from here. */
+  sitemap: {
+    sources: ["/api/__sitemap__/pages"],
+  },
+  /** Spelled out, or agent discovery dumps every page in one heap and titles the landing `/`. */
   llms: {
-    domain: "https://web.agntn.dev",
+    title: "@agntn/web",
+    sections: [
+      {
+        title: "Guide",
+        contentCollection: "docs",
+        contentFilters: [{ field: "path", operator: "LIKE", value: "/guide%" }],
+      },
+      {
+        title: "Providers",
+        contentCollection: "docs",
+        contentFilters: [{ field: "path", operator: "LIKE", value: "/providers%" }],
+      },
+      {
+        title: "Tools",
+        links: [
+          {
+            title: "Explorer",
+            description:
+              "Search one provider, fan out to every configured one, or read a page through the docs worker and see the normalized answer.",
+            href: "https://web.agntn.dev/explorer",
+          },
+        ],
+      },
+    ],
   },
   /** Docus pages define their own OG images; the alt text is the one thing they leave unset. */
   ogImage: {
@@ -112,11 +144,6 @@ export default defineNuxtConfig({
   nitro: {
     preset: "cloudflare_module",
     compatibilityDate: "2026-09-03",
-    prerender: {
-      crawlLinks: true,
-      routes: ["/", "/sitemap.xml", "/robots.txt", "/llms.txt", "/llms-full.txt"],
-      ignore: ["/api"],
-    },
     cloudflare: {
       deployConfig: true,
       nodeCompat: true,
@@ -125,6 +152,12 @@ export default defineNuxtConfig({
     replace: {
       __AGNTN_WEB_BUILD_ID__: JSON.stringify(createSourceBuildId(resolve(librarySource, ".."))),
     },
+  },
+  /** Nuxt's own prerender option, good on any server builder; `nitro.prerender` is Nitro's. */
+  prerender: {
+    crawlLinks: true,
+    routes: ["/", "/sitemap.xml", "/robots.txt", "/llms.txt", "/llms-full.txt"],
+    ignore: ["/api"],
   },
   compatibilityDate: "2026-09-03",
   /** In production the response cache lives in KV, so it survives isolates. */

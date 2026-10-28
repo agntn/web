@@ -1,4 +1,5 @@
 import { has, isProviderConfigured, searchProviderDetailed, searchWithFallback, type SearchPagination } from "@agntn/web";
+import { createError, defineEventHandler, getQuery } from "nuxt/server";
 
 /** One provider's answer for one query, with the diagnostics the library attaches. */
 export interface SearchAnswer {
@@ -76,6 +77,6 @@ export default defineEventHandler(async (event) => {
  */
 function requireWorkerKey(provider: string | undefined): void {
   if (provider && has(provider) && !isProviderConfigured(provider)) {
-    throw createError({ statusCode: 503, statusMessage: `${provider} has no key on the docs worker` });
+    throw createError({ status: 503, statusText: `${provider} has no key on the docs worker` });
   }
 }

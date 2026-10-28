@@ -44,7 +44,7 @@ function firstPagePath(item: ContentNavigationItem): string {
  * current section only, title included; `sections` feeds the header's tabs and `fullNavigation` the
  * mobile menu, which has no tabs and needs every section.
  *
- * @returns {object} `sidebarNavigation`, `fullNavigation` and `sections`.
+ * @returns {object} `subNavigationMode`, `sidebarNavigation`, `fullNavigation` and `sections`.
  */
 export function useSubNavigation() {
   const route = useRoute();
@@ -81,5 +81,5 @@ export function useSubNavigation() {
     })),
   );
 
-  return { sidebarNavigation, fullNavigation, sections };
+  return { subNavigationMode, sidebarNavigation, fullNavigation, sections };
 }

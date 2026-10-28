@@ -18,6 +18,8 @@ const links = computed(() => props.page?.body?.toc?.links ?? []);
 
 const appConfig = useAppConfig();
 const { t } = useDocusI18n();
+/** Docus 5.15 moved the mobile bar's `v-if` up here, so the override carries it. */
+const { subNavigationMode } = useSubNavigation();
 const contentTocVariants = useUIConfig("contentToc");
 
 const { activeHeadings, updateHeadings } = useScrollspy();
@@ -104,7 +106,7 @@ function sectionActive(link: TocLink): boolean {
       </div>
     </nav>
 
-    <DocsAsideMobileBar :links="links" />
+    <LazyDocsAsideMobileBar v-if="subNavigationMode" :links="links" />
   </div>
 </template>
 
