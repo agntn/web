@@ -25,6 +25,7 @@ import {
   lineAt,
   lineStarts,
   tokenizeHtml,
+  type HtmlTree,
   type HtmlComment,
   type HtmlEndTag,
   type HtmlStartTag,
@@ -437,10 +438,12 @@ class SlotTree<T> {
   }
 }
 
-/** An inline script, style or textarea, completed by the text token that follows it. */
+/** An inline script, style or textarea, completed by the text it holds once it closes. */
 interface Pending {
   readonly element: string;
   readonly finding: HiddenFinding;
+  /** Its text children so far; in SVG a CDATA section or a comment splits the code. */
+  text: string;
 }
 
 /** A linked sheet's imports, resolved, its rules and the layers its body names. */
@@ -729,7 +732,7 @@ class HiddenScanner {
   private tree = this.page;
   /** Closing an element settles its pending code or field and reports its hidden records. */
   private readonly elements = new ElementStack<OpenElement>((element) => {
-    if (this.pending?.element === element.name) this.settlePending("");
+    if (this.pending?.element === element.name) this.settlePending();
     for (const record of element.owned) {
       const finding = record.finding();
       if (finding !== undefined) this.findings.push(finding);
@@ -805,7 +808,11 @@ class HiddenScanner {
   private *walkOrder(): Generator<HtmlToken> {
     const holds: Hold[] = [];
     let index = -1;
-    for (const token of tokenizeHtml(this.html, (offset) => this.nesting.sections.has(offset))) {
+    const tree: HtmlTree = {
+      cdataAt: (offset) => this.nesting.sections.has(offset),
+      rawTextAt: (tag) => !this.nesting.markup.has(tag.start),
+    };
+    for (const token of tokenizeHtml(this.html, tree)) {
       index += 1;
       const hold = holds.at(-1);
       if (hold !== undefined && index < hold.move.template) {
@@ -849,21 +856,23 @@ class HiddenScanner {
    * @returns {Nesting} The pass, which also knows where each host's light DOM goes.
    */
   private prepare(): Nesting {
-    let inStyle = false;
     let index = -1;
-    const nesting = new Nesting();
-    for (const token of tokenizeHtml(this.html, (offset) => nesting.cdataAt(offset))) {
+    const nesting = new Nesting((css, root) => {
+      this.fileStyle(css, root);
+    });
+    const tree: HtmlTree = {
+      cdataAt: (offset) => nesting.cdataAt(offset),
+      rawTextAt: (tag) => nesting.rawTextAt(tag),
+    };
+    for (const token of tokenizeHtml(this.html, tree)) {
       index += 1;
-      if (token.kind === "text" && inStyle) {
-        this.fileSheet(token.text);
-        if (/@import\b/iu.test(token.text)) this.tree.assumeDefaults = false;
-      }
-      inStyle = false;
       nesting.step(token, index);
       if (token.kind !== "start" || nesting.inert) continue;
       this.tree = this.treeAt(nesting.shadowRoot);
-      inStyle = token.name === "style" && this.styleApplies(token);
-      this.prepareTag(token);
+      const { namespace } = nesting;
+      if (token.name === "style" && namespace !== "math" && this.styleApplies(token))
+        nesting.gatherSheet();
+      if (namespace === "html") this.prepareTag(token);
     }
     nesting.finish(index);
     this.page.rank();
@@ -882,6 +891,19 @@ class HiddenScanner {
     const tree = new TreeStyles();
     this.shadows.set(start, tree);
     return tree;
+  }
+
+  /**
+   * A `<style>` that just closed; one that imports anything drops the default colors too.
+   * @param css - Its text children, joined.
+   * @param root - The shadow root it opened in, which a template inside it doesn't change.
+   */
+  private fileStyle(css: string, root: number | undefined): void {
+    const current = this.tree;
+    this.tree = this.treeAt(root);
+    this.fileSheet(css);
+    if (/@import\b/iu.test(css)) this.tree.assumeDefaults = false;
+    this.tree = current;
   }
 
   /**
@@ -984,7 +1006,7 @@ class HiddenScanner {
 
   /**
    * A `<base>` counts only in the page's own tree, never in a shadow root.
-   * @param tag - A start tag outside any inert template.
+   * @param tag - An HTML start tag outside any inert template.
    */
   private prepareTag(tag: HtmlStartTag): void {
     if (tag.name === "link") this.prepareLink(tag);
@@ -1037,10 +1059,10 @@ class HiddenScanner {
     for (const { value, written, start } of tag.attributes) {
       this.characters(value, this.lineOf(start), place.label, { written, attribute: true });
     }
-    this.headFinding(tag, place);
+    this.headFinding(tag, place, foreign);
     this.elements.push(this.element(tag, place, namespace));
     if (tag.name === "slot" && !foreign) this.fileSlot(tag);
-    if (FIELD_ELEMENTS.has(tag.name)) this.field(tag, place);
+    if (FIELD_ELEMENTS.has(tag.name) && !foreign) this.field(tag, place);
     this.elements.settle(tag, foreign);
   }
 
@@ -1051,7 +1073,7 @@ class HiddenScanner {
     const parent = this.stack.at(-1);
     this.from = this.inheritedFrom(attribute(tag, "slot") ?? "", place, fallbackOf(tag));
     const declarations = this.declarationsOf(tag);
-    const hidden = this.hiddenAt(tag, place, declarations);
+    const hidden = this.hiddenAt(tag, place, declarations, namespace);
     const { color, background } = this.paintsOf(tag, place, declarations);
     const camouflage =
       hidden === undefined ? this.camouflageAt(place, color, background) : undefined;
@@ -1156,10 +1178,12 @@ class HiddenScanner {
     tag: HtmlStartTag,
     place: Place,
     declarations: Declarations,
+    namespace: Namespace,
   ): HiddenText | undefined {
     const inherited = this.from?.hidden;
     if (inherited !== undefined && !this.shows(tag.name, declarations)) return inherited;
-    const reason = hiddenBy(tag, declarations);
+    const undrawn = namespace === "svg" && UNDRAWN_ELEMENTS.has(tag.name);
+    const reason = undrawn ? `${tag.name} content` : hiddenBy(tag, declarations);
     if (reason === undefined) return undefined;
     return new HiddenText("hidden", place.line, place.label, reason, fallbackOf(tag));
   }
@@ -1239,7 +1263,7 @@ class HiddenScanner {
 
   private text(token: HtmlText): void {
     const line = this.lineOf(token.start);
-    if (this.rawText(token.text, line)) return;
+    if (this.rawText(token, line)) return;
     const text = token.cdata ? token.text : decodeCharacterReferences(token.text);
     const source = token.cdata ? {} : { written: token.text };
     this.characters(text, line, this.stack.at(-1)?.label, {
@@ -1279,18 +1303,19 @@ class HiddenScanner {
 
   /**
    * Text a browser never draws as page text, such as a script or a title.
-   * @param text - The raw text.
+   * @param token - The text, raw in HTML; in SVG and MathML its references decode outside CDATA.
    * @param line - Its line.
    * @returns {boolean} Whether the text was taken here.
    */
-  private rawText(text: string, line: number): boolean {
+  private rawText(token: HtmlText, line: number): boolean {
     const top = this.stack.at(-1);
     if (top === undefined) return false;
-    const pending = this.pending?.element === top.name;
-    if (!pending && !UNDRAWN_ELEMENTS.has(top.name)) return false;
-    this.characters(text, line, top.label);
-    if (pending)
-      this.settlePending(top.name === "textarea" ? decodeCharacterReferences(text) : text);
+    const pending = this.pending?.element === top.name ? this.pending : undefined;
+    if (pending === undefined && !UNDRAWN_ELEMENTS.has(top.name)) return false;
+    const text = childText(token, top.foreign);
+    this.characters(text, line, top.label, text === token.text ? {} : { written: token.text });
+    if (pending !== undefined)
+      pending.text += top.name === "textarea" ? decodeCharacterReferences(text) : text;
     return true;
   }
 
@@ -1301,11 +1326,11 @@ class HiddenScanner {
     this.characters(token.text, line, element);
   }
 
-  private settlePending(text: string): void {
+  private settlePending(): void {
     const pending = this.pending;
     if (pending === undefined) return;
     this.pending = undefined;
-    const { finding } = pending;
+    const { finding, text } = pending;
     if (finding.kind === "field") {
       this.findings.push(text === "" ? finding : { ...finding, value: valueOf(text) });
       return;
@@ -1336,12 +1361,19 @@ class HiddenScanner {
     }
   }
 
-  private headFinding(tag: HtmlStartTag, place: Place): void {
+  /**
+   * What a meta tag, link or inline code holds; in SVG a link or base is just an element.
+   * @param tag - The start tag.
+   * @param place - Its label and line.
+   * @param foreign - Whether it opens in SVG or MathML.
+   */
+  private headFinding(tag: HtmlStartTag, place: Place, foreign: boolean): void {
     let finding: HiddenFinding | undefined;
-    if (tag.name === "meta") finding = metaFinding(tag, place.line);
+    if (tag.name === "script" || tag.name === "style") finding = this.codeFinding(tag, place);
+    else if (foreign) return;
+    else if (tag.name === "meta") finding = metaFinding(tag, place.line);
     else if (tag.name === "link" || tag.name === "base")
       finding = linkFinding(tag, place.line, this.base);
-    else if (tag.name === "script" || tag.name === "style") finding = this.codeFinding(tag, place);
     if (finding !== undefined) this.findings.push(finding);
   }
 
@@ -1357,7 +1389,8 @@ class HiddenScanner {
     };
     const src = kind === "script" ? attribute(tag, "src") : undefined;
     if (src !== undefined) return { ...finding, value: valueOf(resolve(src, this.base)) };
-    this.pending = { element: tag.name, finding };
+    this.settlePending();
+    this.pending = { element: tag.name, finding, text: "" };
     return undefined;
   }
 
@@ -1374,7 +1407,7 @@ class HiddenScanner {
     const holder =
       hidden === undefined ? undefined : `inside hidden ${hidden.label} at line ${hidden.line}`;
     const finding = fieldFinding(tag, place, [type, holder]);
-    if (tag.name === "textarea") this.pending = { element: "textarea", finding };
+    if (tag.name === "textarea") this.pending = { element: "textarea", finding, text: "" };
     else this.findings.push(finding);
   }
 
@@ -1517,6 +1550,15 @@ function styleIsCss(tag: HtmlStartTag): boolean {
   return type === undefined || type === "" || type.toLowerCase() === "text/css";
 }
 
+/**
+ * @param token - A text child of a script, style or the like.
+ * @param foreign - Whether the element sits in SVG or MathML, whose text is markup text.
+ * @returns {string} The text as the element holds it: raw in HTML, decoded outside CDATA there.
+ */
+function childText(token: HtmlText, foreign: boolean): string {
+  return foreign && token.cdata !== true ? decodeCharacterReferences(token.text) : token.text;
+}
+
 /** An element {@link Nesting} tracks: an inert HTML template, a shadow root or anything else. */
 interface Nested {
   readonly name: string;
@@ -1531,6 +1573,10 @@ interface Nested {
   asksDefault: boolean;
   /** Named slots its children ask for, the same way; most elements never get one. */
   asksNamed: Set<string> | undefined;
+  /** For a `<style>` that applies, its text children so far, filed once it closes. */
+  sheet?: string;
+  /** The shadow root that `<style>` opened in, by its template's offset; none for the page. */
+  sheetRoot?: number | undefined;
 }
 
 /** A shadow root's template by its first and last token, walked before the light DOM ahead. */
@@ -1545,15 +1591,30 @@ class Nesting {
   readonly moves = new Map<number, Move>();
   /** Offsets of the `<![CDATA[` that open a section, so the walk splits the page the same way. */
   readonly sections = new Set<number>();
+  /** Offsets of a script, style or the like opened in SVG or MathML, whose tags count there. */
+  readonly markup = new Set<number>();
   /** Hosts by the offset of their shadow root's template. */
   private readonly hosts = new Map<number, Nested>();
   private readonly elements = new ElementStack<Nested>((element) => {
     this.closed(element);
   });
+  /** Takes the CSS of each `<style>` {@link gatherSheet} picked, once the element closes. */
+  private readonly sheetClosed: (css: string, root: number | undefined) => void;
+  /** Where the last start tag opened. */
+  private opened: Namespace = "html";
   private inertTemplates = 0;
   private readonly shadowRoots: number[] = [];
   /** Index of the token being stepped through. */
   private index = 0;
+
+  constructor(sheetClosed: (css: string, root: number | undefined) => void) {
+    this.sheetClosed = sheetClosed;
+  }
+
+  /** @returns {Namespace} Where the start tag just stepped through opened. */
+  get namespace(): Namespace {
+    return this.opened;
+  }
 
   /** @returns {boolean} Whether what comes next sits in an inert HTML template, out of the page. */
   get inert(): boolean {
@@ -1572,8 +1633,16 @@ class Nesting {
   step(token: HtmlToken, index: number): void {
     this.index = index;
     if (token.kind === "end") this.elements.end(token.name);
-    else if (token.kind === "text") this.request("");
-    else if (token.kind === "start" && this.elements.opens(token)) this.open(token);
+    else if (token.kind === "text") this.addText(token);
+    else if (token.kind === "start") this.start(token);
+  }
+
+  /** Gather the text of the `<style>` just opened, unless `/>` closed it at once. */
+  gatherSheet(): void {
+    const style = this.elements.items.at(-1);
+    if (style?.index !== this.index) return;
+    style.sheet = "";
+    style.sheetRoot = this.shadowRoot;
   }
 
   /**
@@ -1597,10 +1666,34 @@ class Nesting {
     return true;
   }
 
+  /**
+   * @param tag - A script, style or the like, met before it gets stepped through. None of them
+   * closes SVG or MathML, so the open elements already say where it lands.
+   * @returns {boolean} Whether it opens as HTML; otherwise it gets filed in {@link markup}.
+   */
+  rawTextAt(tag: HtmlStartTag): boolean {
+    if (this.elements.namespaceAt(tag.name) === "html") return true;
+    this.markup.add(tag.start);
+    return false;
+  }
+
   /** @param last - Index of the page's last token, where the end of the file closes the rest. */
   finish(last: number): void {
     this.index = last;
     while (this.elements.items.length > 0) this.elements.pop();
+  }
+
+  /** @param tag - A start tag; a second `<html>`, `<head>` or `<body>` opens nothing. */
+  private start(tag: HtmlStartTag): void {
+    this.opened = "html";
+    if (this.elements.opens(tag)) this.open(tag);
+  }
+
+  /** @param token - Text, which joins a gathered sheet when its `<style>` holds it directly. */
+  private addText(token: HtmlText): void {
+    this.request("");
+    const parent = this.elements.items.at(-1);
+    if (parent?.sheet !== undefined) parent.sheet += childText(token, parent.foreign);
   }
 
   /**
@@ -1609,6 +1702,7 @@ class Nesting {
    */
   private open(tag: HtmlStartTag): void {
     const namespace = this.elements.namespaceAt(tag.name);
+    this.opened = namespace;
     const foreign = namespace !== "html";
     const host = this.elements.items.at(-1)?.index;
     let kind: Nested["kind"] = "other";
@@ -1649,7 +1743,10 @@ class Nesting {
     else (parent.asksNamed ??= new Set()).add(name);
   }
 
-  private closed(element: Readonly<Pick<Nested, "kind" | "index" | "host">>): void {
+  private closed(
+    element: Readonly<Pick<Nested, "kind" | "index" | "host" | "sheet" | "sheetRoot">>,
+  ): void {
+    if (element.sheet !== undefined) this.sheetClosed(element.sheet, element.sheetRoot);
     if (element.kind === "inert") this.inertTemplates -= 1;
     if (element.kind !== "shadow") return;
     this.shadowRoots.pop();
