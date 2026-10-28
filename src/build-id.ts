@@ -1,10 +1,11 @@
-import { createHash } from "node:crypto";
 import { globSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { Sha256Hasher } from "@agntn/hashes/sha2";
+
+const separator = new Uint8Array(1);
 
 /**
  * Hashes every shipped TypeScript source plus the package and build contracts.
- * Stays on `node:crypto`: `docs/nuxt.config.ts` loads it where no npm package resolves.
  * @param {string} projectRoot - Absolute package root.
  * @returns {string} Twelve hexadecimal characters from the source SHA-256.
  */
@@ -18,14 +19,12 @@ export function createSourceBuildId(projectRoot: string): string {
     ...globSync("src/**/*.ts", { cwd: projectRoot }),
     ...globSync("extensions/pi/**/*.ts", { cwd: projectRoot }),
   ].sort();
-  const hash = createHash("sha256");
+  const hash = new Sha256Hasher();
 
   for (const path of paths) {
-    hash.update(path);
-    hash.update("\0");
-    hash.update(readFileSync(resolve(projectRoot, path)));
-    hash.update("\0");
+    hash.update(Buffer.from(path)).update(separator);
+    hash.update(readFileSync(resolve(projectRoot, path))).update(separator);
   }
 
-  return hash.digest("hex").slice(0, 12);
+  return Buffer.from(hash.digest()).toString("hex").slice(0, 12);
 }
