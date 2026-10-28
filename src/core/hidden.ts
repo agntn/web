@@ -82,8 +82,10 @@ const SCOPE_SCAN_LIMIT = 256;
 const STACK_LIMIT = 512;
 /** Rules kept from a page's stylesheets; Bootstrap files about 370, so past this is no clue. */
 const RULE_LIMIT = 2_000;
-/** Linked sheets filed per page, each import counted; repeated imports would multiply forever. */
+/** Linked sheets filed per tree, each import counted; repeated imports would multiply forever. */
 const SHEET_FILINGS_LIMIT = 50;
+/** Rules kept across every shadow root, so a page of components can't take a budget each. */
+const SHADOW_RULE_LIMIT = 50 * RULE_LIMIT;
 
 const VOID_ELEMENTS = new Set([
   "area",
@@ -103,9 +105,34 @@ const VOID_ELEMENTS = new Set([
   "wbr",
 ]);
 const SINGLETON_ELEMENTS = new Set(["html", "head", "body"]);
-/** Elements that decide whether a sheet in the source reaches the page. */
-const NESTING = new Set(["template", "svg", "math"]);
 const HEADINGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
+/** HTML elements DOM lets a shadow root attach to, besides custom elements. */
+const SHADOW_HOSTS = new Set([
+  "article",
+  "aside",
+  "blockquote",
+  "body",
+  "div",
+  "footer",
+  ...HEADINGS,
+  "header",
+  "main",
+  "nav",
+  "p",
+  "section",
+  "span",
+]);
+/** Hyphenated names SVG and MathML took first, so no custom element can have them. */
+const TAKEN_CUSTOM_NAMES = new Set([
+  "annotation-xml",
+  "color-profile",
+  "font-face",
+  "font-face-src",
+  "font-face-uri",
+  "font-face-format",
+  "font-face-name",
+  "missing-glyph",
+]);
 /** What separates `class` and `rel` tokens: ASCII whitespace, so `a\u00a0` stays one class. */
 const TOKEN_GAP = /[\t\n\f\r ]+/u;
 /** Hiding properties that inherit, so a descendant can set them back. */
@@ -213,7 +240,8 @@ const STANDARD_ATTRIBUTE_NAMES =
   "novalidate nowrap open optimum part pattern ping placeholder playsinline popover popovertarget " +
   "popovertargetaction poster prefix preload profile property readonly referrerpolicy rel required resource " +
   "results rev reversed role rows rowspan rules sandbox scheme scope scrolling selected shadowrootclonable " +
-  "shadowrootdelegatesfocus shadowrootmode shadowrootserializable shape size sizes slot span spellcheck src " +
+  "shadowrootcustomelementregistry shadowrootdelegatesfocus shadowrootmode shadowrootserializable " +
+  "shadowrootslotassignment shape size sizes slot span spellcheck src " +
   "srcdoc srclang srcset standby start step style summary tabindex target text title translate type typeof " +
   "usemap valign value valuetype version vlink vocab vspace width wrap writingsuggestions xmlns";
 let standardAttributes: ReadonlySet<string> | undefined;
@@ -300,6 +328,15 @@ interface Paint {
   readonly source: string;
 }
 
+const DEFAULT_TEXT: Paint = {
+  color: { red: 0, green: 0, blue: 0, alpha: 1 },
+  source: "the default text color",
+};
+const DEFAULT_PAGE: Paint = {
+  color: { red: 255, green: 255, blue: 255, alpha: 1 },
+  source: "the default white page",
+};
+
 /** An element the walk is inside, with what it inherits. */
 interface OpenElement {
   readonly name: string;
@@ -311,6 +348,8 @@ interface OpenElement {
   readonly camouflage: HiddenText | undefined;
   /** Records this element started, reported when it closes. */
   readonly owned: readonly HiddenText[];
+  /** The tree its children sit in, whose rules are the only ones that match them. */
+  readonly styles: TreeStyles;
 }
 
 /** An inline script, style or textarea, completed by the text token that follows it. */
@@ -338,6 +377,69 @@ interface AttributeTally {
   count: number;
 }
 
+/** The rules one tree applies: the page's, or a shadow root's, which no other tree sees. */
+class TreeStyles {
+  /** Stylesheet rules by {@link ruleKey}, so an element meets only the rules that can match it. */
+  readonly rules = new Map<string, StyleRule[]>();
+  ruleCount = 0;
+  /** Linked sheets filed, each import counted; repeated imports would multiply forever. */
+  filings = 0;
+  /** False once it links or imports a sheet that could change the black on white defaults. */
+  assumeDefaults = true;
+  /** Rules in filing order, ranked once every layer is known. */
+  readonly filed: FiledRule[] = [];
+  /** Layers by full name, each part quoted so `a\.b` stays one, with its nested ones in order. */
+  private readonly layers = new Map<string, string[]>([["", []]]);
+  /** How deep each layer sits, so imports can't nest past {@link LAYER_DEPTH_LIMIT} either. */
+  private readonly depths = new Map<string, number>([["", 0]]);
+
+  /**
+   * Declare a layer nested in another, each part the first time it comes up.
+   * @param outer - The full name of the layer it sits in, if any.
+   * @param path - Its name's parts, folded past {@link LAYER_DEPTH_LIMIT}.
+   * @returns {string | undefined} Its full name, or undefined outside any layer.
+   */
+  declareLayer(outer: string | undefined, path: LayerPath): string | undefined {
+    let name = outer ?? "";
+    let depth = this.depths.get(name) ?? 0;
+    for (const part of path.slice(0, Math.max(0, LAYER_DEPTH_LIMIT - depth))) {
+      const full = `${name}/${JSON.stringify(part)}`;
+      depth += 1;
+      if (!this.layers.has(full)) {
+        this.layers.get(name)?.push(full);
+        this.layers.set(full, []);
+        this.depths.set(full, depth);
+      }
+      name = full;
+    }
+    return name === "" ? undefined : name;
+  }
+
+  /**
+   * Rank every layer, nested ones below the rules of the layer around them, as a browser does,
+   * then file the rules by {@link ruleKey}.
+   */
+  rank(): void {
+    const ranks = new Map<string, number>();
+    const stack = [{ name: "", next: 0 }];
+    for (let top = stack.at(-1); top !== undefined; top = stack.at(-1)) {
+      const child = this.layers.get(top.name)?.[top.next];
+      top.next += 1;
+      if (child === undefined) {
+        stack.pop();
+        ranks.set(top.name, ranks.size);
+      } else {
+        stack.push({ name: child, next: 0 });
+      }
+    }
+    for (const { rule, layer } of this.filed) {
+      const ranked = layer === undefined ? rule : { ...rule, layer: ranks.get(layer) };
+      const key = ruleKey(ranked);
+      this.rules.set(key, [...(this.rules.get(key) ?? []), ranked]);
+    }
+  }
+}
+
 /** Where a start tag sits and what the walk names it. */
 interface Place {
   readonly label: string;
@@ -361,7 +463,7 @@ export function revealHtml(html: string, options?: Readonly<RevealHtmlOptions>):
  * @returns {string[]} Absolute URLs in the order the page applies them, each once.
  */
 export function linkedStylesheets(html: string, options?: Readonly<RevealHtmlOptions>): string[] {
-  return [...new HiddenScanner(html, options?.url, options?.stylesheets).linked];
+  return new HiddenScanner(html, options?.url, options?.stylesheets).stylesheets();
 }
 
 /**
@@ -377,39 +479,152 @@ export function invisibleCharacters(text: string): HiddenFinding[] {
 }
 
 /**
- * Walks the tokens once with the stack of open elements. Implied ends follow HTML for paragraphs,
- * lists, options, tables and headings; the rest of its error recovery is out of scope.
+ * Open elements, closed the way the walk models the HTML tree builder. Implied ends follow HTML for
+ * paragraphs, lists, options, tables and headings; the rest of its error recovery is out of scope.
+ * The sheet pass keeps one too, so both agree on every shadow root.
  */
+class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
+  readonly items: T[] = [];
+  /** Open elements by name, so a tag nothing matches costs nothing however deep the stack. */
+  private readonly open = new Map<string, number>();
+  /** Elements that got a shadow root; a second one on the same host stays an inert template. */
+  private readonly hosts = new WeakSet<T>();
+  private readonly closed: (element: T) => void;
+
+  constructor(closed: (element: T) => void) {
+    this.closed = closed;
+  }
+
+  /**
+   * Close whatever a start tag ends without saying so.
+   * @param name - The tag about to open.
+   * @returns {boolean} False for a second `<html>`, `<head>` or `<body>`, which opens nothing.
+   */
+  opens(name: string): boolean {
+    const rule = Object.hasOwn(IMPLIED_END, name) ? IMPLIED_END[name] : undefined;
+    if (rule !== undefined) this.closeWithin(rule.closes, rule.scope);
+    if (CLOSES_PARAGRAPH.has(name)) this.closeWithin(["p"], PARAGRAPH_SCOPE);
+    if (HEADINGS.has(name) && HEADINGS.has(this.items.at(-1)?.name ?? "")) this.pop();
+    return !SINGLETON_ELEMENTS.has(name) || !this.isOpen(name);
+  }
+
+  /**
+   * SVG and MathML follow XML rules: no HTML attributes to judge, and `/>` closes an element.
+   * CDATA sections and `foreignObject` going back to HTML are not modeled.
+   * @param name - The tag about to open.
+   * @returns {boolean} Whether it opens inside, or as, foreign content.
+   */
+  foreignAt(name: string): boolean {
+    return this.items.at(-1)?.foreign === true || name === "svg" || name === "math";
+  }
+
+  /**
+   * A `<template shadowrootmode>` the parser attaches to a host that may take one and has none.
+   * Slots, an implied `<body>` host and custom elements that refuse a shadow root aren't modeled.
+   * @param tag - The start tag.
+   * @param foreign - Whether it opens in SVG or MathML, where a template is just an element.
+   * @returns {boolean} Whether it attaches one; asking again for the same host answers false.
+   */
+  attachesShadowRoot(tag: HtmlStartTag, foreign: boolean): boolean {
+    const host = this.items.at(-1);
+    if (foreign || host === undefined || !opensShadowRoot(tag)) return false;
+    if (!canHostShadow(host.name) || this.hosts.has(host)) return false;
+    this.hosts.add(host);
+    return true;
+  }
+
+  push(element: T): void {
+    this.items.push(element);
+    this.open.set(element.name, (this.open.get(element.name) ?? 0) + 1);
+  }
+
+  /**
+   * Close an element that holds no content where it opens, and any past {@link STACK_LIMIT}.
+   * @param tag - Its start tag.
+   * @param foreign - Whether it sits in foreign content.
+   */
+  settle(tag: HtmlStartTag, foreign: boolean): void {
+    if (closesAtOnce(tag, foreign) || this.items.length > STACK_LIMIT) this.pop();
+  }
+
+  /** @param name - An end tag; it closes nothing past an HTML template but the template. */
+  end(name: string): void {
+    if (!this.isOpen(name)) return;
+    const index = this.items.findLastIndex(
+      (element) => element.name === name || walledOff(element),
+    );
+    if (index === -1 || this.items[index]!.name !== name) return;
+    while (this.items.length > index) this.pop();
+  }
+
+  pop(): void {
+    const element = this.items.pop();
+    if (element === undefined) return;
+    this.open.set(element.name, (this.open.get(element.name) ?? 1) - 1);
+    this.closed(element);
+  }
+
+  private isOpen(name: string): boolean {
+    return (this.open.get(name) ?? 0) > 0;
+  }
+
+  /**
+   * Close the nearest open element named in `closes`, unless a `scope` element or, as in every
+   * HTML scope, a `<template>` sits above it.
+   * @param closes - Elements the start tag ends.
+   * @param scope - Elements that keep them open.
+   */
+  private closeWithin(closes: readonly string[], scope: readonly string[]): void {
+    if (!closes.some((name) => this.isOpen(name))) return;
+    const bottom = Math.max(0, this.items.length - SCOPE_SCAN_LIMIT);
+    for (let index = this.items.length - 1; index >= bottom; index -= 1) {
+      const name = this.items[index]!.name;
+      if (closes.includes(name)) {
+        while (this.items.length > index) this.pop();
+        return;
+      }
+      if (walledOff(this.items[index]!) || scope.includes(name)) return;
+    }
+  }
+}
+
+/** Walks the tokens once with the stack of open elements. */
 class HiddenScanner {
   private readonly lines: number[];
   private readonly html: string;
-  /** Stylesheet rules by {@link ruleKey}, so an element meets only the rules that can match it. */
-  private readonly rules = new Map<string, StyleRule[]>();
-  private ruleCount = 0;
-  private readonly stack: OpenElement[] = [];
-  /** Open elements by name, so a tag nothing matches costs nothing however deep the stack. */
-  private readonly open = new Map<string, number>();
+  private readonly page = new TreeStyles();
+  /** Declarative shadow roots by the offset of their `<template>`. */
+  private readonly shadows = new Map<number, TreeStyles>();
+  /** The tree sheets get filed into while {@link prepare} reads the source. */
+  private tree = this.page;
+  /** Closing an element settles its pending code or field and reports its hidden records. */
+  private readonly elements = new ElementStack<OpenElement>((element) => {
+    if (this.pending?.element === element.name) this.settlePending("");
+    for (const record of element.owned) {
+      const finding = record.finding();
+      if (finding !== undefined) this.findings.push(finding);
+    }
+  });
+  private readonly stack = this.elements.items;
   private readonly findings: HiddenFinding[] = [];
   private readonly attributes = new Map<string, AttributeTally>();
   private base: string | undefined;
   private baseFromPage = false;
-  private assumeDefaults = true;
   private pending: Pending | undefined;
   private readonly sheets: Readonly<Record<string, string | Stylesheet>>;
   /** Each linked sheet parsed once, however often it gets imported. */
   private readonly parsed = new Map<string, ParsedSheet>();
-  private filings = 0;
+  /** Inline sheets by base and text, since every copy of a component brings its own `<style>`. */
+  private readonly inline = new Map<string, ParsedSheet>();
+  /** Rules filed into shadow roots so far, against {@link SHADOW_RULE_LIMIT}. */
+  private shadowRules = 0;
   private preferredTitle: string | undefined;
-  /** Layers by full name, each part quoted so `a\.b` stays one, with its nested ones in order. */
-  private readonly layers = new Map<string, string[]>([["", []]]);
-  /** How deep each layer sits, so imports can't nest past {@link LAYER_DEPTH_LIMIT} either. */
-  private readonly depths = new Map<string, number>([["", 0]]);
   /** Anonymous layers so far, which keeps each one apart. */
   private anonymousLayers = 0;
-  /** Rules in filing order, ranked once every layer is known. */
-  private readonly filed: FiledRule[] = [];
-  /** Every stylesheet the page applies, read or not, by absolute URL. */
-  readonly linked = new Set<string>();
+  /** Every stylesheet the page's own tree applies, read or not, by absolute URL. */
+  private readonly linked = new Set<string>();
+  /** The same for its shadow roots, fetched after the page's own. */
+  private readonly shadowLinked = new Set<string>();
 
   constructor(
     html: string,
@@ -430,7 +645,7 @@ class HiddenScanner {
       else if (token.kind === "text") this.text(token);
       else this.comment(token);
     }
-    while (this.stack.length > 0) this.pop();
+    while (this.stack.length > 0) this.elements.pop();
     const tallies = [...this.attributes.values()].map(({ finding, count }) =>
       count > 1 ? { ...finding, count } : finding,
     );
@@ -440,22 +655,42 @@ class HiddenScanner {
     );
   }
 
-  /** Sheet rules, the `<base>` URL and any linked sheet, before the walk; templates hold none. */
+  /** @returns {string[]} The page's own sheets, then the ones only its shadow roots apply. */
+  stylesheets(): string[] {
+    return [...new Set([...this.linked, ...this.shadowLinked])];
+  }
+
+  /** Sheet rules, the `<base>` URL and linked sheets before the walk; inert templates hold none. */
   private prepare(): void {
     let inStyle = false;
     const nesting = new Nesting();
     for (const token of tokenizeHtml(this.html)) {
       if (token.kind === "text" && inStyle) {
         this.fileSheet(token.text);
-        if (/@import\b/iu.test(token.text)) this.assumeDefaults = false;
+        if (/@import\b/iu.test(token.text)) this.tree.assumeDefaults = false;
       }
       inStyle = false;
       nesting.step(token);
       if (token.kind !== "start" || nesting.inert) continue;
+      this.tree = this.treeAt(nesting.shadowRoot);
       inStyle = token.name === "style" && this.styleApplies(token);
       this.prepareTag(token);
     }
-    this.rankRules();
+    this.page.rank();
+    for (const tree of this.shadows.values()) tree.rank();
+  }
+
+  /**
+   * @param start - Offset of a shadow root's `<template>`, or undefined for the page.
+   * @returns {TreeStyles} That tree, created the first time.
+   */
+  private treeAt(start: number | undefined): TreeStyles {
+    if (start === undefined) return this.page;
+    const known = this.shadows.get(start);
+    if (known !== undefined) return known;
+    const tree = new TreeStyles();
+    this.shadows.set(start, tree);
+    return tree;
   }
 
   /**
@@ -463,7 +698,13 @@ class HiddenScanner {
    * @param css - The content of a `<style>`.
    */
   private fileSheet(css: string): void {
-    this.fileParsed(parseSheet(css, this.base), [], undefined);
+    const key = `${this.base ?? ""}\u0000${css}`;
+    let sheet = this.inline.get(key);
+    if (sheet === undefined) {
+      sheet = parseSheet(css, this.base);
+      this.inline.set(key, sheet);
+    }
+    this.fileParsed(sheet, [], undefined);
   }
 
   /**
@@ -473,11 +714,19 @@ class HiddenScanner {
    * @param layer - The cascade layer an import put it in, if any.
    */
   private fileLinked(url: string, chain: readonly string[], layer: string | undefined): void {
-    this.linked.add(url);
+    const { tree } = this;
+    (tree === this.page ? this.linked : this.shadowLinked).add(url);
     const sheet = this.parsedSheet(url);
-    if (sheet === undefined || chain.includes(url) || this.filings >= SHEET_FILINGS_LIMIT) return;
-    this.filings += 1;
+    if (sheet === undefined || chain.includes(url) || tree.filings >= SHEET_FILINGS_LIMIT) return;
+    if (this.ruleRoom() === 0) return;
+    tree.filings += 1;
     this.fileParsed(sheet, [...chain, url], layer);
+  }
+
+  /** @returns {number} Rules the current tree still takes, shadow roots sharing one budget too. */
+  private ruleRoom(): number {
+    const own = RULE_LIMIT - this.tree.ruleCount;
+    return this.tree === this.page ? own : Math.min(own, SHADOW_RULE_LIMIT - this.shadowRules);
   }
 
   /**
@@ -491,9 +740,10 @@ class HiddenScanner {
     chain: readonly string[],
     layer: string | undefined,
   ): void {
+    const { tree } = this;
     const scope = this.anonymousLayers++;
     const own = (path: LayerPath): string | undefined =>
-      this.declareLayer(
+      tree.declareLayer(
         layer,
         path.map((part) => (part.startsWith("\u0000") ? `\u0000${scope}:${part.slice(1)}` : part)),
       );
@@ -502,11 +752,13 @@ class HiddenScanner {
       else this.fileImport(entry, chain, layer);
     }
     for (const path of sheet.layers) own(path);
-    for (const rule of sheet.rules.slice(0, RULE_LIMIT - this.ruleCount)) {
-      const placed = { ...rule, order: rule.order + this.ruleCount };
-      this.filed.push({ rule: placed, layer: rule.layerPath ? own(rule.layerPath) : layer });
+    const kept = sheet.rules.slice(0, this.ruleRoom());
+    for (const rule of kept) {
+      const placed = { ...rule, order: rule.order + tree.ruleCount };
+      tree.filed.push({ rule: placed, layer: rule.layerPath ? own(rule.layerPath) : layer });
     }
-    this.ruleCount = Math.min(RULE_LIMIT, this.ruleCount + sheet.rules.length);
+    tree.ruleCount = Math.min(RULE_LIMIT, tree.ruleCount + sheet.rules.length);
+    if (tree !== this.page) this.shadowRules += kept.length;
   }
 
   /**
@@ -525,53 +777,7 @@ class HiddenScanner {
     let own: LayerPath | undefined = [];
     if (entry.layer === "") own = anonymous;
     else if (entry.layer !== undefined) own = layerPaths(entry.layer)?.[0];
-    if (own !== undefined) this.fileLinked(entry.url, chain, this.declareLayer(layer, own));
-  }
-
-  /**
-   * Declare a layer nested in another, each part the first time it comes up.
-   * @param outer - The full name of the layer it sits in, if any.
-   * @param path - Its name's parts, folded past {@link LAYER_DEPTH_LIMIT}.
-   * @returns {string | undefined} Its full name, or undefined outside any layer.
-   */
-  private declareLayer(outer: string | undefined, path: LayerPath): string | undefined {
-    let name = outer ?? "";
-    let depth = this.depths.get(name) ?? 0;
-    for (const part of path.slice(0, Math.max(0, LAYER_DEPTH_LIMIT - depth))) {
-      const full = `${name}/${JSON.stringify(part)}`;
-      depth += 1;
-      if (!this.layers.has(full)) {
-        this.layers.get(name)?.push(full);
-        this.layers.set(full, []);
-        this.depths.set(full, depth);
-      }
-      name = full;
-    }
-    return name === "" ? undefined : name;
-  }
-
-  /**
-   * Rank every layer, nested ones below the rules of the layer around them, as a browser does,
-   * then file the rules by {@link ruleKey}.
-   */
-  private rankRules(): void {
-    const ranks = new Map<string, number>();
-    const stack = [{ name: "", next: 0 }];
-    for (let top = stack.at(-1); top !== undefined; top = stack.at(-1)) {
-      const child = this.layers.get(top.name)?.[top.next];
-      top.next += 1;
-      if (child === undefined) {
-        stack.pop();
-        ranks.set(top.name, ranks.size);
-      } else {
-        stack.push({ name: child, next: 0 });
-      }
-    }
-    for (const { rule, layer } of this.filed) {
-      const ranked = layer === undefined ? rule : { ...rule, layer: ranks.get(layer) };
-      const key = ruleKey(ranked);
-      this.rules.set(key, [...(this.rules.get(key) ?? []), ranked]);
-    }
+    if (own !== undefined) this.fileLinked(entry.url, chain, this.tree.declareLayer(layer, own));
   }
 
   private parsedSheet(url: string): ParsedSheet | undefined {
@@ -585,10 +791,15 @@ class HiddenScanner {
     return sheet;
   }
 
+  /**
+   * A `<base>` counts only in the page's own tree, never in a shadow root.
+   * @param tag - A start tag outside any inert template.
+   */
   private prepareTag(tag: HtmlStartTag): void {
     if (tag.name === "link") this.prepareLink(tag);
     const href = attribute(tag, "href");
-    if (tag.name !== "base" || href === undefined || this.baseFromPage) return;
+    if (tag.name !== "base" || href === undefined || this.baseFromPage || this.tree !== this.page)
+      return;
     this.base = resolve(href, this.base);
     this.baseFromPage = true;
   }
@@ -601,7 +812,7 @@ class HiddenScanner {
   private prepareLink(tag: HtmlStartTag): void {
     const rel = attribute(tag, "rel")?.toLowerCase().split(TOKEN_GAP) ?? [];
     if (!rel.includes("stylesheet") || !linkApplies(tag)) return;
-    this.assumeDefaults = false;
+    this.tree.assumeDefaults = false;
     const href = attribute(tag, "href");
     const applied = !rel.includes("alternate") && this.inPreferredSet(attribute(tag, "title"));
     if (href !== undefined && applied) this.fileLinked(resolve(href, this.base), [], undefined);
@@ -614,47 +825,33 @@ class HiddenScanner {
 
   /**
    * Whether a sheet's title keeps it on: an untitled sheet always is, and the first title picks
-   * the set, the way CSSOM chooses the preferred style sheet set.
+   * the set, the way CSSOM chooses the preferred style sheet set. In a shadow root HTML gives the
+   * sheet no title at all.
    * @param title - Its `title` attribute.
    * @returns {boolean} True when a browser applies it without the reader picking another set.
    */
   private inPreferredSet(title: string | undefined): boolean {
-    const name = title ?? "";
+    const name = this.tree === this.page ? (title ?? "") : "";
     if (name === "") return true;
     this.preferredTitle ??= name;
     return this.preferredTitle === name;
   }
 
   private start(tag: HtmlStartTag): void {
-    this.closeImplied(tag.name);
-    if (SINGLETON_ELEMENTS.has(tag.name) && this.isOpen(tag.name)) return;
+    if (!this.elements.opens(tag.name)) return;
     const place = { label: labelOf(tag), line: this.lineOf(tag.start) };
-    const foreign = this.foreignAt(tag.name);
+    const foreign = this.elements.foreignAt(tag.name);
     if (!foreign) this.tallyAttributes(tag, place);
     for (const { value } of tag.attributes) this.characters(value, place.line, place.label);
     this.headFinding(tag, place);
-    const element = this.element(tag, place, foreign);
-    this.stack.push(element);
-    this.open.set(element.name, (this.open.get(element.name) ?? 0) + 1);
+    this.elements.push(this.element(tag, place, foreign));
     if (FIELD_ELEMENTS.has(tag.name)) this.field(tag, place);
-    if (closesAtOnce(tag, foreign) || this.stack.length > STACK_LIMIT) this.pop();
-  }
-
-  /**
-   * SVG and MathML follow XML rules: no HTML attributes to judge, and `/>` closes an element.
-   * CDATA sections and `foreignObject` going back to HTML are not modeled.
-   * @param name - The tag about to open.
-   * @returns {boolean} Whether it opens inside, or as, foreign content.
-   */
-  private foreignAt(name: string): boolean {
-    return this.stack.at(-1)?.foreign === true || name === "svg" || name === "math";
-  }
-
-  private isOpen(name: string): boolean {
-    return (this.open.get(name) ?? 0) > 0;
+    this.elements.settle(tag, foreign);
   }
 
   private element(tag: HtmlStartTag, place: Place, foreign: boolean): OpenElement {
+    const shadowRoot = this.shadowRootAt(tag, place, foreign);
+    if (shadowRoot !== undefined) return shadowRoot;
     const declarations = this.declarationsOf(tag);
     const hidden = this.hiddenAt(tag, place, declarations);
     const { color, background } = this.paintsOf(tag, place, declarations);
@@ -674,6 +871,32 @@ class HiddenScanner {
       background,
       camouflage,
       owned,
+      styles: parent?.styles ?? this.page,
+    };
+  }
+
+  /**
+   * A shadow root renders as part of its host and inherits from it, so the template hides nothing.
+   * @param tag - The start tag.
+   * @param place - Its label and line.
+   * @param foreign - Whether it opens in foreign content.
+   * @returns {OpenElement | undefined} The shadow root, or undefined when the tag opens none.
+   */
+  private shadowRootAt(tag: HtmlStartTag, place: Place, foreign: boolean): OpenElement | undefined {
+    const host = this.stack.at(-1);
+    if (host === undefined || !this.elements.attachesShadowRoot(tag, foreign)) return undefined;
+    const styles = this.shadows.get(tag.start) ?? new TreeStyles();
+    const color = unlessDefault(host.color, DEFAULT_TEXT);
+    const background = unlessDefault(host.background, DEFAULT_PAGE);
+    const defaulted = color !== host.color || background !== host.background;
+    const ownSheets = { color, background, camouflage: defaulted ? undefined : host.camouflage };
+    return {
+      ...host,
+      ...(styles.assumeDefaults ? {} : ownSheets),
+      name: tag.name,
+      label: place.label,
+      owned: [],
+      styles,
     };
   }
 
@@ -741,10 +964,9 @@ class HiddenScanner {
    * @returns {Paint | undefined} The default, or undefined when a stylesheet could change it.
    */
   private defaultPaint(role: "text" | "page"): Paint | undefined {
-    if (!this.assumeDefaults) return undefined;
-    const channel = role === "text" ? 0 : 255;
-    const color = { red: channel, green: channel, blue: channel, alpha: 1 };
-    return { color, source: role === "text" ? "the default text color" : "the default white page" };
+    const tree = this.stack.at(-1)?.styles ?? this.page;
+    if (!this.page.assumeDefaults || !tree.assumeDefaults) return undefined;
+    return role === "text" ? DEFAULT_TEXT : DEFAULT_PAGE;
   }
 
   private declarationsOf(tag: HtmlStartTag): Declarations {
@@ -755,50 +977,12 @@ class HiddenScanner {
       classes: classesOf(tag),
       ...(id === undefined ? {} : { id }),
     };
-    return cascade((key) => this.rules.get(key) ?? [], identity, inline);
+    const { rules } = this.stack.at(-1)?.styles ?? this.page;
+    return cascade((key) => rules.get(key) ?? [], identity, inline);
   }
 
   private end(tag: HtmlEndTag): void {
-    if (!this.isOpen(tag.name)) return;
-    const index = this.stack.findLastIndex(({ name }) => name === tag.name);
-    if (index === -1) return;
-    while (this.stack.length > index) this.pop();
-  }
-
-  private pop(): void {
-    const element = this.stack.pop();
-    if (element === undefined) return;
-    this.open.set(element.name, (this.open.get(element.name) ?? 1) - 1);
-    if (this.pending?.element === element.name) this.settlePending("");
-    for (const record of element.owned) {
-      const finding = record.finding();
-      if (finding !== undefined) this.findings.push(finding);
-    }
-  }
-
-  private closeImplied(name: string): void {
-    const rule = Object.hasOwn(IMPLIED_END, name) ? IMPLIED_END[name] : undefined;
-    if (rule !== undefined) this.closeWithin(rule.closes, rule.scope);
-    if (CLOSES_PARAGRAPH.has(name)) this.closeWithin(["p"], PARAGRAPH_SCOPE);
-    if (HEADINGS.has(name) && HEADINGS.has(this.stack.at(-1)?.name ?? "")) this.pop();
-  }
-
-  /**
-   * Close the nearest open element named in `closes`, unless a `scope` element sits above it.
-   * @param closes - Elements the start tag ends.
-   * @param scope - Elements that keep them open.
-   */
-  private closeWithin(closes: readonly string[], scope: readonly string[]): void {
-    if (!closes.some((name) => this.isOpen(name))) return;
-    const bottom = Math.max(0, this.stack.length - SCOPE_SCAN_LIMIT);
-    for (let index = this.stack.length - 1; index >= bottom; index -= 1) {
-      const name = this.stack[index]!.name;
-      if (closes.includes(name)) {
-        while (this.stack.length > index) this.pop();
-        return;
-      }
-      if (scope.includes(name)) return;
-    }
+    this.elements.end(tag.name);
   }
 
   private text(token: HtmlText): void {
@@ -1009,46 +1193,91 @@ function styleIsCss(tag: HtmlStartTag): boolean {
   return type === undefined || type === "" || type.toLowerCase() === "text/css";
 }
 
-/** Templates and SVG or MathML elements open in the source, closed the way the walk closes them. */
-class Nesting {
-  private readonly stack: string[] = [];
-  private readonly counts = new Map<string, number>();
+/** An element {@link Nesting} tracks: an inert HTML template, a shadow root or anything else. */
+interface Nested {
+  readonly name: string;
+  readonly foreign: boolean;
+  readonly kind: "inert" | "shadow" | "other";
+}
 
-  /** @returns {boolean} Whether what comes next sits in an HTML template, out of the page. */
+/** What the sheet pass sits in, on the same stack the walk keeps: inert templates, shadow roots. */
+class Nesting {
+  private readonly elements = new ElementStack<Nested>((element) => {
+    this.closed(element);
+  });
+  private inertTemplates = 0;
+  private readonly shadowRoots: number[] = [];
+
+  /** @returns {boolean} Whether what comes next sits in an inert HTML template, out of the page. */
   get inert(): boolean {
-    return this.stack[0] === "template";
+    return this.inertTemplates > 0;
+  }
+
+  /** @returns {number | undefined} Offset of the innermost shadow root open, if any. */
+  get shadowRoot(): number | undefined {
+    return this.shadowRoots.at(-1);
+  }
+
+  /** @param token - The next token. */
+  step(token: HtmlToken): void {
+    if (token.kind === "end") this.elements.end(token.name);
+    else if (token.kind === "start" && this.elements.opens(token.name)) this.open(token);
   }
 
   /**
    * Only an HTML template walls its content off; inside SVG or MathML it's just another element.
-   * @param token - The next token.
+   * @param tag - The start tag.
    */
-  step(token: HtmlToken): void {
-    if ((token.kind !== "start" && token.kind !== "end") || !NESTING.has(token.name)) return;
-    if (token.kind === "end") this.close(token.name);
-    else if (!token.selfClosing || !this.foreignAt(token.name)) this.push(token.name);
+  private open(tag: HtmlStartTag): void {
+    const foreign = this.elements.foreignAt(tag.name);
+    let kind: Nested["kind"] = "other";
+    if (tag.name === "template" && !foreign)
+      kind = this.elements.attachesShadowRoot(tag, foreign) ? "shadow" : "inert";
+    this.elements.push({ name: tag.name, foreign, kind });
+    if (kind === "inert") this.inertTemplates += 1;
+    else if (kind === "shadow") this.shadowRoots.push(tag.start);
+    this.elements.settle(tag, foreign);
   }
 
-  private foreignAt(name: string): boolean {
-    return name !== "template" || this.count("svg") + this.count("math") > 0;
+  private closed(element: Nested): void {
+    if (element.kind === "inert") this.inertTemplates -= 1;
+    else if (element.kind === "shadow") this.shadowRoots.pop();
   }
+}
 
-  private push(name: string): void {
-    this.stack.push(name);
-    this.counts.set(name, this.count(name) + 1);
-  }
+/**
+ * @param tag - A start tag.
+ * @returns {boolean} Whether it's a template whose `shadowrootmode` is `open` or `closed`.
+ */
+function opensShadowRoot(tag: HtmlStartTag): boolean {
+  const mode = attribute(tag, "shadowrootmode")?.toLowerCase();
+  return tag.name === "template" && (mode === "open" || mode === "closed");
+}
 
-  private close(name: string): void {
-    if (this.count(name) === 0) return;
-    for (let popped = this.stack.pop(); popped !== undefined; popped = this.stack.pop()) {
-      this.counts.set(popped, this.count(popped) - 1);
-      if (popped === name) return;
-    }
-  }
+/**
+ * @param name - An HTML element's name.
+ * @returns {boolean} Whether DOM lets it host a shadow root: a custom element or one of a few.
+ */
+function canHostShadow(name: string): boolean {
+  if (SHADOW_HOSTS.has(name)) return true;
+  return /^[a-z]/u.test(name) && name.includes("-") && !TAKEN_CUSTOM_NAMES.has(name);
+}
 
-  private count(name: string): number {
-    return this.counts.get(name) ?? 0;
-  }
+/**
+ * @param element - An open element.
+ * @returns {boolean} Whether it's an HTML template, which no end tag or implied end crosses.
+ */
+function walledOff(element: Readonly<{ name: string; foreign: boolean }>): boolean {
+  return element.name === "template" && !element.foreign;
+}
+
+/**
+ * @param paint - A paint a shadow root inherits.
+ * @param standard - The default it could be.
+ * @returns {Paint | undefined} The paint, or undefined when it's only the default.
+ */
+function unlessDefault(paint: Paint | undefined, standard: Paint): Paint | undefined {
+  return paint === standard ? undefined : paint;
 }
 
 function fieldType(tag: HtmlStartTag): string {

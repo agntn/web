@@ -875,6 +875,179 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("shows what a declarative shadow root renders", () => {
+    const html = [
+      "<div><template shadowrootmode=open><p>Shown in every browser</p><slot></slot></template>light</div>",
+      "<my-card><template shadowrootmode=CLOSED shadowrootslotassignment=manual>card</template></my-card>",
+    ].join("");
+
+    const findings = revealHtml(html);
+
+    expect(ofKind(findings, "hidden")).toEqual([]);
+    expect(ofKind(findings, "attribute")).toEqual([]);
+  });
+
+  it("keeps a shadow root's styles in its own tree", () => {
+    const url = "https://example.com/";
+    const html = [
+      "<style>.a { display: none }</style>",
+      "<div><template shadowrootmode=open><base href=https://cdn.example/>",
+      "<style title=Other>.b { display: none }</style><link rel=stylesheet href=s.css>",
+      "<p class=a>a in</p><p class=b>b in</p><p class=s>s in</p></template></div>",
+      "<style title=Main>.m { display: none }</style>",
+      "<p class=a>a out</p><p class=b>b out</p><p class=s>s out</p><p class=m>m</p>",
+    ].join("\n");
+    const stylesheets = { "https://example.com/s.css": ".s { display: none }" };
+
+    expect(linkedStylesheets(html, { url })).toEqual(["https://example.com/s.css"]);
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .b", value: "b in" }),
+      expect.objectContaining({ reason: "display: none via .s", value: "s in" }),
+      expect.objectContaining({ reason: "display: none via .a", value: "a out" }),
+      expect.objectContaining({ reason: "display: none via .m", value: "m" }),
+    ]);
+  });
+
+  it.each([
+    ["a mode HTML doesn't define", "<div><template shadowrootmode=' open'>x</template></div>"],
+    ["a host that can't take one", "<a><template shadowrootmode=open>x</template></a>"],
+    ["a name SVG took first", "<font-face><template shadowrootmode=open>x</template></font-face>"],
+    [
+      "a second root on one host",
+      "<div><template shadowrootmode=open></template><template shadowrootmode=open>x</template></div>",
+    ],
+    ["a root inside a template", "<template><div><template shadowrootmode=open>x</template></div>"],
+    ["an SVG host", "<svg><my-el><template shadowrootmode=open>x</template></my-el></svg>"],
+  ])("leaves a template inert for %s", (_label, html) => {
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "template content", value: "x" }),
+    ]);
+  });
+
+  it("applies no sheet from a template that attaches no shadow root", () => {
+    const html = [
+      "<a><template shadowrootmode=open><style>.a { display: none }</style><p class=a>x</p></template></a>",
+      "<p class=a>a</p>",
+    ].join("");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "template content", value: "x" }),
+    ]);
+  });
+
+  it("fetches no sheet a template that attaches no shadow root links", () => {
+    const url = "https://example.com/";
+    const links = Array.from(
+      { length: 10 },
+      (_, index) => `<link rel=stylesheet href=s${index}.css>`,
+    );
+    const html = [
+      `<a><template shadowrootmode=open>${links.join("")}</template></a>`,
+      `<div><template shadowrootmode=open></template><template shadowrootmode=open>${links.join("")}</template></div>`,
+      "<link rel=stylesheet href=page.css>",
+    ].join("");
+
+    expect(linkedStylesheets(html, { url })).toEqual(["https://example.com/page.css"]);
+  });
+
+  it("keeps the page's sheets ahead of and apart from its components' sheets", () => {
+    const url = "https://example.com/";
+    const card =
+      "<div><template shadowrootmode=open><link rel=stylesheet href=shared.css></template></div>";
+    const html = `${card.repeat(60)}<link rel=stylesheet href=page.css><p class=outside>x</p>`;
+    const stylesheets = {
+      "https://example.com/shared.css": ".inside { color: red }",
+      "https://example.com/page.css": ".outside { display: none }",
+    };
+
+    expect(linkedStylesheets(html, { url })).toEqual([
+      "https://example.com/page.css",
+      "https://example.com/shared.css",
+    ]);
+    expect(ofKind(revealHtml(html, { url, stylesheets }), "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .outside", value: "x" }),
+    ]);
+  });
+
+  it("files one big sheet into thousands of shadow roots in one pass", () => {
+    const url = "https://example.com/";
+    const rules = Array.from({ length: 2_000 }, (_, index) => `.r${index} { color: red }`);
+    const card =
+      "<div><template shadowrootmode=open><link rel=stylesheet href=big.css></template></div>";
+    const html = `${card.repeat(4_000)}<link rel=stylesheet href=page.css><p class=outside>x</p>`;
+    const stylesheets = {
+      "https://example.com/big.css": rules.join("\n"),
+      "https://example.com/page.css": ".outside { display: none }",
+    };
+
+    const started = cpuNow();
+    const findings = revealHtml(html, { url, stylesheets });
+
+    expect(cpuNow() - started).toBeLessThan(3_000);
+    expect(ofKind(findings, "hidden")).toEqual([
+      expect.objectContaining({ reason: "display: none via .outside", value: "x" }),
+    ]);
+  });
+
+  it("lets a shadow root's sheets drop the default colors in its own tree only", () => {
+    const html = [
+      "<div><template shadowrootmode=open><link rel=stylesheet href=s.css>",
+      "<span style='color:#fff'>linked</span></template></div>",
+      "<div style='color:#fff'><template shadowrootmode=open><link rel=stylesheet href=s.css>",
+      "host</template></div>",
+      "<div><template shadowrootmode=open><span style='color:#fff'>plain</span></template></div>",
+      "<span style='color:#fff'>page</span>",
+    ].join("");
+
+    expect(ofKind(revealHtml(html), "camouflage").map(({ value }) => value)).toEqual([
+      "plain",
+      "page",
+    ]);
+  });
+
+  it("keeps a host's own camouflage in a shadow root with sheets of its own", () => {
+    const html = [
+      "<div style='color:red;background:red'><template shadowrootmode=open>",
+      "<link rel=stylesheet href=s.css><span>secret</span></template></div>",
+    ].join("");
+
+    expect(ofKind(revealHtml(html), "camouflage")).toEqual([
+      expect.objectContaining({ value: "secret" }),
+    ]);
+  });
+
+  it("closes no list item across a template", () => {
+    const url = "https://example.com/";
+    const html = [
+      "<ul><li><template><li><style>.x { display: none }</style><link rel=stylesheet href=t.css>",
+      "</li></template></li></ul><p class=x>visible</p>",
+    ].join("");
+
+    expect(linkedStylesheets(html, { url })).toEqual([]);
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
+  });
+
+  it("closes nothing outside a template from an end tag inside it", () => {
+    const url = "https://example.com/";
+    const html = [
+      "<div><template></div><style>.x { display: none }</style><link rel=stylesheet href=t.css>",
+      "</template></div><p class=x>visible</p><svg><template></svg><p data-note=1>after</p>",
+    ].join("");
+
+    expect(linkedStylesheets(html, { url })).toEqual([]);
+    const findings = revealHtml(html);
+    expect(ofKind(findings, "hidden")).toEqual([]);
+    expect(ofKind(findings, "attribute")).toEqual([expect.objectContaining({ name: "data-note" })]);
+  });
+
+  it("hides a shadow root along with its host", () => {
+    const html = "<div hidden><template shadowrootmode=open><p>x</p></template></div>";
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ reason: "hidden attribute", value: "x" }),
+    ]);
+  });
+
   it("names the sheets a screen applies, each once, and ends an import cycle", () => {
     const html = [
       "<link rel=stylesheet href=a.css><link rel='alternate stylesheet' href=alt.css>",
