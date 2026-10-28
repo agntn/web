@@ -914,7 +914,7 @@ describe("revealHtml", () => {
     ["a name SVG took first", "<font-face><template shadowrootmode=open>x</template></font-face>"],
     [
       "a second root on one host",
-      "<div><template shadowrootmode=open></template><template shadowrootmode=open>x</template></div>",
+      "<div><template shadowrootmode=open><slot></slot></template><template shadowrootmode=open>x</template></div>",
     ],
     ["a root inside a template", "<template><div><template shadowrootmode=open>x</template></div>"],
     ["an SVG host", "<svg><my-el><template shadowrootmode=open>x</template></my-el></svg>"],
@@ -1045,6 +1045,154 @@ describe("revealHtml", () => {
 
     expect(ofKind(revealHtml(html), "hidden")).toEqual([
       expect.objectContaining({ reason: "hidden attribute", value: "x" }),
+    ]);
+  });
+
+  it("hides light DOM no slot takes", () => {
+    const html = [
+      "<div><template shadowrootmode=open><p>Shown</p></template>light text</div>",
+      "<my-card><b slot=early>before the root</b><img slot=A alt=photo>",
+      "<template shadowrootmode=open><slot name=a></slot><slot name=early></slot></template></my-card>",
+      "<my-card><template shadowrootmode=open shadowrootslotassignment=manual><slot></slot>",
+      "</template><i>scripted</i></my-card>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({
+        element: "div",
+        line: 1,
+        reason: "unslotted, no default slot",
+        value: "light text",
+      }),
+      expect.objectContaining({
+        element: "img",
+        line: 2,
+        reason: "unslotted, no slot named A",
+        value: "photo",
+      }),
+      expect.objectContaining({
+        element: "i",
+        line: 5,
+        reason: "unslotted, its shadow root assigns slots by script",
+        value: "scripted",
+      }),
+    ]);
+  });
+
+  it("hides slotted content with its slot", () => {
+    const html = [
+      "<my-el><template shadowrootmode=open><style>.off { display: none }</style>",
+      "<slot name=a class=off></slot><div hidden><slot></slot></div><slot>later</slot>",
+      "</template><span slot=a>first</span>text</my-el>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({
+        element: "span",
+        line: 3,
+        reason: "display: none via .off on its slot at line 2",
+        value: "first",
+      }),
+      expect.objectContaining({
+        element: "my-el",
+        line: 3,
+        reason: "hidden attribute on div at line 2, around its slot",
+        value: "text",
+      }),
+    ]);
+  });
+
+  it("lets slotted content take after its slot, not its host", () => {
+    const html = [
+      "<div style='visibility:hidden'><template shadowrootmode=open>",
+      "<p style='visibility:visible'><slot></slot></p></template>shown</div>",
+      "<div><template shadowrootmode=open><span style='visibility:hidden'><slot></slot></span>",
+      "</template><b style='visibility:visible'>overridden</b><i>dimmed</i></div>",
+      "<div><template shadowrootmode=open><p style='color:#fff;background:#fff'><slot></slot></p>",
+      "</template>blank <u>white</u></div>",
+      "<div><template shadowrootmode=open><link rel=stylesheet href=dark.css><slot></slot>",
+      "</template><p><span style='color:#fff'>on a sheet we never read</span></p></div>",
+    ].join("\n");
+
+    const findings = revealHtml(html);
+
+    expect(ofKind(findings, "hidden")).toEqual([
+      expect.objectContaining({
+        element: "i",
+        line: 4,
+        reason: "visibility: hidden on span at line 3, around its slot",
+        value: "dimmed",
+      }),
+    ]);
+    expect(ofKind(findings, "camouflage")).toEqual([
+      expect.objectContaining({ element: "u", line: 6, value: "white" }),
+      expect.objectContaining({ element: "div", line: 6, value: "blank" }),
+    ]);
+  });
+
+  it("names the hiding behind a slot that is itself slotted, once", () => {
+    const html = [
+      "<div><template shadowrootmode=open><p><template shadowrootmode=open>",
+      "<b hidden><slot></slot></b></template><slot></slot></p></template>deep</div>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({
+        element: "div",
+        line: 2,
+        reason: "hidden attribute on b at line 2, around its slot",
+        value: "deep",
+      }),
+    ]);
+  });
+
+  it.each([
+    [
+      "a slot in an inert template",
+      "<div><template shadowrootmode=open><template><slot></slot></template></template>x</div>",
+    ],
+    [
+      "a slot in a nested shadow root",
+      "<div><template shadowrootmode=open><span><template shadowrootmode=open><slot></slot>",
+    ],
+    [
+      "a slot in SVG",
+      "<div><template shadowrootmode=open><svg><slot></slot></svg></template>x</div>",
+    ],
+  ])("assigns nothing to %s", (_label, html) => {
+    const page = html.endsWith("</div>") ? html : `${html}</template></span></template>x</div>`;
+
+    expect(ofKind(revealHtml(page), "hidden")).toEqual([
+      expect.objectContaining({ reason: "unslotted, no default slot", value: "x" }),
+    ]);
+  });
+
+  it.each([
+    [
+      "inside light DOM held back for another root",
+      [
+        "<div><my-el slot=s><i slot=n>x</i><template shadowrootmode=open><slot name=m></slot>",
+        "</template></my-el><template shadowrootmode=open><slot name=s></slot></template></div>",
+      ].join(""),
+    ],
+    [
+      "whose template the file never closes",
+      "<div><my-el><i slot=n>x</i><template shadowrootmode=open><slot name=m></slot>",
+    ],
+  ])("reads a shadow root before light DOM ahead of it, %s", (_label, html) => {
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({ element: "i", reason: "unslotted, no slot named n", value: "x" }),
+    ]);
+  });
+
+  it("counts an attribute from its first line when light DOM comes before the root", () => {
+    const html = [
+      "<div><b data-key=1 slot=x>early</b>",
+      "<template shadowrootmode=open><i data-key=1></i><slot name=x></slot></template></div>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "attribute")).toEqual([
+      expect.objectContaining({ count: 2, line: 1, name: "data-key" }),
     ]);
   });
 

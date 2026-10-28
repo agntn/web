@@ -268,6 +268,8 @@ class HiddenText {
   private text = "";
   private length = 0;
   private summaryShown = false;
+  /** Set on a copy {@link slotted} made, whose reason already names where the hiding sits. */
+  private copy = false;
 
   constructor(
     kind: "hidden" | "camouflage",
@@ -291,6 +293,25 @@ class HiddenText {
     if (this.summaryShown) return false;
     this.summaryShown = true;
     return true;
+  }
+
+  /**
+   * A copy at a slotted child's own line, since this one went out with the shadow root.
+   * @param place - The child's label and line.
+   * @param own - Whether the slot started this record, rather than an element around it.
+   * @param fallback - What the child shows without text.
+   * @returns {HiddenText} The copy.
+   */
+  slotted(place: Place, own: boolean, fallback?: string): HiddenText {
+    const where = own ? "its slot" : this.label;
+    const around = own ? "" : ", around its slot";
+    const placed = this.copy || this.kind === "camouflage";
+    const reason = placed
+      ? this.reason
+      : `${this.reason} on ${where} at line ${this.line}${around}`;
+    const copy = new HiddenText(this.kind, place.line, place.label, reason, fallback);
+    copy.copy = true;
+    return copy;
   }
 
   add(text: string): void {
@@ -346,10 +367,42 @@ interface OpenElement {
   readonly color: Paint | undefined;
   readonly background: Paint | undefined;
   readonly camouflage: HiddenText | undefined;
-  /** Records this element started, reported when it closes. */
-  readonly owned: readonly HiddenText[];
+  /** Records this element started, reported when it closes; a host adds its light text's later. */
+  readonly owned: HiddenText[];
   /** The tree its children sit in, whose rules are the only ones that match them. */
   readonly styles: TreeStyles;
+  /** Slots of the shadow root it sits in; none in the page's own tree or an inert template. */
+  readonly slots: SlotTree<OpenElement> | undefined;
+}
+
+/**
+ * One shadow root's slots, the first of each name, which is the one DOM assigns to. A slot's
+ * fallback, hidden once anything lands in it, isn't modeled.
+ */
+class SlotTree<T> {
+  /** `shadowrootslotassignment=manual` leaves assigning to script, so nothing lands anywhere. */
+  readonly manual: boolean;
+  private readonly slots = new Map<string, T>();
+
+  constructor(manual: boolean) {
+    this.manual = manual;
+  }
+
+  /**
+   * @param name - The slot's `name`, empty for the default slot.
+   * @param slot - The slot element.
+   */
+  add(name: string, slot: T): void {
+    if (!this.slots.has(name)) this.slots.set(name, slot);
+  }
+
+  /**
+   * @param name - A light child's `slot` attribute, empty for text and elements without one.
+   * @returns {T | undefined} The slot it lands in, or undefined when none takes it.
+   */
+  find(name: string): T | undefined {
+    return this.manual ? undefined : this.slots.get(name);
+  }
 }
 
 /** An inline script, style or textarea, completed by the text token that follows it. */
@@ -373,7 +426,8 @@ interface FiledRule {
 
 /** A repeated attribute, listed once with how often it occurs. */
 interface AttributeTally {
-  readonly finding: HiddenFinding;
+  /** The earliest occurrence, since a shadow root's template is walked ahead of light DOM. */
+  finding: HiddenFinding;
   count: number;
 }
 
@@ -520,7 +574,7 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
 
   /**
    * A `<template shadowrootmode>` the parser attaches to a host that may take one and has none.
-   * Slots, an implied `<body>` host and custom elements that refuse a shadow root aren't modeled.
+   * An implied `<body>` host and custom elements that refuse a shadow root aren't modeled.
    * @param tag - The start tag.
    * @param foreign - Whether it opens in SVG or MathML, where a template is just an element.
    * @returns {boolean} Whether it attaches one; asking again for the same host answers false.
@@ -588,10 +642,22 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
   }
 }
 
+/** Light DOM the walk holds back until its host's shadow root template has gone first. */
+interface Hold {
+  readonly move: Move;
+  /** Token index of the first one held. */
+  readonly base: number;
+  readonly tokens: HtmlToken[];
+  /** Open elements once its host opened, so a template the file never closes ends first. */
+  readonly depth: number;
+}
+
 /** Walks the tokens once with the stack of open elements. */
 class HiddenScanner {
   private readonly lines: number[];
   private readonly html: string;
+  /** Templates the walk takes ahead of the light DOM before them, by their host's token index. */
+  private readonly moves: Map<number, Move>;
   private readonly page = new TreeStyles();
   /** Declarative shadow roots by the offset of their `<template>`. */
   private readonly shadows = new Map<number, TreeStyles>();
@@ -608,6 +674,12 @@ class HiddenScanner {
   private readonly stack = this.elements.items;
   private readonly findings: HiddenFinding[] = [];
   private readonly attributes = new Map<string, AttributeTally>();
+  /** Each host's shadow root slots, which its light children land in. */
+  private readonly hosts = new WeakMap<OpenElement, SlotTree<OpenElement>>();
+  /** The record a host's light text goes to, once it holds some a reader misses. */
+  private readonly lightText = new WeakMap<OpenElement, HiddenText>();
+  /** What the opening element inherits from: its parent, or the slot a light child lands in. */
+  private from: OpenElement | undefined;
   private base: string | undefined;
   private baseFromPage = false;
   private pending: Pending | undefined;
@@ -635,11 +707,11 @@ class HiddenScanner {
     this.html = html;
     this.base = url;
     this.sheets = sheets;
-    this.prepare();
+    this.moves = this.prepare();
   }
 
   run(): HiddenFinding[] {
-    for (const token of tokenizeHtml(this.html)) {
+    for (const token of this.walkOrder()) {
       if (token.kind === "start") this.start(token);
       else if (token.kind === "end") this.end(token);
       else if (token.kind === "text") this.text(token);
@@ -660,24 +732,78 @@ class HiddenScanner {
     return [...new Set([...this.linked, ...this.shadowLinked])];
   }
 
-  /** Sheet rules, the `<base>` URL and linked sheets before the walk; inert templates hold none. */
-  private prepare(): void {
+  /**
+   * Source order, but a shadow root's template goes before the light DOM ahead of it, held back.
+   * A moved run closes what it opens, so the stack matches; at EOF the open template closes first.
+   * @yields {HtmlToken} Each token once.
+   */
+  private *walkOrder(): Generator<HtmlToken> {
+    const holds: Hold[] = [];
+    let index = -1;
+    for (const token of tokenizeHtml(this.html)) {
+      index += 1;
+      const hold = holds.at(-1);
+      if (hold !== undefined && index < hold.move.template) {
+        hold.tokens.push(token);
+        continue;
+      }
+      yield token;
+      const move = this.moves.get(index);
+      if (move !== undefined)
+        holds.push({ move, base: index + 1, tokens: [], depth: this.stack.length });
+      for (let done = holds.at(-1); done?.move.end === index; done = holds.at(-1)) {
+        holds.pop();
+        while (this.stack.length > done.depth) this.elements.pop();
+        yield* this.heldOrder(done.base, done.tokens);
+      }
+    }
+  }
+
+  /**
+   * Held light DOM in walk order, a host inside it taking its template first too.
+   * @param base - Token index of the first one held.
+   * @param tokens - The tokens held.
+   * @yields {HtmlToken} Each one once.
+   */
+  private *heldOrder(base: number, tokens: readonly HtmlToken[]): Generator<HtmlToken> {
+    const ranges: (readonly [number, number])[] = [[base, base + tokens.length - 1]];
+    for (let range = ranges.pop(); range !== undefined; range = ranges.pop()) {
+      const [from, to] = range;
+      for (let index = from; index <= to; index += 1) {
+        yield tokens[index - base]!;
+        const move = this.moves.get(index);
+        if (move === undefined) continue;
+        ranges.push([move.end + 1, to], [index + 1, move.template - 1], [move.template, move.end]);
+        break;
+      }
+    }
+  }
+
+  /**
+   * Sheet rules, the `<base>` URL and linked sheets before the walk; inert templates hold none.
+   * @returns {Map<number, Move>} The templates the walk takes early, by their host's token index.
+   */
+  private prepare(): Map<number, Move> {
     let inStyle = false;
+    let index = -1;
     const nesting = new Nesting();
     for (const token of tokenizeHtml(this.html)) {
+      index += 1;
       if (token.kind === "text" && inStyle) {
         this.fileSheet(token.text);
         if (/@import\b/iu.test(token.text)) this.tree.assumeDefaults = false;
       }
       inStyle = false;
-      nesting.step(token);
+      nesting.step(token, index);
       if (token.kind !== "start" || nesting.inert) continue;
       this.tree = this.treeAt(nesting.shadowRoot);
       inStyle = token.name === "style" && this.styleApplies(token);
       this.prepareTag(token);
     }
+    nesting.finish(index);
     this.page.rank();
     for (const tree of this.shadows.values()) tree.rank();
+    return nesting.moves;
   }
 
   /**
@@ -845,6 +971,7 @@ class HiddenScanner {
     for (const { value } of tag.attributes) this.characters(value, place.line, place.label);
     this.headFinding(tag, place);
     this.elements.push(this.element(tag, place, foreign));
+    if (tag.name === "slot" && !foreign) this.fileSlot(tag);
     if (FIELD_ELEMENTS.has(tag.name)) this.field(tag, place);
     this.elements.settle(tag, foreign);
   }
@@ -852,12 +979,13 @@ class HiddenScanner {
   private element(tag: HtmlStartTag, place: Place, foreign: boolean): OpenElement {
     const shadowRoot = this.shadowRootAt(tag, place, foreign);
     if (shadowRoot !== undefined) return shadowRoot;
+    const parent = this.stack.at(-1);
+    this.from = this.inheritedFrom(attribute(tag, "slot") ?? "", place, fallbackOf(tag));
     const declarations = this.declarationsOf(tag);
     const hidden = this.hiddenAt(tag, place, declarations);
     const { color, background } = this.paintsOf(tag, place, declarations);
     const camouflage =
       hidden === undefined ? this.camouflageAt(place, color, background) : undefined;
-    const parent = this.stack.at(-1);
     const owned = [hidden, camouflage].filter(
       (record): record is HiddenText =>
         record !== undefined && record !== parent?.hidden && record !== parent?.camouflage,
@@ -872,7 +1000,17 @@ class HiddenScanner {
       camouflage,
       owned,
       styles: parent?.styles ?? this.page,
+      slots: walledOff({ name: tag.name, foreign }) ? undefined : parent?.slots,
     };
+  }
+
+  /**
+   * File the `<slot>` just opened with the shadow root it sits in, if it sits in one.
+   * @param tag - Its start tag.
+   */
+  private fileSlot(tag: HtmlStartTag): void {
+    const slot = this.stack.at(-1);
+    if (slot !== undefined) slot.slots?.add(attribute(tag, "name") ?? "", slot);
   }
 
   /**
@@ -890,6 +1028,9 @@ class HiddenScanner {
     const background = unlessDefault(host.background, DEFAULT_PAGE);
     const defaulted = color !== host.color || background !== host.background;
     const ownSheets = { color, background, camouflage: defaulted ? undefined : host.camouflage };
+    const assignment = attribute(tag, "shadowrootslotassignment")?.toLowerCase();
+    const slots = new SlotTree<OpenElement>(assignment === "manual");
+    this.hosts.set(host, slots);
     return {
       ...host,
       ...(styles.assumeDefaults ? {} : ownSheets),
@@ -897,7 +1038,50 @@ class HiddenScanner {
       label: place.label,
       owned: [],
       styles,
+      slots,
     };
+  }
+
+  /** @returns {SlotTree<OpenElement> | undefined} The current element's shadow root slots. */
+  private hostSlots(): SlotTree<OpenElement> | undefined {
+    const top = this.stack.at(-1);
+    return top === undefined ? undefined : this.hosts.get(top);
+  }
+
+  /**
+   * What a node inherits from: its element, or for a host's light child the slot it lands in.
+   * @param name - Its `slot` attribute; text and elements without one take the default slot.
+   * @param place - Its label and line.
+   * @param fallback - What it shows without text, such as an image's `alt`.
+   * @returns {OpenElement | undefined} The element or slot, hidden when no slot takes the node.
+   */
+  private inheritedFrom(name: string, place: Place, fallback?: string): OpenElement | undefined {
+    const host = this.stack.at(-1);
+    const slots = this.hostSlots();
+    if (host === undefined || slots === undefined) return host;
+    const slot = slots.find(name);
+    if (slot === undefined) return this.unslottedIn(unslotted(name, slots.manual), place, fallback);
+    const { hidden, camouflage } = slot;
+    const own = hidden !== undefined && slot.owned.includes(hidden);
+    return {
+      ...slot,
+      hidden: hidden === host.hidden ? hidden : hidden?.slotted(place, own, fallback),
+      camouflage: camouflage === host.camouflage ? camouflage : camouflage?.slotted(place, false),
+    };
+  }
+
+  /**
+   * A light child no slot takes renders nowhere, unless its host is already out of sight.
+   * @param reason - Why no slot takes it.
+   * @param place - Its label and line.
+   * @param fallback - What it shows without text.
+   * @returns {OpenElement | undefined} The host, hiding the child when nothing else does.
+   */
+  private unslottedIn(reason: string, place: Place, fallback?: string): OpenElement | undefined {
+    const host = this.stack.at(-1);
+    if (host?.hidden !== undefined) return host;
+    const hidden = new HiddenText("hidden", place.line, place.label, reason, fallback);
+    return host && { ...host, hidden };
   }
 
   private hiddenAt(
@@ -905,7 +1089,7 @@ class HiddenScanner {
     place: Place,
     declarations: Declarations,
   ): HiddenText | undefined {
-    const inherited = this.stack.at(-1)?.hidden;
+    const inherited = this.from?.hidden;
     if (inherited !== undefined && !this.shows(tag.name, declarations)) return inherited;
     const reason = hiddenBy(tag, declarations);
     if (reason === undefined) return undefined;
@@ -920,10 +1104,10 @@ class HiddenScanner {
    * @returns {boolean} True when the element and its content are in sight.
    */
   private shows(name: string, declarations: Declarations): boolean {
-    const parent = this.stack.at(-1);
-    const record = parent?.hidden;
-    if (parent === undefined || record === undefined) return false;
-    const opener = parent.name === "details" && parent.owned.includes(record);
+    const { from } = this;
+    const record = from?.hidden;
+    if (from === undefined || record === undefined) return false;
+    const opener = from.name === "details" && from.owned.includes(record);
     if (opener && name === "summary" && record.reason === "closed details") {
       return record.showSummary();
     }
@@ -935,9 +1119,9 @@ class HiddenScanner {
     place: Place,
     declarations: Declarations,
   ): { color: Paint | undefined; background: Paint | undefined } {
-    const parent = this.stack.at(-1);
-    const color = ownColor(tag, declarations, place.label) ?? parent?.color;
-    const background = ownBackground(tag, declarations, place.label) ?? parent?.background;
+    const color = ownColor(tag, declarations, place.label) ?? this.from?.color;
+    const background = ownBackground(tag, declarations, place.label) ?? this.from?.background;
+    if (this.from !== undefined) return { color, background };
     return {
       color: color ?? this.defaultPaint("text"),
       background: background ?? this.defaultPaint("page"),
@@ -952,20 +1136,20 @@ class HiddenScanner {
     if (color === undefined || background === undefined || color.color.alpha === 0)
       return undefined;
     if (!sameColor(color.color, background.color)) return undefined;
-    const parent = this.stack.at(-1);
-    if (parent?.color === color && parent.background === background) return parent.camouflage;
+    const { from } = this;
+    if (from?.color === color && from.background === background) return from.camouflage;
     const reason = `${colorText(color.color)} text from ${color.source} on ${colorText(background.color)} from ${background.source}`;
     return new HiddenText("camouflage", place.line, place.label, reason);
   }
 
   /**
-   * With no stylesheet linked or imported, a browser draws black text on a white page.
+   * With no stylesheet linked or imported, a browser draws black text on a white page. Only an
+   * element without a parent takes it; below that a paint nobody knows stays unknown.
    * @param role - Which default to take.
    * @returns {Paint | undefined} The default, or undefined when a stylesheet could change it.
    */
   private defaultPaint(role: "text" | "page"): Paint | undefined {
-    const tree = this.stack.at(-1)?.styles ?? this.page;
-    if (!this.page.assumeDefaults || !tree.assumeDefaults) return undefined;
+    if (!this.page.assumeDefaults) return undefined;
     return role === "text" ? DEFAULT_TEXT : DEFAULT_PAGE;
   }
 
@@ -988,10 +1172,37 @@ class HiddenScanner {
   private text(token: HtmlText): void {
     const line = this.lineOf(token.start);
     if (this.rawText(token.text, line)) return;
-    const top = this.stack.at(-1);
     const text = decodeCharacterReferences(token.text);
-    this.characters(text, line, top?.label, token.start === 0);
-    (top?.hidden ?? top?.camouflage)?.add(text);
+    this.characters(text, line, this.stack.at(-1)?.label, token.start === 0);
+    this.textRecord(line, text)?.add(text);
+  }
+
+  /**
+   * The record text joins: its element's, or for a host the one its default slot gives.
+   * @param line - The text's line.
+   * @param text - The decoded text.
+   * @returns {HiddenText | undefined} The record, or undefined when a reader sees the text.
+   */
+  private textRecord(line: number, text: string): HiddenText | undefined {
+    const top = this.stack.at(-1);
+    if (top === undefined || this.hostSlots() === undefined) return top?.hidden ?? top?.camouflage;
+    const known = this.lightText.get(top);
+    return known !== undefined || text.trim() === "" ? known : this.lightTextRecord(line);
+  }
+
+  /**
+   * The record a host's light text gets through the default slot; a new one stays with the host.
+   * @param line - Line of the first light text that isn't blank.
+   * @returns {HiddenText | undefined} What hides or camouflages it, if anything.
+   */
+  private lightTextRecord(line: number): HiddenText | undefined {
+    const host = this.stack.at(-1)!;
+    const from = this.inheritedFrom("", { label: host.label, line });
+    const record = from?.hidden ?? from?.camouflage;
+    if (record === undefined || record === host.hidden || record === host.camouflage) return record;
+    host.owned.push(record);
+    this.lightText.set(host, record);
+    return record;
   }
 
   /**
@@ -1044,8 +1255,11 @@ class HiddenScanner {
           finding: attributeFinding(place, name, value, reason),
           count: 1,
         });
-      } else {
-        tally.count += 1;
+        continue;
+      }
+      tally.count += 1;
+      if (place.line < tally.finding.line) {
+        tally.finding = attributeFinding(place, name, value, reason);
       }
     }
   }
@@ -1198,15 +1412,29 @@ interface Nested {
   readonly name: string;
   readonly foreign: boolean;
   readonly kind: "inert" | "shadow" | "other";
+  /** Token index of its start tag. */
+  readonly index: number;
+  /** For a shadow root, the token index of its host's start tag. */
+  readonly host?: number;
+}
+
+/** A shadow root's template by its first and last token, walked before the light DOM ahead. */
+interface Move {
+  readonly template: number;
+  readonly end: number;
 }
 
 /** What the sheet pass sits in, on the same stack the walk keeps: inert templates, shadow roots. */
 class Nesting {
+  /** Hosts by token index, the ones with light DOM ahead of their shadow root's template. */
+  readonly moves = new Map<number, Move>();
   private readonly elements = new ElementStack<Nested>((element) => {
     this.closed(element);
   });
   private inertTemplates = 0;
   private readonly shadowRoots: number[] = [];
+  /** Index of the token being stepped through. */
+  private index = 0;
 
   /** @returns {boolean} Whether what comes next sits in an inert HTML template, out of the page. */
   get inert(): boolean {
@@ -1218,10 +1446,20 @@ class Nesting {
     return this.shadowRoots.at(-1);
   }
 
-  /** @param token - The next token. */
-  step(token: HtmlToken): void {
+  /**
+   * @param token - The next token.
+   * @param index - Its index among the page's tokens.
+   */
+  step(token: HtmlToken, index: number): void {
+    this.index = index;
     if (token.kind === "end") this.elements.end(token.name);
     else if (token.kind === "start" && this.elements.opens(token.name)) this.open(token);
+  }
+
+  /** @param last - Index of the page's last token, where the end of the file closes the rest. */
+  finish(last: number): void {
+    this.index = last;
+    while (this.elements.items.length > 0) this.elements.pop();
   }
 
   /**
@@ -1230,10 +1468,12 @@ class Nesting {
    */
   private open(tag: HtmlStartTag): void {
     const foreign = this.elements.foreignAt(tag.name);
+    const host = this.elements.items.at(-1)?.index;
     let kind: Nested["kind"] = "other";
     if (tag.name === "template" && !foreign)
       kind = this.elements.attachesShadowRoot(tag, foreign) ? "shadow" : "inert";
-    this.elements.push({ name: tag.name, foreign, kind });
+    const element = { name: tag.name, foreign, kind, index: this.index };
+    this.elements.push(kind === "shadow" ? { ...element, host } : element);
     if (kind === "inert") this.inertTemplates += 1;
     else if (kind === "shadow") this.shadowRoots.push(tag.start);
     this.elements.settle(tag, foreign);
@@ -1241,7 +1481,11 @@ class Nesting {
 
   private closed(element: Nested): void {
     if (element.kind === "inert") this.inertTemplates -= 1;
-    else if (element.kind === "shadow") this.shadowRoots.pop();
+    if (element.kind !== "shadow") return;
+    this.shadowRoots.pop();
+    const { host, index: template } = element;
+    if (host !== undefined && template > host + 1)
+      this.moves.set(host, { template, end: this.index });
   }
 }
 
@@ -1269,6 +1513,16 @@ function canHostShadow(name: string): boolean {
  */
 function walledOff(element: Readonly<{ name: string; foreign: boolean }>): boolean {
   return element.name === "template" && !element.foreign;
+}
+
+/**
+ * @param name - A light child's `slot` attribute, empty for the default slot.
+ * @param manual - Whether the shadow root leaves assigning to script.
+ * @returns {string} Why no slot takes it.
+ */
+function unslotted(name: string, manual: boolean): string {
+  if (manual) return "unslotted, its shadow root assigns slots by script";
+  return name === "" ? "unslotted, no default slot" : `unslotted, no slot named ${valueOf(name)}`;
 }
 
 /**
