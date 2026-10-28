@@ -1027,6 +1027,19 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
   });
 
+  it("closes nothing outside a template from an end tag inside it", () => {
+    const url = "https://example.com/";
+    const html = [
+      "<div><template></div><style>.x { display: none }</style><link rel=stylesheet href=t.css>",
+      "</template></div><p class=x>visible</p><svg><template></svg><p data-note=1>after</p>",
+    ].join("");
+
+    expect(linkedStylesheets(html, { url })).toEqual([]);
+    const findings = revealHtml(html);
+    expect(ofKind(findings, "hidden")).toEqual([]);
+    expect(ofKind(findings, "attribute")).toEqual([expect.objectContaining({ name: "data-note" })]);
+  });
+
   it("hides a shadow root along with its host", () => {
     const html = "<div hidden><template shadowrootmode=open><p>x</p></template></div>";
 

@@ -547,10 +547,13 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
     if (closesAtOnce(tag, foreign) || this.items.length > STACK_LIMIT) this.pop();
   }
 
+  /** @param name - An end tag; it closes nothing past an HTML template but the template. */
   end(name: string): void {
     if (!this.isOpen(name)) return;
-    const index = this.items.findLastIndex((element) => element.name === name);
-    if (index === -1) return;
+    const index = this.items.findLastIndex(
+      (element) => element.name === name || walledOff(element),
+    );
+    if (index === -1 || this.items[index]!.name !== name) return;
     while (this.items.length > index) this.pop();
   }
 
@@ -580,7 +583,7 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
         while (this.items.length > index) this.pop();
         return;
       }
-      if (name === "template" || scope.includes(name)) return;
+      if (walledOff(this.items[index]!) || scope.includes(name)) return;
     }
   }
 }
@@ -1258,6 +1261,14 @@ function opensShadowRoot(tag: HtmlStartTag): boolean {
 function canHostShadow(name: string): boolean {
   if (SHADOW_HOSTS.has(name)) return true;
   return /^[a-z]/u.test(name) && name.includes("-") && !TAKEN_CUSTOM_NAMES.has(name);
+}
+
+/**
+ * @param element - An open element.
+ * @returns {boolean} Whether it's an HTML template, which no end tag or implied end crosses.
+ */
+function walledOff(element: Readonly<{ name: string; foreign: boolean }>): boolean {
+  return element.name === "template" && !element.foreign;
 }
 
 /**
