@@ -1569,6 +1569,23 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("reads xmp as page text the way a browser draws it, and keeps noembed out of sight", () => {
+    const html = [
+      "<xmp style=display:none>a &amp; <b>b</b></xmp>",
+      "<div hidden><xmp>inside</xmp></div>",
+      "<noembed style=display:none>fallback</noembed>",
+      "<p style=display:none>a<xmp>b</xmp>c</p>",
+    ].join("\n");
+
+    expect(
+      ofKind(revealHtml(html), "hidden").map(({ line, element, value }) => [line, element, value]),
+    ).toEqual([
+      [1, "xmp", "a &amp; <b>b</b>"],
+      [2, "div", "inside"],
+      [4, "p", "a"],
+    ]);
+  });
+
   it.each([
     ["foreignObject", "<svg><foreignObject>%</foreignObject></svg>"],
     ["desc", "<svg><desc>%</desc></svg>"],

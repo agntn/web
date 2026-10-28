@@ -165,15 +165,7 @@ const VISIBLE_VALUES: Readonly<Record<string, RegExp>> = {
 };
 const FIELD_ELEMENTS = new Set(["input", "select", "textarea", "button"]);
 /** Raw text a browser never draws: code, and the fallbacks for frames and plugins. */
-const UNDRAWN_ELEMENTS = new Set([
-  "script",
-  "style",
-  "iframe",
-  "noembed",
-  "noframes",
-  "xmp",
-  "title",
-]);
+const UNDRAWN_ELEMENTS = new Set(["script", "style", "iframe", "noembed", "noframes", "title"]);
 /** Start tags that close an open `<p>`, the way the HTML tree builder does. */
 const CLOSES_PARAGRAPH = new Set([
   "address",
@@ -205,6 +197,7 @@ const CLOSES_PARAGRAPH = new Set([
   "section",
   "table",
   "ul",
+  "xmp",
 ]);
 const PARAGRAPH_SCOPE = [
   "applet",
@@ -1264,9 +1257,11 @@ class HiddenScanner {
   private text(token: HtmlText): void {
     const line = this.lineOf(token.start);
     if (this.rawText(token, line)) return;
-    const text = token.cdata ? token.text : decodeCharacterReferences(token.text);
-    const source = token.cdata ? {} : { written: token.text };
-    this.characters(text, line, this.stack.at(-1)?.label, {
+    const top = this.stack.at(-1);
+    const asWritten = token.cdata === true || (top?.name === "xmp" && !top.foreign);
+    const text = asWritten ? token.text : decodeCharacterReferences(token.text);
+    const source = asWritten ? {} : { written: token.text };
+    this.characters(text, line, top?.label, {
       ...source,
       documentStart: token.start === 0,
     });
