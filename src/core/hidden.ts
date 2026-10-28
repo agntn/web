@@ -98,6 +98,10 @@ const MATH_GLYPHS = new Set(["mglyph", "malignmark"]);
 const ANNOTATION_HTML = new Set(["text/html", "application/xhtml+xml"]);
 /** What a tag like `<p>` closes before it opens: SVG and MathML that hold no HTML. */
 const FOREIGN_CONTENT = new Set<Content>(["svg", "math", "annotation"]);
+/** Content of SVG and MathML that every scope but a table's stops at, any `annotation-xml` too. */
+const SCOPE_FENCES = new Set<Content>(["html", "mathText", "annotation"]);
+/** End tags that reach past those fences: a table's, in table scope, and `</template>`. */
+const FENCE_CROSSING_ENDS = new Set("caption table tbody td template tfoot th thead tr".split(" "));
 /** HTML tags that close the SVG or MathML they open in, and `<font>` with any of these. */
 const BREAKOUT_TAGS = new Set(
   (
@@ -227,16 +231,19 @@ const PARAGRAPH_SCOPE = [
 interface ImpliedEnd {
   readonly closes: readonly string[];
   readonly scope: readonly string[];
+  /** Table scope, the only one that looks past {@link SCOPE_FENCES}. */
+  readonly table?: boolean;
 }
 
+const PARAGRAPH_END: ImpliedEnd = { closes: ["p"], scope: PARAGRAPH_SCOPE };
 const IMPLIED_END: Readonly<Record<string, ImpliedEnd>> = {
   li: { closes: ["li"], scope: ["ul", "ol", "menu"] },
   dt: { closes: ["dt", "dd"], scope: ["dl"] },
   dd: { closes: ["dt", "dd"], scope: ["dl"] },
   option: { closes: ["option"], scope: ["select", "datalist", "optgroup"] },
-  tr: { closes: ["tr", "td", "th"], scope: ["table", "tbody", "thead", "tfoot"] },
-  td: { closes: ["td", "th"], scope: ["tr", "table"] },
-  th: { closes: ["td", "th"], scope: ["tr", "table"] },
+  tr: { closes: ["tr", "td", "th"], scope: ["table", "tbody", "thead", "tfoot"], table: true },
+  td: { closes: ["td", "th"], scope: ["tr", "table"], table: true },
+  th: { closes: ["td", "th"], scope: ["tr", "table"], table: true },
 };
 /** Utility classes that CSS frameworks define as hidden. */
 const HIDING_CLASSES = new Set([
@@ -604,8 +611,8 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
   /** @param name - An HTML tag that may end an open list item, cell, `<p>` or heading. */
   private closeImplied(name: string): void {
     const rule = Object.hasOwn(IMPLIED_END, name) ? IMPLIED_END[name] : undefined;
-    if (rule !== undefined) this.closeWithin(rule.closes, rule.scope);
-    if (CLOSES_PARAGRAPH.has(name)) this.closeWithin(["p"], PARAGRAPH_SCOPE);
+    if (rule !== undefined) this.closeWithin(rule);
+    if (CLOSES_PARAGRAPH.has(name)) this.closeWithin(PARAGRAPH_END);
     if (HEADINGS.has(name) && HEADINGS.has(this.items.at(-1)?.name ?? "")) this.pop();
   }
 
@@ -655,14 +662,12 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
     if (closesAtOnce(tag, foreign) || this.items.length > STACK_LIMIT) this.pop();
   }
 
-  /** @param name - An end tag; it closes nothing past an HTML template but the template. */
+  /** @param name - An end tag; `</p>` and `</br>` pop SVG and MathML the way `<p>` does. */
   end(name: string): void {
+    if (name === "p" || name === "br") this.leaveForeign();
     if (!this.isOpen(name)) return;
-    const index = this.items.findLastIndex(
-      (element) => element.name === name || walledOff(element),
-    );
-    if (index === -1 || this.items[index]!.name !== name) return;
-    while (this.items.length > index) this.pop();
+    const index = this.endedAt(name);
+    while (index !== -1 && this.items.length > index) this.pop();
   }
 
   /** @param element - The top element again, as its children see it, under the same name. */
@@ -679,7 +684,10 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
 
   /** @param tag - A tag like `<p>`, which pops SVG and MathML down to whatever holds HTML. */
   private breakOut(tag: HtmlStartTag): void {
-    if (!breaksOut(tag)) return;
+    if (breaksOut(tag)) this.leaveForeign();
+  }
+
+  private leaveForeign(): void {
     while (FOREIGN_CONTENT.has(this.items.at(-1)?.content ?? "html")) this.pop();
   }
 
@@ -688,21 +696,41 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
   }
 
   /**
-   * Close the nearest open element named in `closes`, unless a `scope` element or, as in every
-   * HTML scope, a `<template>` sits above it.
-   * @param closes - Elements the start tag ends.
-   * @param scope - Elements that keep them open.
+   * SVG and MathML end tags match through their own elements first, HTML ones stop at a fence.
+   * @param name - An open element's name.
+   * @returns {number} The index its end tag closes down to, or -1 when it closes nothing.
    */
-  private closeWithin(closes: readonly string[], scope: readonly string[]): void {
+  private endedAt(name: string): number {
+    const table = FENCE_CROSSING_ENDS.has(name);
+    let fenced = false;
+    let index = this.items.length - 1;
+    for (; this.items[index]?.foreign === true; index -= 1) {
+      if (this.items[index]!.name === name) return index;
+      fenced ||= fences(this.items[index]!, table);
+    }
+    for (; !fenced && index >= 0; index -= 1) {
+      const element = this.items[index]!;
+      if (!element.foreign && element.name === name) return index;
+      fenced = fences(element, table);
+    }
+    return -1;
+  }
+
+  /**
+   * Close the nearest open element the rule ends, unless one of its `scope` or a fence sits above.
+   * @param rule - What the start tag closes and what keeps it open.
+   */
+  private closeWithin(rule: ImpliedEnd): void {
+    const { closes, scope } = rule;
     if (!closes.some((name) => this.isOpen(name))) return;
     const bottom = Math.max(0, this.items.length - SCOPE_SCAN_LIMIT);
     for (let index = this.items.length - 1; index >= bottom; index -= 1) {
-      const name = this.items[index]!.name;
-      if (closes.includes(name)) {
+      const element = this.items[index]!;
+      if (closes.includes(element.name)) {
         while (this.items.length > index) this.pop();
         return;
       }
-      if (walledOff(this.items[index]!) || scope.includes(name)) return;
+      if (fences(element, rule.table === true) || scope.includes(element.name)) return;
     }
   }
 }
@@ -1792,6 +1820,18 @@ function canHostShadow(name: string): boolean {
  */
 function walledOff(element: Readonly<{ name: string; foreign: boolean }>): boolean {
   return element.name === "template" && !element.foreign;
+}
+
+/**
+ * @param element - An open element between a tag and what it may close.
+ * @param table - Whether the tag checks table scope, which leaves SVG and MathML open.
+ * @returns {boolean} Whether it ends the scope: a template, or SVG and MathML holding HTML.
+ */
+function fences(
+  element: Readonly<{ name: string; foreign: boolean; content: Content }>,
+  table: boolean,
+): boolean {
+  return walledOff(element) || (!table && element.foreign && SCOPE_FENCES.has(element.content));
 }
 
 /**
