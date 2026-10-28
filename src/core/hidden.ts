@@ -857,8 +857,8 @@ class HiddenScanner {
    */
   private prepare(): Nesting {
     let index = -1;
-    const nesting = new Nesting((css) => {
-      this.fileStyle(css);
+    const nesting = new Nesting((css, root) => {
+      this.fileStyle(css, root);
     });
     const tree: HtmlTree = {
       cdataAt: (offset) => nesting.cdataAt(offset),
@@ -896,10 +896,14 @@ class HiddenScanner {
   /**
    * A `<style>` that just closed; one that imports anything drops the default colors too.
    * @param css - Its text children, joined.
+   * @param root - The shadow root it opened in, which a template inside it doesn't change.
    */
-  private fileStyle(css: string): void {
+  private fileStyle(css: string, root: number | undefined): void {
+    const current = this.tree;
+    this.tree = this.treeAt(root);
     this.fileSheet(css);
     if (/@import\b/iu.test(css)) this.tree.assumeDefaults = false;
+    this.tree = current;
   }
 
   /**
@@ -1571,6 +1575,8 @@ interface Nested {
   asksNamed: Set<string> | undefined;
   /** For a `<style>` that applies, its text children so far, filed once it closes. */
   sheet?: string;
+  /** The shadow root that `<style>` opened in, by its template's offset; none for the page. */
+  sheetRoot?: number | undefined;
 }
 
 /** A shadow root's template by its first and last token, walked before the light DOM ahead. */
@@ -1593,7 +1599,7 @@ class Nesting {
     this.closed(element);
   });
   /** Takes the CSS of each `<style>` {@link gatherSheet} picked, once the element closes. */
-  private readonly sheetClosed: (css: string) => void;
+  private readonly sheetClosed: (css: string, root: number | undefined) => void;
   /** Where the last start tag opened. */
   private opened: Namespace = "html";
   private inertTemplates = 0;
@@ -1601,7 +1607,7 @@ class Nesting {
   /** Index of the token being stepped through. */
   private index = 0;
 
-  constructor(sheetClosed: (css: string) => void) {
+  constructor(sheetClosed: (css: string, root: number | undefined) => void) {
     this.sheetClosed = sheetClosed;
   }
 
@@ -1634,7 +1640,9 @@ class Nesting {
   /** Gather the text of the `<style>` just opened, unless `/>` closed it at once. */
   gatherSheet(): void {
     const style = this.elements.items.at(-1);
-    if (style?.index === this.index) style.sheet = "";
+    if (style?.index !== this.index) return;
+    style.sheet = "";
+    style.sheetRoot = this.shadowRoot;
   }
 
   /**
@@ -1735,8 +1743,10 @@ class Nesting {
     else (parent.asksNamed ??= new Set()).add(name);
   }
 
-  private closed(element: Readonly<Pick<Nested, "kind" | "index" | "host" | "sheet">>): void {
-    if (element.sheet !== undefined) this.sheetClosed(element.sheet);
+  private closed(
+    element: Readonly<Pick<Nested, "kind" | "index" | "host" | "sheet" | "sheetRoot">>,
+  ): void {
+    if (element.sheet !== undefined) this.sheetClosed(element.sheet, element.sheetRoot);
     if (element.kind === "inert") this.inertTemplates -= 1;
     if (element.kind !== "shadow") return;
     this.shadowRoots.pop();

@@ -1651,6 +1651,18 @@ describe("revealHtml", () => {
     expect(ofKind(findings, "script").map(({ value }) => value)).toEqual(["if (a < b) go()"]);
   });
 
+  it("keeps an SVG style in its own tree past a shadow root inside it", () => {
+    const html = [
+      "<svg><style>.a { display: none }<foreignObject><div><template shadowrootmode=open>",
+      "<style>.b { display: none }</style></template></div></foreignObject></style></svg>",
+      "<p class=a>a</p><p class=b>b</p>",
+    ].join("");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ reason, value }) => [reason, value])).toEqual([
+      ["display: none via .a", "a"],
+    ]);
+  });
+
   it("applies no style MathML holds, nor a link or base SVG holds", () => {
     const url = "https://example.com/";
     const html = [
