@@ -376,25 +376,28 @@ interface OpenElement {
   readonly slots: SlotTree<OpenElement> | undefined;
 }
 
-/**
- * One shadow root's slots, the first of each name, which is the one DOM assigns to. A slot's
- * fallback, hidden once anything lands in it, isn't modeled.
- */
+/** One shadow root's slots, the first of each name, which is the one DOM assigns to. */
 class SlotTree<T> {
   /** `shadowrootslotassignment=manual` leaves assigning to script, so nothing lands anywhere. */
   readonly manual: boolean;
   private readonly slots = new Map<string, T>();
+  /** Whether the host's light DOM asks for a slot by this name. */
+  private readonly asked: (name: string) => boolean;
 
-  constructor(manual: boolean) {
+  constructor(manual: boolean, asked: (name: string) => boolean) {
     this.manual = manual;
+    this.asked = asked;
   }
 
   /**
    * @param name - The slot's `name`, empty for the default slot.
    * @param slot - The slot element.
+   * @returns {boolean} Whether light DOM lands in it, which keeps its fallback off the page.
    */
-  add(name: string, slot: T): void {
-    if (!this.slots.has(name)) this.slots.set(name, slot);
+  add(name: string, slot: T): boolean {
+    if (this.slots.has(name)) return false;
+    this.slots.set(name, slot);
+    return !this.manual && this.asked(name);
   }
 
   /**
@@ -612,6 +615,11 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean }>> {
     while (this.items.length > index) this.pop();
   }
 
+  /** @param element - The top element again, as its children see it, under the same name. */
+  replaceTop(element: T): void {
+    this.items[this.items.length - 1] = element;
+  }
+
   pop(): void {
     const element = this.items.pop();
     if (element === undefined) return;
@@ -669,6 +677,8 @@ class HiddenScanner {
   private readonly html: string;
   /** Templates the walk takes ahead of the light DOM before them, by their host's token index. */
   private readonly moves: Map<number, Move>;
+  /** The sheet pass, which also knows the slots each host's light DOM asks for. */
+  private readonly nesting: Nesting;
   private readonly page = new TreeStyles();
   /** Declarative shadow roots by the offset of their `<template>`. */
   private readonly shadows = new Map<number, TreeStyles>();
@@ -718,7 +728,8 @@ class HiddenScanner {
     this.html = html;
     this.base = url;
     this.sheets = sheets;
-    this.moves = this.prepare();
+    this.nesting = this.prepare();
+    this.moves = this.nesting.moves;
   }
 
   run(): HiddenFinding[] {
@@ -792,9 +803,9 @@ class HiddenScanner {
 
   /**
    * Sheet rules, the `<base>` URL and linked sheets before the walk; inert templates hold none.
-   * @returns {Map<number, Move>} The templates the walk takes early, by their host's token index.
+   * @returns {Nesting} The pass, which also knows where each host's light DOM goes.
    */
-  private prepare(): Map<number, Move> {
+  private prepare(): Nesting {
     let inStyle = false;
     let index = -1;
     const nesting = new Nesting();
@@ -814,7 +825,7 @@ class HiddenScanner {
     nesting.finish(index);
     this.page.rank();
     for (const tree of this.shadows.values()) tree.rank();
-    return nesting.moves;
+    return nesting;
   }
 
   /**
@@ -1018,12 +1029,16 @@ class HiddenScanner {
   }
 
   /**
-   * File the `<slot>` just opened with the shadow root it sits in, if it sits in one.
+   * File the `<slot>` just opened with its shadow root. A filled slot buries its own children,
+   * the fallback, but what lands in it still takes the slot's real look.
    * @param tag - Its start tag.
    */
   private fileSlot(tag: HtmlStartTag): void {
     const slot = this.stack.at(-1);
-    if (slot !== undefined) slot.slots?.add(attribute(tag, "name") ?? "", slot);
+    const name = attribute(tag, "name") ?? "";
+    if (slot?.slots?.add(name, slot) !== true) return;
+    const fallback = new HiddenText("hidden", this.lineOf(tag.start), slot.label, filledSlot(name));
+    this.elements.replaceTop({ ...slot, hidden: fallback, owned: [...slot.owned, fallback] });
   }
 
   /**
@@ -1042,7 +1057,8 @@ class HiddenScanner {
     const defaulted = color !== host.color || background !== host.background;
     const ownSheets = { color, background, camouflage: defaulted ? undefined : host.camouflage };
     const assignment = attribute(tag, "shadowrootslotassignment")?.toLowerCase();
-    const slots = new SlotTree<OpenElement>(assignment === "manual");
+    const asked = (name: string): boolean => this.nesting.asked(tag.start, name);
+    const slots = new SlotTree<OpenElement>(assignment === "manual", asked);
     this.hosts.set(host, slots);
     return {
       ...host,
@@ -1426,6 +1442,10 @@ interface Nested {
   readonly index: number;
   /** For a shadow root, the token index of its host's start tag. */
   readonly host?: number;
+  /** Whether a child goes to the default slot, should this element turn out to be a host. */
+  asksDefault: boolean;
+  /** Named slots its children ask for, the same way; most elements never get one. */
+  asksNamed: Set<string> | undefined;
 }
 
 /** A shadow root's template by its first and last token, walked before the light DOM ahead. */
@@ -1438,6 +1458,8 @@ interface Move {
 class Nesting {
   /** Hosts by token index, the ones with light DOM ahead of their shadow root's template. */
   readonly moves = new Map<number, Move>();
+  /** Hosts by the offset of their shadow root's template. */
+  private readonly hosts = new Map<number, Nested>();
   private readonly elements = new ElementStack<Nested>((element) => {
     this.closed(element);
   });
@@ -1463,7 +1485,19 @@ class Nesting {
   step(token: HtmlToken, index: number): void {
     this.index = index;
     if (token.kind === "end") this.elements.end(token.name);
+    else if (token.kind === "text") this.request("");
     else if (token.kind === "start" && this.elements.opens(token.name)) this.open(token);
+  }
+
+  /**
+   * @param template - Offset of a shadow root's template.
+   * @param name - A slot's `name`, empty for the default slot.
+   * @returns {boolean} Whether the host's light DOM asks for that slot, ahead of the root or after.
+   */
+  asked(template: number, name: string): boolean {
+    const host = this.hosts.get(template);
+    if (host === undefined) return false;
+    return name === "" ? host.asksDefault : host.asksNamed?.has(name) === true;
   }
 
   /** @param last - Index of the page's last token, where the end of the file closes the rest. */
@@ -1482,14 +1516,41 @@ class Nesting {
     let kind: Nested["kind"] = "other";
     if (tag.name === "template" && !foreign)
       kind = this.elements.attachesShadowRoot(tag, foreign) ? "shadow" : "inert";
-    const element = { name: tag.name, foreign, kind, index: this.index };
+    const element: Nested = {
+      name: tag.name,
+      foreign,
+      kind,
+      index: this.index,
+      asksDefault: false,
+      asksNamed: undefined,
+    };
+    if (kind === "shadow") this.attach(tag.start);
+    else this.request(attribute(tag, "slot") ?? "");
     this.elements.push(kind === "shadow" ? { ...element, host } : element);
     if (kind === "inert") this.inertTemplates += 1;
-    else if (kind === "shadow") this.shadowRoots.push(tag.start);
     this.elements.settle(tag, foreign);
   }
 
-  private closed(element: Nested): void {
+  /** @param template - Offset of the template that gives the open element a shadow root. */
+  private attach(template: number): void {
+    const host = this.elements.items.at(-1);
+    if (host !== undefined) this.hosts.set(template, host);
+    this.shadowRoots.push(template);
+  }
+
+  /**
+   * DOM hands every text node to the default slot, a lone newline too, so tidy markup fills it.
+   * Comments don't count.
+   * @param name - The child's `slot` attribute, empty for text and elements without one.
+   */
+  private request(name: string): void {
+    const parent = this.elements.items.at(-1);
+    if (parent === undefined) return;
+    if (name === "") parent.asksDefault = true;
+    else (parent.asksNamed ??= new Set()).add(name);
+  }
+
+  private closed(element: Readonly<Pick<Nested, "kind" | "index" | "host">>): void {
     if (element.kind === "inert") this.inertTemplates -= 1;
     if (element.kind !== "shadow") return;
     this.shadowRoots.pop();
@@ -1533,6 +1594,15 @@ function walledOff(element: Readonly<{ name: string; foreign: boolean }>): boole
 function unslotted(name: string, manual: boolean): string {
   if (manual) return "unslotted, its shadow root assigns slots by script";
   return name === "" ? "unslotted, no default slot" : `unslotted, no slot named ${valueOf(name)}`;
+}
+
+/**
+ * @param name - A slot's `name`, empty for the default slot.
+ * @returns {string} Why its fallback never shows.
+ */
+function filledSlot(name: string): string {
+  const slot = name === "" ? "the default slot" : `the slot named ${valueOf(name)}`;
+  return `fallback, light DOM fills ${slot}`;
 }
 
 /**

@@ -1138,6 +1138,109 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("hides slot fallback once light DOM fills the slot", () => {
+    const html = [
+      "<my-el><template shadowrootmode=open><slot>fallback secret</slot></template>light</my-el>",
+      "<my-el>",
+      "  <template shadowrootmode=open><slot><b>beaten by a newline</b></slot></template>",
+      "</my-el>",
+      "<my-el><b slot=n>early</b><template shadowrootmode=open>",
+      "<slot name=n>named <input name=code></slot></template></my-el>",
+      "<my-el><template shadowrootmode=open><slot style='visibility:hidden'>",
+      "<i style='visibility:visible'>still gone</i></slot><slot>second</slot></template>t</my-el>",
+    ].join("\n");
+
+    const findings = revealHtml(html);
+
+    expect(ofKind(findings, "hidden")).toEqual([
+      expect.objectContaining({
+        element: "slot",
+        line: 1,
+        reason: "fallback, light DOM fills the default slot",
+        value: "fallback secret",
+      }),
+      expect.objectContaining({
+        element: "slot",
+        line: 3,
+        reason: "fallback, light DOM fills the default slot",
+        value: "beaten by a newline",
+      }),
+      expect.objectContaining({
+        element: "slot",
+        line: 6,
+        reason: "fallback, light DOM fills the slot named n",
+        value: "named",
+      }),
+      expect.objectContaining({
+        element: "slot",
+        line: 7,
+        reason: "fallback, light DOM fills the default slot",
+        value: "still gone",
+      }),
+      expect.objectContaining({
+        element: "my-el",
+        line: 8,
+        reason: "visibility: hidden on its slot at line 7",
+        value: "t",
+      }),
+    ]);
+    expect(ofKind(findings, "field")).toEqual([
+      expect.objectContaining({
+        line: 6,
+        name: "code",
+        reason: "type=text, inside hidden slot at line 6",
+      }),
+    ]);
+  });
+
+  it.each([
+    ["an empty host", "<my-el><template shadowrootmode=open><slot>shown</slot></template></my-el>"],
+    [
+      "a host holding only a comment",
+      "<my-el><!-- c --><template shadowrootmode=open><slot>shown</slot></template></my-el>",
+    ],
+    [
+      "light DOM asking for another slot",
+      "<my-el><template shadowrootmode=open><slot name=x>shown</slot><slot name=y></slot></template><b slot=y>y</b></my-el>",
+    ],
+    [
+      "light DOM an implied end moves out of the host",
+      "<p><template shadowrootmode=open><slot>shown</slot></template><div>x</div>",
+    ],
+    [
+      "a second slot of the same name",
+      "<my-el><template shadowrootmode=open><slot></slot><slot>shown</slot></template>t</my-el>",
+    ],
+    [
+      "manual assignment",
+      "<my-el><template shadowrootmode=open shadowrootslotassignment=manual><slot>shown</slot></template>t</my-el>",
+    ],
+  ])("leaves slot fallback alone with %s", (_label, html) => {
+    expect(revealHtml(html)).not.toContainEqual(expect.objectContaining({ value: "shown" }));
+  });
+
+  it("hides what a slot in unseen fallback takes in", () => {
+    const html = [
+      "<my-el><template shadowrootmode=open><slot><slot name=inner>x</slot></slot></template>",
+      "<i slot=inner>deep</i></my-el>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden")).toEqual([
+      expect.objectContaining({
+        element: "slot",
+        line: 1,
+        reason: "fallback, light DOM fills the slot named inner",
+        value: "x",
+      }),
+      expect.objectContaining({
+        element: "i",
+        line: 2,
+        reason: "fallback, light DOM fills the default slot on slot at line 1, around its slot",
+        value: "deep",
+      }),
+    ]);
+  });
+
   it("names the hiding behind a slot that is itself slotted, once", () => {
     const html = [
       "<div><template shadowrootmode=open><p><template shadowrootmode=open>",
