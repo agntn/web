@@ -208,10 +208,10 @@ export class EmptyUrlError extends WebError {
   }
 }
 
-/** Thrown when a read continuation token is malformed or belongs to another request. */
+/** Thrown when a read continuation is malformed or belongs to another read. */
 export class InvalidReadContinuationError extends WebError {
-  constructor() {
-    super("Invalid read continuation token");
+  constructor(message = "Invalid read continuation token") {
+    super(message);
     this.name = "InvalidReadContinuationError";
   }
 }

@@ -34,15 +34,27 @@ export function openContinuation(
   fieldCount: number,
   request: string,
 ): string[] | undefined {
+  const fields = continuationFields(token, fieldCount);
+  const tag = token.slice(token.lastIndexOf(".") + 1);
+  if (!fields || tag !== continuationTag(domain, fields, request)) return undefined;
+  return fields;
+}
+
+/**
+ * Split a token into fields without the tag check, so a stale token isn't mistaken for junk.
+ * @param token - Token as the caller passed it.
+ * @param fieldCount - Number of fields the token must carry.
+ * @returns {string[] | undefined} The fields, or `undefined` when the token is malformed.
+ */
+export function continuationFields(token: string, fieldCount: number): string[] | undefined {
   const parts = token.split(".");
-  const tag = parts.pop();
+  parts.pop();
   if (parts.length !== fieldCount) return undefined;
   const fields = parts.map((part) => Buffer.from(part, "base64url").toString("utf8"));
   const canonical = fields.every(
     (field, index) => Buffer.from(field).toString("base64url") === parts[index],
   );
-  if (!canonical || tag !== continuationTag(domain, fields, request)) return undefined;
-  return fields;
+  return canonical ? fields : undefined;
 }
 
 /**
