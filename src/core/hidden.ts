@@ -28,6 +28,7 @@ import {
   type HtmlEndTag,
   type HtmlStartTag,
   type HtmlText,
+  type HtmlToken,
 } from "./html.ts";
 import { hiddenKinds, type HiddenKind } from "./hidden-kinds.ts";
 import { clip } from "./text.ts";
@@ -101,6 +102,8 @@ const VOID_ELEMENTS = new Set([
   "wbr",
 ]);
 const SINGLETON_ELEMENTS = new Set(["html", "head", "body"]);
+/** Elements that decide whether a sheet in the source reaches the page. */
+const NESTING = new Set(["template", "svg", "math"]);
 const HEADINGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 /** Hiding properties that inherit, so a descendant can set them back. */
 const INHERITED_HIDING = new Set(["visibility", "font-size", "color"]);
@@ -434,16 +437,20 @@ class HiddenScanner {
     );
   }
 
-  /** Stylesheet rules, the `<base>` URL and whether a stylesheet is linked, before the walk. */
+  /** Sheet rules, the `<base>` URL and any linked sheet, before the walk; templates hold none. */
   private prepare(): void {
     let inStyle = false;
+    const nesting = new Nesting();
     for (const token of tokenizeHtml(this.html)) {
       if (token.kind === "text" && inStyle) {
         this.fileSheet(token.text);
         if (/@import\b/iu.test(token.text)) this.assumeDefaults = false;
       }
-      inStyle = token.kind === "start" && token.name === "style" && this.styleApplies(token);
-      if (token.kind === "start") this.prepareTag(token);
+      inStyle = false;
+      nesting.step(token);
+      if (token.kind !== "start" || nesting.inert) continue;
+      inStyle = token.name === "style" && this.styleApplies(token);
+      this.prepareTag(token);
     }
     this.rankRules();
   }
@@ -988,6 +995,48 @@ function linkApplies(tag: HtmlStartTag): boolean {
   const type = attribute(tag, "type")?.split(";")[0]?.trim().toLowerCase() ?? "";
   const css = type === "" || type === "text/css";
   return css && attribute(tag, "disabled") === undefined && forScreen(attribute(tag, "media"));
+}
+
+/** Templates and SVG or MathML elements open in the source, closed the way the walk closes them. */
+class Nesting {
+  private readonly stack: string[] = [];
+  private readonly counts = new Map<string, number>();
+
+  /** @returns {boolean} Whether what comes next sits in an HTML template, out of the page. */
+  get inert(): boolean {
+    return this.stack[0] === "template";
+  }
+
+  /**
+   * Only an HTML template walls its content off; inside SVG or MathML it's just another element.
+   * @param token - The next token.
+   */
+  step(token: HtmlToken): void {
+    if ((token.kind !== "start" && token.kind !== "end") || !NESTING.has(token.name)) return;
+    if (token.kind === "end") this.close(token.name);
+    else if (!token.selfClosing || !this.foreignAt(token.name)) this.push(token.name);
+  }
+
+  private foreignAt(name: string): boolean {
+    return name !== "template" || this.count("svg") + this.count("math") > 0;
+  }
+
+  private push(name: string): void {
+    this.stack.push(name);
+    this.counts.set(name, this.count(name) + 1);
+  }
+
+  private close(name: string): void {
+    if (this.count(name) === 0) return;
+    for (let popped = this.stack.pop(); popped !== undefined; popped = this.stack.pop()) {
+      this.counts.set(popped, this.count(popped) - 1);
+      if (popped === name) return;
+    }
+  }
+
+  private count(name: string): number {
+    return this.counts.get(name) ?? 0;
+  }
 }
 
 function fieldType(tag: HtmlStartTag): string {
