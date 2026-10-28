@@ -1620,6 +1620,52 @@ describe("revealHtml", () => {
     expect(linkedStylesheets(html, { url: "https://example.com/" })).toEqual([]);
     expect(ofKind(revealHtml(html), "link")).toEqual([]);
   });
+
+  it("reads a style and a script in SVG as markup, the CSS from their text children", () => {
+    const html = [
+      "<svg><style>",
+      "<![CDATA[ @import 'x.css'; .a { display: none } ]]>",
+      ".b::after { content: '&lt;' }<!-- .c { display: none } --><g>.d { display: none }</g>",
+      "</style><script><![CDATA[if (a < b) go()]]></script></svg>",
+      "<p class=a>a</p><p class=b>b</p><p class=c>c</p><p class=d>d</p>",
+      "<svg><foreignObject><style><g>.e { display: none }</g></style></foreignObject></svg>",
+      "<p class=e>e</p>",
+    ].join("\n");
+
+    const findings = revealHtml(html);
+
+    expect(linkedStylesheets(html, { url: "https://example.com/" })).toEqual([
+      "https://example.com/x.css",
+    ]);
+    expect(
+      ofKind(findings, "hidden").map(({ line, reason, value }) => [line, reason, value]),
+    ).toEqual([
+      [1, "style content", ".d { display: none }"],
+      [5, "display: none via .a", "a"],
+    ]);
+    expect(ofKind(findings, "comment").map(({ value }) => value)).toEqual([".c { display: none }"]);
+    expect(ofKind(findings, "style").map(({ value }) => value)).toEqual([
+      "@import 'x.css'; .a { display: none } .b::after { content: '<' }",
+      "<g>.e { display: none }</g>",
+    ]);
+    expect(ofKind(findings, "script").map(({ value }) => value)).toEqual(["if (a < b) go()"]);
+  });
+
+  it("applies no style MathML holds, nor a link or base SVG holds", () => {
+    const url = "https://example.com/";
+    const html = [
+      "<math><style>.a { display: none }<mi>shown</mi></style></math>",
+      "<svg><link rel=stylesheet href=x.css><base href=https://example.org/></svg>",
+      "<p class=a>a</p><p class=x>x</p>",
+    ].join("");
+    const stylesheets = { [`${url}x.css`]: ".x { display: none }" };
+
+    const findings = revealHtml(html, { url, stylesheets });
+
+    expect(linkedStylesheets(html, { url })).toEqual([]);
+    expect(ofKind(findings, "hidden")).toEqual([]);
+    expect(ofKind(findings, "link")).toEqual([]);
+  });
 });
 
 /* One answer of the test server. */

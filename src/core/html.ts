@@ -127,26 +127,30 @@ const NAMED_REFERENCES: Readonly<Record<string, string>> = {
   euro: "\u20AC",
 };
 
-/** How a pass reads the source: the tree walk, or the encoding prescan. */
-interface TokenizerMode {
-  /** Whether a script, a style and the like hold text up to their own end tag. */
-  readonly rawText: boolean;
+/**
+ * What only the tree knows about where a tag sits. It has seen every token ahead of the one it's
+ * asked about, but not that one.
+ */
+export interface HtmlTree {
   /** Whether the `<![CDATA[` at this offset opens a section, which only SVG and MathML do. */
   readonly cdataAt: (offset: number) => boolean;
+  /** Whether this script, style or the like opens as HTML and holds text up to its end tag. */
+  readonly rawTextAt: (tag: HtmlStartTag) => boolean;
 }
+
+/** A page with no SVG or MathML in it, as far as anyone told the tokenizer. */
+const HTML_ONLY: HtmlTree = { cdataAt: () => false, rawTextAt: () => true };
+/** The encoding prescan, which finds markup inside a script too. */
+const PRESCAN: HtmlTree = { cdataAt: () => false, rawTextAt: () => false };
 
 /**
  * Split HTML into tokens like a browser does; whatever opens no markup is text.
  * @param html - The page source.
- * @param cdataAt - Whether a `<![CDATA[` at that offset sits in SVG or MathML. Only the tree
- * knows, and it has seen every token ahead of it by the time it's asked.
+ * @param tree - Where each `<![CDATA[` and raw text tag sits, which in SVG and MathML is markup.
  * @yields {HtmlToken} Tokens in source order, a few at a time, never the whole page as a list.
  */
-export function* tokenizeHtml(
-  html: string,
-  cdataAt: (offset: number) => boolean = () => false,
-): Generator<HtmlToken> {
-  yield* new Tokenizer(html, { rawText: true, cdataAt }).run();
+export function* tokenizeHtml(html: string, tree: HtmlTree = HTML_ONLY): Generator<HtmlToken> {
+  yield* new Tokenizer(html, tree).run();
 }
 
 /**
@@ -155,7 +159,7 @@ export function* tokenizeHtml(
  * @yields {HtmlToken} Tokens in source order, with no element read as raw text.
  */
 export function* prescanHtml(html: string): Generator<HtmlToken> {
-  yield* new Tokenizer(html, { rawText: false, cdataAt: () => false }).run();
+  yield* new Tokenizer(html, PRESCAN).run();
 }
 
 /**
@@ -273,16 +277,14 @@ function isScalarValue(codePoint: number): boolean {
 /** Holds the position while it walks the source once. */
 class Tokenizer {
   private readonly html: string;
-  private readonly rawText: boolean;
-  private readonly cdataAt: (offset: number) => boolean;
+  private readonly tree: HtmlTree;
   private readonly tokens: HtmlToken[] = [];
   private position = 0;
   private textStart = 0;
 
-  constructor(html: string, mode: TokenizerMode) {
+  constructor(html: string, tree: HtmlTree) {
     this.html = html;
-    this.rawText = mode.rawText;
-    this.cdataAt = mode.cdataAt;
+    this.tree = tree;
   }
 
   *run(): Generator<HtmlToken> {
@@ -304,7 +306,7 @@ class Tokenizer {
   private markup(): boolean {
     const next = this.html[this.position + 1] ?? "";
     if (this.html.startsWith("<!--", this.position)) return this.comment();
-    if (this.html.startsWith(CDATA_OPEN, this.position) && this.cdataAt(this.position))
+    if (this.html.startsWith(CDATA_OPEN, this.position) && this.tree.cdataAt(this.position))
       return this.cdata();
     if (next === "!" || next === "?") return this.bogusComment(next);
     if (next === "/") return this.endTag();
@@ -377,11 +379,10 @@ class Tokenizer {
     const name = this.html.slice(start + 1, nameEnd).toLowerCase();
     const tag = new AttributeReader(this.html, nameEnd).read();
     if (tag === undefined) return this.skip(start, this.html.length);
-    this.emit(
-      { kind: "start", start, name, attributes: tag.attributes, selfClosing: tag.selfClosing },
-      tag.end,
-    );
-    if (this.rawText && RAW_TEXT.has(name)) this.readRawText(name);
+    const { attributes, selfClosing } = tag;
+    const token: HtmlStartTag = { kind: "start", start, name, attributes, selfClosing };
+    this.emit(token, tag.end);
+    if (RAW_TEXT.has(name) && this.tree.rawTextAt(token)) this.readRawText(name);
     return true;
   }
 
