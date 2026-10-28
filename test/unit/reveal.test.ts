@@ -327,6 +327,31 @@ describe("revealHtml", () => {
     expect(hidden).toEqual([expect.objectContaining({ value: "gone" })]);
   });
 
+  it.each([
+    "center",
+    "dialog open",
+    "dir",
+    "hgroup",
+    "search",
+    "summary",
+    "listing",
+    "li",
+    "dd",
+    "dt",
+    "plaintext",
+  ])("ends a hidden paragraph at <%s>, as a browser does", (tag) => {
+    const name = tag.split(" ")[0];
+    const hidden = ofKind(revealHtml(`<p style=display:none>a<${tag}>b</${name}>c`), "hidden");
+
+    expect(hidden.map(({ value }) => value)).toEqual(["a"]);
+  });
+
+  it("shows the summary that ends a paragraph in closed details", () => {
+    const hidden = ofKind(revealHtml("<details><p>x<summary>s</summary>y</details>"), "hidden");
+
+    expect(hidden.map(({ value }) => value)).toEqual(["xy"]);
+  });
+
   it("finds text in its background's color and names both colors", () => {
     const findings = revealHtml(
       [
