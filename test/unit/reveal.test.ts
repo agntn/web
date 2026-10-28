@@ -183,6 +183,83 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
   });
 
+  it.each([
+    ["an invalid display", "display:none", "display:bogus"],
+    ["a misspelled visibility", "visibility:hidden", "visibility:hiden"],
+    ["an invalid opacity", "opacity:0", "opacity:full"],
+    ["a negative font-size", "font-size:0", "font-size:-12px"],
+    ["an unknown font-size unit", "font-size:0", "font-size:12pz"],
+    ["an unknown color", "color:transparent", "color:invisible"],
+    ["a color with an old IE hack", "color:transparent", String.raw`color:red\9`],
+    ["an invalid left", "position:absolute;left:-9999px", "left:far"],
+    ["an invalid text-indent", "text-indent:-9999px", "text-indent:none"],
+    ["a misspelled position", "position:absolute;left:-9999px", "position:abs"],
+    ["an invalid clip", "position:absolute;clip:rect(0,0,0,0)", "clip:none"],
+    ["an invalid clip-path", "clip-path:inset(50%)", "clip-path:inset"],
+    ["an invalid height", "overflow:hidden;height:0", "height:tall"],
+    ["a negative width", "overflow:hidden;width:1px", "width:-5px"],
+    ["a misspelled overflow", "overflow:hidden;height:1px", "overflow:hiden"],
+    ["an empty display", "display:none", "display:"],
+  ])("drops %s the way a browser does", (_label, valid, invalid) => {
+    const inline = `<p style='${valid};${invalid}'>a</p>`;
+    const sheets = `<style>.b{${valid}}.b{${invalid}!important}</style><p class=b>b</p>`;
+
+    const hidden = ofKind(revealHtml(`${inline}\n${sheets}`), "hidden");
+
+    expect(hidden.map(({ value }) => value)).toEqual(["a", "b"]);
+  });
+
+  it.each([
+    ["background-color:#fff", "background-color:whit"],
+    ["background:#fff", "background:whit"],
+    ["background:#fff", String.raw`background:#000\9`],
+  ])("keeps %s camouflaging when %s comes after", (valid, invalid) => {
+    const html = `<body bgcolor=#000><span style='color:#fff;${valid};${invalid}'>x</span>`;
+
+    expect(ofKind(revealHtml(html), "camouflage")).toEqual([
+      expect.objectContaining({ value: "x" }),
+    ]);
+  });
+
+  it.each([
+    "url(a.png) no-repeat center / cover, linear-gradient(#000, #111) #000",
+    'url("hero(.png") #000',
+    "url(a.png)#000",
+  ])("still lets background:%s undo the one before it", (value) => {
+    const html = `<body bgcolor=#000><span style='color:#fff;background:#fff;background:${value}'>x</span>`;
+
+    expect(ofKind(revealHtml(html), "camouflage")).toEqual([]);
+  });
+
+  it.each([
+    ["display:none", "display:inline flow-root"],
+    ["display:none", "display:-webkit-box"],
+    ["display:none", "display:var(--shown)"],
+    ["display:none", "display:INHERIT"],
+    ["display:none", String.raw`display:bl\6f ck`],
+    ["visibility:hidden", "visibility:VISIBLE"],
+    ["visibility:hidden", String.raw`visibility:v\61 r(--shown, visible)`],
+    ["visibility:hidden", "visibility:var(--x, visible"],
+    ["opacity:0", "opacity:50%"],
+    ["opacity:0", "opacity:calc(1 / 2)"],
+    ["opacity:0", "opacity:calc(1"],
+    ["font-size:0", "font-size:clamp(1rem, 2vw, 3rem)"],
+    ["font-size:0", "font-size:12"],
+    ["color:transparent", "color:rebeccapurple"],
+    ["color:transparent", "color:CanvasText"],
+    ["color:transparent", "color:oklch(70% 0.1 200)"],
+    ["color:transparent", "color:light-dark(#000, #fff)"],
+    ["position:absolute;left:-9999px", "left:anchor(--a right)"],
+    ["text-indent:-9999px", "text-indent:2em hanging"],
+    ["clip-path:inset(50%)", "clip-path:circle(40%) border-box"],
+    ["clip-path:inset(50%)", "clip-path:none"],
+    ["overflow:hidden;height:0", "height:fit-content"],
+    ["overflow:hidden;height:0", "height:100dvh"],
+    ["overflow:hidden;width:0", "width:-webkit-fill-available"],
+  ])("still lets a valid value undo %s: %s", (hiding, value) => {
+    expect(ofKind(revealHtml(`<p style='${hiding};${value}'>x</p>`), "hidden")).toEqual([]);
+  });
+
   it("lets a descendant undo inherited visibility, size or color", () => {
     const html = [
       "<div style='visibility:hidden'>gone <span style='visibility:visible'>back</span></div>",
