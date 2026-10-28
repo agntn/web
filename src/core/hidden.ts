@@ -1053,14 +1053,20 @@ class HiddenScanner {
    * @param name - Its `slot` attribute; text and elements without one take the default slot.
    * @param place - Its label and line.
    * @param fallback - What it shows without text, such as an image's `alt`.
-   * @returns {OpenElement | undefined} The element or slot, hidden when no slot takes the node.
+   * @returns {OpenElement | undefined} The element or slot; an unslotted node hides past overrides.
    */
   private inheritedFrom(name: string, place: Place, fallback?: string): OpenElement | undefined {
     const host = this.stack.at(-1);
     const slots = this.hostSlots();
     if (host === undefined || slots === undefined) return host;
     const slot = slots.find(name);
-    if (slot === undefined) return this.unslottedIn(unslotted(name, slots.manual), place, fallback);
+    if (slot === undefined) {
+      const reason = unslotted(name, slots.manual);
+      return {
+        ...host,
+        hidden: new HiddenText("hidden", place.line, place.label, reason, fallback),
+      };
+    }
     const { hidden, camouflage } = slot;
     const own = hidden !== undefined && slot.owned.includes(hidden);
     return {
@@ -1068,20 +1074,6 @@ class HiddenScanner {
       hidden: hidden === host.hidden ? hidden : hidden?.slotted(place, own, fallback),
       camouflage: camouflage === host.camouflage ? camouflage : camouflage?.slotted(place, false),
     };
-  }
-
-  /**
-   * A light child no slot takes renders nowhere, unless its host is already out of sight.
-   * @param reason - Why no slot takes it.
-   * @param place - Its label and line.
-   * @param fallback - What it shows without text.
-   * @returns {OpenElement | undefined} The host, hiding the child when nothing else does.
-   */
-  private unslottedIn(reason: string, place: Place, fallback?: string): OpenElement | undefined {
-    const host = this.stack.at(-1);
-    if (host?.hidden !== undefined) return host;
-    const hidden = new HiddenText("hidden", place.line, place.label, reason, fallback);
-    return host && { ...host, hidden };
   }
 
   private hiddenAt(

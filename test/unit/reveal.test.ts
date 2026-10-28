@@ -1055,6 +1055,8 @@ describe("revealHtml", () => {
       "<template shadowrootmode=open><slot name=a></slot><slot name=early></slot></template></my-card>",
       "<my-card><template shadowrootmode=open shadowrootslotassignment=manual><slot></slot>",
       "</template><i>scripted</i></my-card>",
+      "<div style='visibility:hidden'><template shadowrootmode=open></template>",
+      "<b style='visibility:visible'>no slot to show it in</b></div>",
     ].join("\n");
 
     expect(ofKind(revealHtml(html), "hidden")).toEqual([
@@ -1075,6 +1077,12 @@ describe("revealHtml", () => {
         line: 5,
         reason: "unslotted, its shadow root assigns slots by script",
         value: "scripted",
+      }),
+      expect.objectContaining({
+        element: "b",
+        line: 7,
+        reason: "unslotted, no default slot",
+        value: "no slot to show it in",
       }),
     ]);
   });
