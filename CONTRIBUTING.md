@@ -37,3 +37,13 @@ Test what a caller sees, not how many times something got called. No external se
 Fewer is better. A browser, a crawler or a heavy runtime is the cue for a separate package, see the top. The package is ESM only, with no CJS shims, `as any` or `@ts-ignore`.
 
 Versions live in the root `deps` and `dev` catalogs, so one line moves the library and docs together. Nothing is hoisted now, so docs must list every package it imports in `docs/package.json`. Hoisting used to hide the gaps. `test/unit/docs-dependencies.test.ts` names what you forgot.
+
+## Releasing
+
+A release should need one decision, not a checklist. Every push to `main` refreshes a draft PR from [uppt](https://github.com/danielroe/uppt). Conventional commit types since the last tag set the version and write the notes. Pick the type with care, it ends up in front of every user who reads them.
+
+Merge the PR and it tags `vX.Y.Z`, then creates the GitHub release. The notes live there, there's no `CHANGELOG.md`.
+
+On that tag, `release.yml` runs `vp test`, packs with `pnpm pack` and stages the tarball on npm through OIDC trusted publishing. The pack step runs obuild through `prepack`. npm keeps the version invisible until a maintainer approves it with 2FA on npmjs.com.
+
+Publish failed? Run `gh workflow run release.yml --ref vX.Y.Z` to test, pack and publish again. It uses the tag's own workflow. A fix merged after the tag only reaches the next version.
