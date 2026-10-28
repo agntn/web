@@ -16,6 +16,7 @@ import {
   type HiddenFinding,
   type Stylesheet,
 } from "./hidden.ts";
+import { prescanHtml, type HtmlAttribute } from "./html.ts";
 import { sanitizeUrl } from "./redaction.ts";
 import { clip } from "./text.ts";
 import type { ExecutionOptions } from "./types.ts";
@@ -514,8 +515,35 @@ async function readText(
 function charsetOf(contentType: string, head: string): string {
   const declared = CHARSET.exec(contentType)?.groups?.label;
   if (declared !== undefined) return declared;
-  const meta = /<meta[^>]+charset\s*=\s*["']?(?<label>[\w.:-]+)/iu.exec(head)?.groups?.label;
-  return meta ?? "utf-8";
+  return metaCharset(head) ?? "utf-8";
+}
+
+/**
+ * The charset the first `<meta>` outside a comment names, the way the HTML prescan finds it.
+ * @param head - The start of the body, read as single bytes.
+ * @returns {string | undefined} The label, or undefined when no `<meta>` names one.
+ */
+function metaCharset(head: string): string | undefined {
+  for (const token of prescanHtml(head)) {
+    if (token.kind !== "start" || token.name !== "meta") continue;
+    const label = charsetOfMeta(token.attributes);
+    if (label !== undefined) return label;
+  }
+  return undefined;
+}
+
+/**
+ * A `charset`, or a `content` charset when `http-equiv` says it is the content type.
+ * @param attributes - The attributes of one `<meta>`.
+ * @returns {string | undefined} The label, or undefined when the tag names none.
+ */
+function charsetOfMeta(attributes: readonly HtmlAttribute[]): string | undefined {
+  const value = (name: string): string | undefined =>
+    attributes.find((attribute) => attribute.name === name)?.value.trim();
+  const charset = value("charset");
+  if (charset !== undefined && charset !== "") return charset;
+  if (value("http-equiv")?.toLowerCase() !== "content-type") return undefined;
+  return CHARSET.exec(value("content") ?? "")?.groups?.label;
 }
 
 function decoder(label: string): TextDecoder {

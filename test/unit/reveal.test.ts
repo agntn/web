@@ -1224,6 +1224,37 @@ describe("revealUrl", () => {
     expect(ofKind(result.findings, "comment")[0]?.value).toBe("café");
   });
 
+  it.each([
+    `<!-- <meta charset="windows-1250"> -->`,
+    `<!-- <meta http-equiv="Content-Type" content="text/html; charset=windows-1250"> -->`,
+    `<meta content="text/html; charset=windows-1250">`,
+  ])("ignores the charset in %s", async (tag) => {
+    routes.set("/ignored", [{ status: 200, headers: html, body: `${tag}<!-- zażółć -->` }]);
+
+    const result = await revealUrl(`${base}/ignored`, { allowPrivateNetwork: true });
+
+    expect(ofKind(result.findings, "comment").at(-1)?.value).toBe("zażółć");
+  });
+
+  it.each([
+    "<!--><meta charset=windows-1252>",
+    `<p title="<!--"><meta charset=windows-1252>`,
+    `<a href="a> <!-- b"><meta charset=windows-1252>`,
+    `<script>"<meta charset=windows-1252>"</script>`,
+    `<meta http-equiv=content-type content="text/html; charset=windows-1252">`,
+  ])("reads the charset in %s", async (page) => {
+    const latin = Buffer.concat([
+      Buffer.from(`${page}<!-- caf`),
+      Buffer.from([0xe9]),
+      Buffer.from(" -->"),
+    ]);
+    routes.set("/read", [{ status: 200, headers: html, body: latin }]);
+
+    const result = await revealUrl(`${base}/read`, { allowPrivateNetwork: true });
+
+    expect(ofKind(result.findings, "comment").at(-1)?.value).toBe("café");
+  });
+
   it("scans the start of a page longer than maxBytes", async () => {
     const page = `<!-- first -->${"x".repeat(5_000)}<!-- past the limit -->`;
     routes.set("/long", [{ status: 200, headers: html, body: page }]);

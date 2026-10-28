@@ -122,7 +122,16 @@ const NAMED_REFERENCES: Readonly<Record<string, string>> = {
  * @yields {HtmlToken} Tokens in source order, a few at a time, never the whole page as a list.
  */
 export function* tokenizeHtml(html: string): Generator<HtmlToken> {
-  yield* new Tokenizer(html).run();
+  yield* new Tokenizer(html, true).run();
+}
+
+/**
+ * Split HTML the way the encoding prescan reads it, which finds markup inside a script too.
+ * @param html - The start of a page.
+ * @yields {HtmlToken} Tokens in source order, with no element read as raw text.
+ */
+export function* prescanHtml(html: string): Generator<HtmlToken> {
+  yield* new Tokenizer(html, false).run();
 }
 
 /**
@@ -202,12 +211,14 @@ function isScalarValue(codePoint: number): boolean {
 /** Holds the position while it walks the source once. */
 class Tokenizer {
   private readonly html: string;
+  private readonly rawText: boolean;
   private readonly tokens: HtmlToken[] = [];
   private position = 0;
   private textStart = 0;
 
-  constructor(html: string) {
+  constructor(html: string, rawText: boolean) {
     this.html = html;
+    this.rawText = rawText;
   }
 
   *run(): Generator<HtmlToken> {
@@ -286,7 +297,7 @@ class Tokenizer {
       { kind: "start", start, name, attributes: tag.attributes, selfClosing: tag.selfClosing },
       tag.end,
     );
-    if (RAW_TEXT.has(name)) this.rawText(name);
+    if (this.rawText && RAW_TEXT.has(name)) this.readRawText(name);
     return true;
   }
 
@@ -294,7 +305,7 @@ class Tokenizer {
    * Everything up to `</name` is text, the way a browser reads a script or a style.
    * @param name - The raw text element just opened.
    */
-  private rawText(name: string): void {
+  private readRawText(name: string): void {
     const pattern = new RegExp(`</${name}[\\t\\n\\f\\r />]`, "giu");
     pattern.lastIndex = this.position;
     const close = pattern.exec(this.html)?.index ?? this.html.length;
