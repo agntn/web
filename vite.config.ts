@@ -29,6 +29,9 @@ export default defineConfig({
     globals: true,
     setupFiles: ["test/setup.ts"],
     include: ["test/**/*.test.ts"],
+    /** A hook packing `dist/` or a cold Pi import blows past the default limits on a loaded box. */
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     /** A docs module resolves the library as the worker bundles it, from `src/`. */
     alias: {
       "@agntn/web": fileURLToPath(new URL("src/index.ts", import.meta.url)),
