@@ -1,4 +1,5 @@
 import { detectAvailableProviders, searchAllDetailed, type SearchPagination } from "@agntn/web";
+import { createError, defineEventHandler, getQuery } from "nuxt/server";
 
 export interface FanoutResult extends WireResult {
   /** Every provider that returned this URL, the first one being the representative. */
@@ -31,7 +32,7 @@ export default defineEventHandler(async (event) => {
   const params = { q, maxResults, providers };
   try {
     if (providers.length === 0) {
-      throw createError({ statusCode: 503, statusMessage: "No search provider is configured on the docs worker" });
+      throw createError({ status: 503, statusText: "No search provider is configured on the docs worker" });
     }
     return await cachedAnswer<FanoutAnswer>(
       event,

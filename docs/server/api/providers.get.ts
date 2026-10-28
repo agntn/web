@@ -1,4 +1,5 @@
 import { listProviders, packageCapabilities, version, type ProviderStatus } from "@agntn/web";
+import { defineEventHandler } from "nuxt/server";
 
 export interface ProvidersAnswer {
   version: string;

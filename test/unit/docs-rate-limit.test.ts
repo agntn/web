@@ -1,14 +1,30 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 /** Stands in for `ohash`, which only `docs/` installs and CI never does. Tests compare keys only. */
 vi.mock("ohash", () => ({ hash: (value: unknown) => `h:${String(value)}` }));
 
-const { assertRateLimit } = await import("../../docs/server/utils/query.ts");
+/** Only `docs/` installs these: CI takes the mock by bare name, a local run the one by path. */
+const { nitro, nuxtServer } = vi.hoisted(() => ({
+  nitro: { useStorage: () => undefined },
+  nuxtServer: {
+    getRequestHeader: (
+      event: Readonly<{
+        req: Readonly<{ headers: Readonly<{ get: (name: string) => string | null }> }>;
+      }>,
+      name: string,
+    ) => event.req.headers.get(name) ?? undefined,
+    getRequestIP: () => undefined,
+    createError: (input: Readonly<{ status: number; statusText: string }>) =>
+      Object.assign(new Error(input.statusText), input),
+    isNuxtError: () => false,
+  },
+}));
+vi.mock("nitropack/runtime", () => nitro);
+vi.mock("../../docs/node_modules/nitropack/dist/runtime/index.mjs", () => nitro);
+vi.mock("nuxt/server", () => nuxtServer);
+vi.mock("../../docs/node_modules/nuxt/dist/server/index.js", () => nuxtServer);
 
-interface FakeEvent {
-  readonly headers: Readonly<Record<string, string>>;
-  readonly context: Readonly<{ cloudflare: Readonly<{ env: Readonly<Record<string, unknown>> }> }>;
-}
+const { assertRateLimit } = await import("../../docs/server/utils/query.ts");
 
 /** Keys the fake `QUERY_LIMIT` binding was asked about, emptied by every `keyFor`. */
 const keys: string[] = [];
@@ -22,8 +38,13 @@ function fakeEvent(address: string): never {
       return { success: true };
     },
   };
-  const event: FakeEvent = {
+  const req = new Request("https://web.agntn.dev/api/search", {
     headers: { "cf-connecting-ip": address },
+  });
+  const event = {
+    req,
+    url: new URL(req.url),
+    res: { headers: new Headers() },
     context: { cloudflare: { env: { QUERY_LIMIT: binding } } },
   };
   return event as never;
@@ -35,18 +56,6 @@ async function keyFor(address: string): Promise<string | undefined> {
   await assertRateLimit(fakeEvent(address));
   return keys[0];
 }
-
-beforeEach(() => {
-  vi.stubGlobal(
-    "getRequestHeader",
-    (event: Readonly<FakeEvent>, name: string) => event.headers[name.toLowerCase()],
-  );
-  vi.stubGlobal("getRequestIP", () => undefined);
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("docs rate limit key", () => {
   it("counts every address of one IPv6 /64 as one client", async () => {

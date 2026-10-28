@@ -1,4 +1,5 @@
 import { readUrlDetailed } from "@agntn/web";
+import { defineEventHandler, getQuery } from "nuxt/server";
 
 /** One page as `readUrlDetailed` returns it, with the reader that answered and the readers tried before it. */
 export interface ReadAnswer {
