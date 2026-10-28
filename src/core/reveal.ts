@@ -514,8 +514,26 @@ async function readText(
 function charsetOf(contentType: string, head: string): string {
   const declared = CHARSET.exec(contentType)?.groups?.label;
   if (declared !== undefined) return declared;
-  const meta = /<meta[^>]+charset\s*=\s*["']?(?<label>[\w.:-]+)/iu.exec(head)?.groups?.label;
-  return meta ?? "utf-8";
+  return metaCharset(head) ?? "utf-8";
+}
+
+/**
+ * The charset a `<meta>` names, read like the HTML prescan, which steps over comments and tags.
+ * @param head - The start of the body, read as single bytes.
+ * @returns {string | undefined} The label, or undefined when no `<meta>` outside a comment has one.
+ */
+function metaCharset(head: string): string | undefined {
+  const tags = /<!--|<meta[^>]+charset\s*=\s*["']?(?<label>[\w.:-]+)|<[!/?a-z][^>]*>/giu;
+  for (let match = tags.exec(head); match !== null; match = tags.exec(head)) {
+    const label = match.groups?.label;
+    if (label !== undefined) return label;
+    if (match[0] === "<!--") {
+      const end = head.indexOf("-->", match.index + 2);
+      if (end === -1) return undefined;
+      tags.lastIndex = end + 3;
+    }
+  }
+  return undefined;
 }
 
 function decoder(label: string): TextDecoder {
