@@ -64,7 +64,7 @@ export interface Color {
 }
 
 /** An at-rule ahead, past whitespace; sticky, so it tests one position. */
-const AT_RULE = /\s*@/uy;
+const AT_RULE = /[ \t\n\r\f]*@/uy;
 /** An at-keyword, whose name may hold escapes and non-ASCII letters, and what follows it. */
 const AT_KEYWORD =
   /^@(?<name>(?:[\w-]|\P{ASCII}|\\(?:[\da-f]{1,6}[ \t\n\r\f]?|[^\n\r\f]))+)(?<rest>.*)$/su;
@@ -78,6 +78,8 @@ const NAME_TOKEN =
 const SPACE = /^[ \t\n\r\f]/u;
 /** Nothing but CSS whitespace. */
 const BLANK = /^[ \t\n\r\f]*$/u;
+/** A trailing `!important`, where only CSS whitespace may sit after the `!`. */
+const IMPORTANT = /![ \t\n\r\f]*important$/iu;
 /**
  * One whole CSS identifier: a valid start, then only name characters and escapes. A hex escape
  * takes six digits or stops before the next one, so a near miss fails in one pass, not 2^n.
@@ -89,7 +91,8 @@ const ESCAPE = /\\(?:([\da-f]{1,6})[ \t\n\r\f]?|([^\n\r\f]))/giu;
 /** Layers nested deeper than this fold into their ancestor at this depth; no page needs more. */
 export const LAYER_DEPTH_LIMIT = 32;
 /** `@import` with its URL, quoted or in `url()`, and the media list after it. */
-const IMPORT = /^@import\s*(?:url\(\s*)?(?<url>"[^"]*"|'[^']*'|[^\s"')]+)\s*\)?\s*(?<media>.*)$/isu;
+const IMPORT =
+  /^@import[ \t\n\r\f]*(?:url\([ \t\n\r\f]*)?(?<url>"[^"]*"|'[^']*'|[^ \t\n\r\f"')]+)[ \t\n\r\f]*\)?[ \t\n\r\f]*(?<media>.*)$/isu;
 /** An import's `layer` or `layer(name)`, where an escaped `)` stays in the name. */
 const IMPORT_LAYER = /^layer\b(?:\((?<name>(?:\\[\s\S]|[^)\\])*)\))?/iu;
 /** Words a media type can't be, so a query naming one turns into `not all`. */
@@ -98,7 +101,9 @@ const NOT_A_TYPE = ["and", "layer", "not", "only", "or"];
 const SCREEN_TYPES = ["all", "screen"];
 const COMPOUND_SELECTOR = /^(?<tag>[a-z][\w-]*|\*)?(?<rest>(?:[.#][\w-]+)*)$/iu;
 const SELECTOR_PART = /[.#][\w-]+/gu;
-const COLOR_TOKEN = /#[\da-f]{3,8}\b|rgba?\([^)]{0,64}\)|\b[a-z]+\b/giu;
+/** A hex color, `rgb()` or a bare word, each a whole token, so `#fff\u00a0` is no `#fff`. */
+const COLOR_TOKEN =
+  /#[\da-f]{3,8}(?![\w-]|\P{ASCII}|\\)|rgba?\([^)]{0,64}\)|(?<![\w-]|\P{ASCII}|\\)[a-z]+(?![\w-]|\P{ASCII}|\\)/giu;
 /** A function that is not a color, like \`url()\` or a gradient, whose words name no background. */
 const IMAGE_FUNCTION = /\b(?!rgba?\()[a-z-]+\([^)]{0,512}\)/giu;
 /** A background value longer than this holds no color worth reading, only cost. */
@@ -127,7 +132,7 @@ const RGB_COLOR = /^rgba?\((?<body>[^)]*)\)$/iu;
 const ZERO_LENGTH = /^[+-]?(?:0+(?:\.0*)?|\.0+)(?:[a-z]+|%)?$/iu;
 const FAR_OFF = /^-(?<amount>\d+(?:\.\d+)?)px$/iu;
 const CLIPPED =
-  /^(?:rect\(\s*0(?:px)?[\s,]+0(?:px)?[\s,]+0(?:px)?[\s,]+0(?:px)?\s*\)|inset\(\s*(?:50|100)%\s*\))$/iu;
+  /^(?:rect\([ \t\n\r\f]*0(?:px)?[ \t\n\r\f,]+0(?:px)?[ \t\n\r\f,]+0(?:px)?[ \t\n\r\f,]+0(?:px)?[ \t\n\r\f]*\)|inset\([ \t\n\r\f]*(?:50|100)%[ \t\n\r\f]*\))$/iu;
 const AT_MOST_ONE_PIXEL = /^(?:0*(?:\.\d+)?|1)(?:px)?$/iu;
 /** A pushed element sits this far off the left or top edge, past any screen it could show on. */
 const OFF_SCREEN_PIXELS = 999;
@@ -172,10 +177,10 @@ export function parseDeclarations(text: string, source?: string): Record<string,
   for (const part of splitTopLevel(withoutComments(text), ";")) {
     const colon = part.indexOf(":");
     if (colon <= 0) continue;
-    const property = part.slice(0, colon).trim().toLowerCase();
-    const raw = part.slice(colon + 1).trim();
-    const important = /!\s*important$/iu.test(raw);
-    const value = (important ? raw.replace(/!\s*important$/iu, "") : raw).trim();
+    const property = trimmed(part.slice(0, colon)).toLowerCase();
+    const raw = trimmed(part.slice(colon + 1));
+    const important = IMPORTANT.test(raw);
+    const value = important ? trimmed(raw.replace(IMPORTANT, "")) : raw;
     const declaration = { value, important, ...(source === undefined ? {} : { source }) };
     declarations[property] = winner(declarations[property], declaration);
     if (property === "background") {
@@ -250,7 +255,7 @@ class StylesheetReader {
       return close + 1;
     }
     if (open === -1) return this.text.length;
-    const prelude = this.text.slice(from, open).trimStart();
+    const prelude = trimmed(this.text.slice(from, open));
     if (this.text[open] === ";") return this.statement(prelude, path, open);
     return this.block(prelude, open, path);
   }
@@ -282,7 +287,7 @@ class StylesheetReader {
    */
   private statement(prelude: string, path: LayerPath, end: number): number {
     const names = atRuleRest(prelude, "layer") ?? "";
-    if (names.trim() !== "") this.layers.push(...(layerPaths(names, path) ?? []));
+    if (!BLANK.test(names)) this.layers.push(...(layerPaths(names, path) ?? []));
     return end + 1;
   }
 
@@ -318,7 +323,7 @@ class StylesheetReader {
     const names = atRuleRest(prelude, "layer");
     if (names === undefined) return undefined;
     const anonymous = [[...path, `\u0000${this.anonymous++}`].slice(0, LAYER_DEPTH_LIMIT)];
-    const [inner, ...more] = names.trim() === "" ? anonymous : (layerPaths(names, path) ?? []);
+    const [inner, ...more] = BLANK.test(names) ? anonymous : (layerPaths(names, path) ?? []);
     if (inner === undefined || more.length > 0) return undefined;
     this.layers.push(inner);
     return inner;
@@ -428,7 +433,7 @@ export function stylesheetPreamble(css: string): StylesheetPreamble {
 function statementPreamble(statement: string): StylesheetPreamble | undefined {
   if (/^@charset\b/iu.test(statement)) return [];
   const names = atRuleRest(statement, "layer");
-  if (names === undefined || names.trim() === "") return importPreamble(statement);
+  if (names === undefined || BLANK.test(names)) return importPreamble(statement);
   return [{ layers: layerPaths(names) ?? [] }];
 }
 
@@ -453,10 +458,10 @@ function importPreamble(statement: string): StylesheetPreamble | undefined {
 function importOf(url: string, conditions: string): StylesheetImport | undefined {
   const bare = url.replaceAll(/^["']|["']$/gu, "");
   if (bare === "" || !forScreen(importMedia(conditions))) return undefined;
-  const layer = IMPORT_LAYER.exec(conditions.trim());
+  const layer = IMPORT_LAYER.exec(trimmed(conditions));
   if (layer === null) return { url: bare };
   const name = layer.groups?.name ?? "";
-  return { url: bare, layer: name.trim() === "" ? "" : name };
+  return { url: bare, layer: BLANK.test(name) ? "" : name };
 }
 
 /**
@@ -469,7 +474,7 @@ function* leadingStatements(text: string): Generator<string> {
   while (atRuleAt(text, position)) {
     const end = preludeEnd(text, position, true);
     if (end === -1 || text[end] !== ";") return;
-    yield text.slice(position, end).trimStart();
+    yield trimmed(text.slice(position, end));
     position = end + 1;
   }
 }
@@ -480,9 +485,9 @@ function* leadingStatements(text: string): Generator<string> {
  * @returns {string} The media list alone.
  */
 function importMedia(conditions: string | undefined): string {
-  let text = (conditions ?? "").trim().replace(IMPORT_LAYER, "").trimStart();
+  let text = trimmed(trimmed(conditions ?? "").replace(IMPORT_LAYER, ""));
   if (/^supports\(/iu.test(text)) text = text.slice(closingParen(text, text.indexOf("(")) + 1);
-  return text.trim();
+  return trimmed(text);
 }
 
 /**
@@ -650,7 +655,7 @@ export function hidingReason(declarations: Declarations): string | undefined {
  * @returns {Color | undefined} The color, or undefined for anything else.
  */
 export function parseColor(value: string): Color | undefined {
-  const text = value.trim().toLowerCase();
+  const text = trimmed(value).toLowerCase();
   if (text === "transparent") return { red: 0, green: 0, blue: 0, alpha: 0 };
   if (HEX_COLOR.test(text)) return hexColor(text.slice(1));
   const rgb = RGB_COLOR.exec(text)?.groups?.body;
@@ -707,6 +712,19 @@ function winner(
 }
 
 /**
+ * Text without CSS whitespace at its ends; `trim()` would take a no-break space along with it.
+ * @param text - The text.
+ * @returns {string} The text, trimmed.
+ */
+export function trimmed(text: string): string {
+  let start = 0;
+  let end = text.length;
+  while (start < end && SPACE.test(text.charAt(start))) start += 1;
+  while (end > start && SPACE.test(text.charAt(end - 1))) end -= 1;
+  return text.slice(start, end);
+}
+
+/**
  * Split on a separator outside parentheses and quotes, so `url(data:a;b)` stays whole.
  * @param text - Text to split.
  * @param separator - One character.
@@ -714,7 +732,7 @@ function winner(
  */
 function splitTopLevel(text: string, separator: string): string[] {
   return splitTopLevelRaw(text, separator)
-    .map((part) => part.trim())
+    .map((part) => trimmed(part))
     .filter((part) => part.length > 0);
 }
 
@@ -954,7 +972,7 @@ function farOff(declarations: Declarations, property: string): string | undefine
 
 function clipped(declarations: Declarations): string | undefined {
   const clip = declarations.clip ?? declarations["clip-path"];
-  if (clip === undefined || !CLIPPED.test(clip.value.trim())) return undefined;
+  if (clip === undefined || !CLIPPED.test(clip.value)) return undefined;
   return reason(declarations.clip === undefined ? "clip-path" : "clip", clip);
 }
 
@@ -962,7 +980,7 @@ function squeezed(declarations: Declarations): string | undefined {
   if (declarations.overflow?.value.toLowerCase() !== "hidden") return undefined;
   for (const property of ["height", "width"]) {
     const declaration = declarations[property];
-    if (declaration !== undefined && AT_MOST_ONE_PIXEL.test(declaration.value.trim())) {
+    if (declaration !== undefined && AT_MOST_ONE_PIXEL.test(declaration.value)) {
       return `${reason(property, declaration)}, overflow: hidden`;
     }
   }
@@ -978,7 +996,7 @@ function hexColor(hex: string): Color {
 }
 
 function rgbColor(body: string): Color | undefined {
-  const parts = body.split(/[\s,/]+/u).filter((part) => part.length > 0);
+  const parts = body.split(/[ \t\n\r\f,/]+/u).filter((part) => part.length > 0);
   if (parts.length < 3) return undefined;
   const [red, green, blue] = parts.slice(0, 3).map((part) => channel(part, 255));
   const alpha = parts[3] === undefined ? 1 : channel(parts[3], 1);

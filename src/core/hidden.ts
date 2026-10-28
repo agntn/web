@@ -12,6 +12,7 @@ import {
   ruleKey,
   sameColor,
   stylesheetPreamble,
+  trimmed,
   type Color,
   type LayerPath,
   type StylesheetImport,
@@ -105,6 +106,8 @@ const SINGLETON_ELEMENTS = new Set(["html", "head", "body"]);
 /** Elements that decide whether a sheet in the source reaches the page. */
 const NESTING = new Set(["template", "svg", "math"]);
 const HEADINGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
+/** What separates `class` and `rel` tokens: ASCII whitespace, so `a\u00a0` stays one class. */
+const TOKEN_GAP = /[\t\n\f\r ]+/u;
 /** Hiding properties that inherit, so a descendant can set them back. */
 const INHERITED_HIDING = new Set(["visibility", "font-size", "color"]);
 /** Values that undo an inherited hiding; `inherit`, `em` and `%` follow the parent. */
@@ -596,7 +599,7 @@ class HiddenScanner {
    * @param tag - The `<link>` start tag.
    */
   private prepareLink(tag: HtmlStartTag): void {
-    const rel = attribute(tag, "rel")?.toLowerCase().split(/\s+/u) ?? [];
+    const rel = attribute(tag, "rel")?.toLowerCase().split(TOKEN_GAP) ?? [];
     if (!rel.includes("stylesheet") || !linkApplies(tag)) return;
     this.assumeDefaults = false;
     const href = attribute(tag, "href");
@@ -967,9 +970,7 @@ function overridesHiding(reason: string, declarations: Declarations): boolean {
   if (own === undefined || !INHERITED_HIDING.has(property)) return false;
   if (property === "color") return (parseColor(own.value)?.alpha ?? 0) > 0;
   const visible = Object.hasOwn(VISIBLE_VALUES, property) ? VISIBLE_VALUES[property] : undefined;
-  return (
-    visible?.test(own.value.trim()) === true && hidingReason({ [property]: own }) === undefined
-  );
+  return visible?.test(own.value) === true && hidingReason({ [property]: own }) === undefined;
 }
 
 /**
@@ -993,7 +994,7 @@ function structuralReason(tag: HtmlStartTag, declarations: Declarations): string
  * @returns {boolean} True when the link counts.
  */
 function linkApplies(tag: HtmlStartTag): boolean {
-  const type = attribute(tag, "type")?.split(";")[0]?.trim().toLowerCase() ?? "";
+  const type = trimmed(attribute(tag, "type")?.split(";")[0] ?? "").toLowerCase();
   const css = type === "" || type === "text/css";
   return css && attribute(tag, "disabled") === undefined && forScreen(attribute(tag, "media"));
 }
@@ -1151,9 +1152,9 @@ function linkFinding(
 ): HiddenFinding | undefined {
   const href = attribute(tag, "href");
   if (href === undefined) return undefined;
-  const rel = tag.name === "base" ? "base" : (attribute(tag, "rel")?.trim().toLowerCase() ?? "");
+  const rel = tag.name === "base" ? "base" : trimmed(attribute(tag, "rel") ?? "").toLowerCase();
   return {
-    kind: rel.split(/\s+/u).includes("stylesheet") ? "style" : "link",
+    kind: rel.split(TOKEN_GAP).includes("stylesheet") ? "style" : "link",
     line,
     ...(rel === "" ? {} : { name: rel }),
     value: valueOf(resolve(href, base)),
@@ -1192,7 +1193,7 @@ function attribute(tag: HtmlStartTag, name: string): string | undefined {
 }
 
 function classesOf(tag: HtmlStartTag): string[] {
-  return (attribute(tag, "class") ?? "").split(/\s+/u).filter((name) => name !== "");
+  return (attribute(tag, "class") ?? "").split(TOKEN_GAP).filter((name) => name !== "");
 }
 
 /**
