@@ -100,6 +100,11 @@ const ANNOTATION_HTML = new Set(["text/html", "application/xhtml+xml"]);
 const FOREIGN_CONTENT = new Set<Content>(["svg", "math", "annotation"]);
 /** Content of SVG and MathML that every scope but a table's stops at, any `annotation-xml` too. */
 const SCOPE_FENCES = new Set<Content>(["html", "mathText", "annotation"]);
+/** Elements that stop list-item or default-scope end tags. */
+const LIST_ITEM_SCOPE = new Set("applet caption html marquee object table td th template".split(" "));
+const DEFAULT_SCOPE = new Set(
+  "applet caption html marquee object table td th template button select datalist optgroup".split(" "),
+);
 /** End tags that reach past those fences: a table's, in table scope, and `</template>`. */
 const FENCE_CROSSING_ENDS = new Set("caption table tbody td template tfoot th thead tr".split(" "));
 /** HTML tags that close the SVG or MathML they open in, and `<font>` with any of these. */
@@ -702,6 +707,7 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
    */
   private endedAt(name: string): number {
     const table = FENCE_CROSSING_ENDS.has(name);
+    const scope = name === "li" ? LIST_ITEM_SCOPE : name === "dd" || name === "dt" ? DEFAULT_SCOPE : undefined;
     let fenced = false;
     let index = this.items.length - 1;
     for (; this.items[index]?.foreign === true; index -= 1) {
@@ -711,6 +717,7 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
     for (; !fenced && index >= 0; index -= 1) {
       const element = this.items[index]!;
       if (!element.foreign && element.name === name) return index;
+      if (scope?.has(element.name)) return -1;
       fenced = fences(element, table);
     }
     return -1;

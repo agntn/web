@@ -1052,6 +1052,22 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
   });
 
+  it("keeps list and definition end tags within their HTML scopes", () => {
+    const html = [
+      "<ul><li hidden>a<table></li>b</table></ul>",
+      "<dl><dd hidden>a<table></dd>b</table></dl>",
+      "<ul><li hidden>c<button></li>d</button></ul>",
+      "<ul><li hidden>e<section></li>f</section></ul>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual([
+      "ab",
+      "ab",
+      "c",
+      "e",
+    ]);
+  });
+
   it("closes nothing outside a template from an end tag inside it", () => {
     const url = "https://example.com/";
     const html = [
