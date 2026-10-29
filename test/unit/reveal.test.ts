@@ -1052,6 +1052,42 @@ describe("revealHtml", () => {
     expect(ofKind(revealHtml(html), "hidden")).toEqual([]);
   });
 
+  it("keeps a list item open past a section, a table or the other kind of list", () => {
+    const html = [
+      "<ul><li hidden>a<section><li>b</li></section>c</li></ul>",
+      "<dl><dd hidden>d<section><dt>e</dt></section>f</dd></dl>",
+      "<ul><li hidden>g<table><tr><td><li>h</li></td></tr></table>i</li></ul>",
+      "<dl><dt hidden>j<ul><dd>k</dd></ul>l</dt></dl>",
+      "<ul><li hidden>m<h2><li>n</li></h2>o</li></ul>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [1, "abc"],
+      [2, "def"],
+      [3, "ghi"],
+      [4, "jkl"],
+      [5, "mno"],
+    ]);
+  });
+
+  it("still closes a list item past a div, a p, a search or a stray <td>", () => {
+    const html = [
+      "<ul><li hidden>a<li>b</li></ul>",
+      "<ul><li hidden>c<div><li>d</li></div></ul>",
+      "<dl><dd hidden>e<p><dt>f</dt></dl>",
+      "<ul><li hidden>g<search><li>h</li></search></ul>",
+      "<ul><li hidden>i<td><li>j</li></ul>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [1, "a"],
+      [2, "c"],
+      [3, "e"],
+      [4, "g"],
+      [5, "i"],
+    ]);
+  });
+
   it("closes nothing outside a template from an end tag inside it", () => {
     const url = "https://example.com/";
     const html = [
