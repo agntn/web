@@ -46,9 +46,9 @@ catalogs:
     "@nuxt/ui": 4.12.0
     "@oh-my-pi/omptype": 18.2.11
     "@oh-my-pi/pi-coding-agent": 18.2.11
-    "@types/node": 26.6.5
+    "@types/node": 26.6.6
     "@vueuse/core": 15.0.0
-    ai: 7.0.142
+    ai: 7.0.159
     jiti: 2.7.0
     obuild: 0.4.45
     shiki: 4.5.0
