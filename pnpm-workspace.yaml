@@ -28,8 +28,8 @@ catalogs:
     "@modelcontextprotocol/server": 2.4.0
     better-sqlite3: 12.11.1
     docus: 5.15.0
-    nitropack: 2.13.5
-    nuxt: 4.6.3
+    nitropack: 2.13.6
+    nuxt: 4.6.4
     ohash: 2.0.12
     string-width: 8.3.0
     ufo: 1.6.4
@@ -48,11 +48,11 @@ catalogs:
     "@oh-my-pi/pi-coding-agent": 18.2.11
     "@types/node": 26.6.6
     "@vueuse/core": 15.0.0
-    ai: 7.0.159
+    ai: 7.0.163
     jiti: 2.7.0
     obuild: 0.4.45
     shiki: 4.5.0
-    typebox: 1.4.3
+    typebox: 1.4.4
     typescript: 7.0.2
     wrangler: 4.152.0
 
