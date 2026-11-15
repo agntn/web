@@ -29,7 +29,7 @@ import type {
 
 const BASE_URL = "https://chatgpt.com/backend-api";
 const ENDPOINT = `${BASE_URL}/codex/responses`;
-const DEFAULT_MODEL = "gpt-5.5";
+const DEFAULT_MODEL = "gpt-6.1-sol";
 const TIMEOUT_MS = 90_000;
 const INSTRUCTIONS =
   "Search the web to answer the user's query. Cite your sources and keep the answer concise.";
@@ -221,7 +221,7 @@ export class OpenAICodexProvider extends Provider {
       return await collectSearch(events, this.#model, maxResults, summary);
     } catch (error) {
       signal.throwIfAborted();
-      throw normalizeError(error, "openai-codex");
+      throw normalizeError(rejectedModel(error, this.#model), "openai-codex");
     }
   }
 }
@@ -419,6 +419,22 @@ function eventError(event: Readonly<CodexEvent>): Error {
   if (/forbidden|\b403\b/iu.test(detail))
     return new HTTPError(403, ENDPOINT, "Codex access denied");
   return protocolError("Codex request failed");
+}
+
+/**
+ * Codex answers a retired model with a bare 400, so name the model before it reads like a broken stream.
+ * @param error - Failure from the stream.
+ * @param model - Model the request asked for.
+ * @returns {unknown} A 400 that names the model, or the error unchanged.
+ */
+function rejectedModel(error: unknown, model: string): unknown {
+  if (!(error instanceof HTTPError) || error.statusCode !== 400) return error;
+  return new HTTPError(
+    400,
+    ENDPOINT,
+    `Codex rejected the request for model ${model}; if it was retired, set codex.model or OPENAI_CODEX_MODEL to one your account offers`,
+    { cause: error },
+  );
 }
 
 function protocolError(message: string): HTTPError {
