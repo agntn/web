@@ -152,6 +152,24 @@ describe("OpenAI Codex search", () => {
     },
   );
 
+  it("asks for a current model by default and names it when Codex answers 400", async () => {
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async () => new Response("test-access-token", { status: 400 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const provider = await createSearchProvider("openai-codex", { codex: { credentials } });
+    const error: unknown = await provider.search("query").catch((failure: unknown) => failure);
+    expect(await new Request(...fetchMock.mock.calls[0]).json()).toMatchObject({
+      model: "gpt-6.1-sol",
+    });
+    expect(error).toBeInstanceOf(HTTPError);
+    expect(error).toMatchObject({ statusCode: 400 });
+    expect(String(error)).toContain("model gpt-6.1-sol");
+    expect(String(error)).toContain("OPENAI_CODEX_MODEL");
+    expect(String(error)).not.toContain("test-access-token");
+    expect(fetchMock.mock.calls).toHaveLength(1);
+  });
+
   it("rejects arbitrary endpoints before resolving credentials", async () => {
     await expect(
       createSearchProvider("openai-codex", {
