@@ -1,6 +1,6 @@
 {
   "name": "@agntn/web",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Unified web search and read provider for agents and CLI.",
   "keywords": [
     "agents",
