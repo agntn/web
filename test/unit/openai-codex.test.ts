@@ -6,9 +6,15 @@ import {
   createSearchProvider,
   getProviderCapabilities,
   isDetailedSearchProvider,
+  builtinProviders,
+  getProviderApiKeyEnvVar,
   isProviderConfigured,
   searchProviderDetailed,
+  searchWithFallback,
 } from "../../src/index.ts";
+import { Provider } from "../../src/core/provider.ts";
+import { register } from "../../src/core/registry.ts";
+import type { ProviderConfig, SearchResult } from "../../src/core/types.ts";
 
 import { completedEvents, sse } from "../fixtures/codex.ts";
 
@@ -167,6 +173,44 @@ describe("OpenAI Codex search", () => {
     expect(String(error)).toContain("model gpt-6.1-sol");
     expect(String(error)).toContain("OPENAI_CODEX_MODEL");
     expect(String(error)).not.toContain("test-access-token");
+  });
+
+  it("moves automatic search past a Codex 400 and keeps the failure", async () => {
+    for (const name of builtinProviders) {
+      const envVar = getProviderApiKeyEnvVar(name);
+      if (envVar !== null) vi.stubEnv(envVar, "");
+    }
+    vi.stubEnv("OPENAI_CODEX_ACCESS_TOKEN", credentials.accessToken);
+    vi.stubEnv("OPENAI_CODEX_ACCOUNT_ID", credentials.accountId);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockImplementation(async () => new Response("", { status: 400 })),
+    );
+    class BackupProvider extends Provider {
+      static readonly providerName = "codex-backup";
+      static readonly defaultBaseURL = "https://backup.example.com";
+      static readonly apiKeyEnvVar = null;
+
+      constructor(config: Readonly<ProviderConfig>) {
+        super(config, BackupProvider);
+      }
+
+      async search(): Promise<SearchResult[]> {
+        return [{ url: "https://backup.example.com/", title: "Backup", snippet: "" }];
+      }
+    }
+    const unregister = register(BackupProvider);
+    try {
+      const response = await searchWithFallback("public search");
+      expect(response.provider).toBe("codex-backup");
+      expect(response.attempts).toEqual(["openai-codex", "codex-backup"]);
+      expect(response.results.map(({ url }) => url)).toEqual(["https://backup.example.com/"]);
+      expect(response.failures).toHaveLength(1);
+      expect(response.failures[0].provider).toBe("openai-codex");
+      expect(response.failures[0].error).toContain("model gpt-6.1-sol");
+    } finally {
+      unregister();
+    }
   });
 
   it("rejects arbitrary endpoints before resolving credentials", async () => {
