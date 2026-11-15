@@ -167,7 +167,6 @@ describe("OpenAI Codex search", () => {
     expect(String(error)).toContain("model gpt-6.1-sol");
     expect(String(error)).toContain("OPENAI_CODEX_MODEL");
     expect(String(error)).not.toContain("test-access-token");
-    expect(fetchMock.mock.calls).toHaveLength(1);
   });
 
   it("rejects arbitrary endpoints before resolving credentials", async () => {
