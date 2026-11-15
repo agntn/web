@@ -56,11 +56,27 @@ export function isFallbackEligible(
   }
   if (!(error instanceof HTTPError)) return false;
 
-  const isJinaReadConflict =
-    operation === "read" && provider === "jina" && error.statusCode === 409;
   return (
-    FALLBACK_HTTP_STATUS_CODES.has(error.statusCode) || error.isServerError() || isJinaReadConflict
+    FALLBACK_HTTP_STATUS_CODES.has(error.statusCode) ||
+    error.isServerError() ||
+    isProviderFallbackStatus(error.statusCode, provider, operation)
   );
+}
+
+/**
+ * Provider statuses that fall through. A Codex 400 is the adapter's own stale setup.
+ * @param statusCode - HTTP status of the failure.
+ * @param provider - Provider that failed.
+ * @param operation - Capability being attempted.
+ * @returns {boolean} Whether this provider's status may fall through.
+ */
+function isProviderFallbackStatus(
+  statusCode: number,
+  provider: string,
+  operation: FallbackOperation,
+): boolean {
+  if (provider === "openai-codex") return statusCode === 400;
+  return operation === "read" && provider === "jina" && statusCode === 409;
 }
 
 /** Automatic provider order with the providers that recently ran out of credits moved last. */
