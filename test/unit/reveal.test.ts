@@ -1681,6 +1681,70 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it.each([
+    "<table hidden>a<tr><td>b</table>c",
+    "<table><tbody hidden>a<tr><td>b</table>c",
+    "<table><tr hidden>a<td>b</table>c",
+    "<table><thead hidden>a<tr><th>b</table>c",
+    "<table><tfoot hidden>a<tr><td>b</table>c",
+  ])("moves stray table text outside its hidden table context: %s", (html) => {
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["b"]);
+  });
+
+  it("moves stray column-group text in front of the table", () => {
+    expect(ofKind(revealHtml("<table><colgroup hidden>a<col></table>c"), "hidden")).toEqual([]);
+  });
+
+  it("uses the table parent's visibility, including a nested table's cell", () => {
+    expect(
+      ofKind(revealHtml("<div hidden><table>a<tr><td>b</table>c</div>"), "hidden").map(
+        ({ value }) => value,
+      ),
+    ).toEqual(["abc"]);
+    expect(
+      ofKind(revealHtml("<table><tr><td hidden>a<table>b<tr><td>c</table>d</table>"), "hidden").map(
+        ({ value }) => value,
+      ),
+    ).toEqual(["abcd"]);
+    expect(
+      ofKind(
+        revealHtml(
+          '<div style="color:white;background:white"><table hidden>a<tr><td>b</table></div>',
+        ),
+        "camouflage",
+      ).map(({ value }) => value),
+    ).toEqual(["a"]);
+  });
+
+  it("keeps text in cells and captions hidden", () => {
+    expect(
+      ofKind(
+        revealHtml("<table hidden><caption>a</caption><tr><th>b</th><td>c</td></tr></table>"),
+        "hidden",
+      ).map(({ value }) => value),
+    ).toEqual(["abc"]);
+  });
+
+  it("decodes stray table text before testing for HTML whitespace", () => {
+    expect(
+      ofKind(revealHtml("<table hidden>&#97; &#160;<tr><td>b</table>"), "hidden").map(
+        ({ value }) => value,
+      ),
+    ).toEqual(["b"]);
+  });
+
+  it("assigns fostered text to the table parent's default shadow slot", () => {
+    const html =
+      '<div><template shadowrootmode="open"><slot hidden>fallback</slot><slot name="table"></slot></template>' +
+      '<table slot="table">a<tr><td>b</table></div>';
+    expect(ofKind(revealHtml(html), "hidden").map(({ value }) => value)).toEqual(["fallback", "a"]);
+    expect(
+      ofKind(revealHtml(html.replace("<slot hidden>", "<slot>")), "hidden").map(
+        ({ value }) => value,
+      ),
+    ).toEqual(["fallback"]);
+  });
+
   it("ends a table row or section where the next one starts", () => {
     const html = [
       "<table><tr hidden><td>a<tr><td>b</table>",

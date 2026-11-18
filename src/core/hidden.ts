@@ -128,6 +128,8 @@ const VOID_ELEMENTS = new Set([
   "track",
   "wbr",
 ]);
+/** Text directly inside these HTML table elements moves before the enclosing table. */
+const TABLE_TEXT_PARENTS = new Set(["table", "tbody", "thead", "tfoot", "tr", "colgroup"]);
 const SINGLETON_ELEMENTS = new Set(["html", "head", "body"]);
 const HEADINGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6"]);
 /** HTML elements DOM lets a shadow root attach to, besides custom elements. */
@@ -1149,7 +1151,12 @@ class HiddenScanner {
     const shadowRoot = this.shadowRootAt(tag, place, foreign);
     if (shadowRoot !== undefined) return shadowRoot;
     const parent = this.stack.at(-1);
-    this.from = this.inheritedFrom(attribute(tag, "slot") ?? "", place, fallbackOf(tag));
+    this.from = this.inheritedFrom(
+      attribute(tag, "slot") ?? "",
+      place,
+      fallbackOf(tag),
+      this.stack.length - 1,
+    );
     const declarations = this.declarationsOf(tag);
     const hidden = this.hiddenAt(tag, place, declarations, namespace);
     const { color, background } = this.paintsOf(tag, place, declarations);
@@ -1218,9 +1225,12 @@ class HiddenScanner {
     };
   }
 
-  /** @returns {SlotTree<OpenElement> | undefined} The current element's shadow root slots. */
-  private hostSlots(): SlotTree<OpenElement> | undefined {
-    const top = this.stack.at(-1);
+  /**
+   * @param index - The parent element's position in the open stack.
+   * @returns {SlotTree<OpenElement> | undefined} The parent's shadow root slots.
+   */
+  private hostSlots(index: number): SlotTree<OpenElement> | undefined {
+    const top = this.stack[index];
     return top === undefined ? undefined : this.hosts.get(top);
   }
 
@@ -1229,11 +1239,17 @@ class HiddenScanner {
    * @param name - Its `slot` attribute; text and elements without one take the default slot.
    * @param place - Its label and line.
    * @param fallback - What it shows without text, such as an image's `alt`.
+   * @param index - The parent element's position in the open stack.
    * @returns {OpenElement | undefined} The element or slot; an unslotted node hides past overrides.
    */
-  private inheritedFrom(name: string, place: Place, fallback?: string): OpenElement | undefined {
-    const host = this.stack.at(-1);
-    const slots = this.hostSlots();
+  private inheritedFrom(
+    name: string,
+    place: Place,
+    fallback: string | undefined,
+    index: number,
+  ): OpenElement | undefined {
+    const host = this.stack[index];
+    const slots = this.hostSlots(index);
     if (host === undefined || slots === undefined) return host;
     const slot = slots.find(name);
     if (slot === undefined) {
@@ -1346,34 +1362,39 @@ class HiddenScanner {
     const asWritten = token.cdata === true || (top?.name === "xmp" && !top.foreign);
     const text = asWritten ? token.text : decodeCharacterReferences(token.text);
     const source = asWritten ? {} : { written: token.text };
-    this.characters(text, line, top?.label, {
+    const index = textParentIndex(this.stack, text);
+    const parent = this.stack[index];
+    this.characters(text, line, parent?.label, {
       ...source,
       documentStart: token.start === 0,
     });
-    this.textRecord(line, text)?.add(text);
+    this.textRecord(line, text, index)?.add(text);
   }
 
   /**
    * The record text joins: its element's, or for a host the one its default slot gives.
    * @param line - The text's line.
    * @param text - The decoded text.
+   * @param index - The text parent's position in the open stack.
    * @returns {HiddenText | undefined} The record, or undefined when a reader sees the text.
    */
-  private textRecord(line: number, text: string): HiddenText | undefined {
-    const top = this.stack.at(-1);
-    if (top === undefined || this.hostSlots() === undefined) return top?.hidden ?? top?.camouflage;
+  private textRecord(line: number, text: string, index: number): HiddenText | undefined {
+    const top = this.stack[index];
+    if (top === undefined || this.hostSlots(index) === undefined)
+      return top?.hidden ?? top?.camouflage;
     const known = this.lightText.get(top);
-    return known !== undefined || text.trim() === "" ? known : this.lightTextRecord(line);
+    return known !== undefined || text.trim() === "" ? known : this.lightTextRecord(line, index);
   }
 
   /**
    * The record a host's light text gets through the default slot; a new one stays with the host.
    * @param line - Line of the first light text that isn't blank.
+   * @param index - The host's position in the open stack.
    * @returns {HiddenText | undefined} What hides or camouflages it, if anything.
    */
-  private lightTextRecord(line: number): HiddenText | undefined {
-    const host = this.stack.at(-1)!;
-    const from = this.inheritedFrom("", { label: host.label, line });
+  private lightTextRecord(line: number, index: number): HiddenText | undefined {
+    const host = this.stack[index]!;
+    const from = this.inheritedFrom("", { label: host.label, line }, undefined, index);
     const record = from?.hidden ?? from?.camouflage;
     if (record === undefined || record === host.hidden || record === host.camouflage) return record;
     host.owned.push(record);
@@ -1639,6 +1660,33 @@ function childText(token: HtmlText, foreign: boolean): string {
   return foreign && token.cdata !== true ? decodeCharacterReferences(token.text) : token.text;
 }
 
+/**
+ * Find where table text lands after HTML foster parenting, without closing the open table.
+ * @param stack - Elements still open at the text.
+ * @param text - Decoded text; an all-HTML-whitespace run stays in its table element.
+ * @returns {number} The parent's stack position, or -1 for text at the document root.
+ */
+function textParentIndex<T extends { readonly name: string; readonly foreign: boolean }>(
+  stack: readonly T[],
+  text: string,
+): number {
+  const top = stack.at(-1);
+  if (
+    top === undefined ||
+    top.foreign ||
+    !TABLE_TEXT_PARENTS.has(top.name) ||
+    /^[\t\n\f\r ]*$/u.test(text)
+  )
+    return stack.length - 1;
+  for (let index = stack.length - 1; index >= 0; index -= 1) {
+    const element = stack[index]!;
+    if (element.foreign) continue;
+    if (element.name === "template") return index;
+    if (element.name === "table") return index - 1;
+  }
+  return stack.length - 1;
+}
+
 /** An element {@link Nesting} tracks: an inert HTML template, a shadow root or anything else. */
 interface Nested {
   readonly name: string;
@@ -1771,8 +1819,8 @@ class Nesting {
 
   /** @param token - Text, which joins a gathered sheet when its `<style>` holds it directly. */
   private addText(token: HtmlText): void {
-    this.request("");
     const parent = this.elements.items.at(-1);
+    this.request("", textParentIndex(this.elements.items, decodeCharacterReferences(token.text)));
     if (parent?.sheet !== undefined) parent.sheet += childText(token, parent.foreign);
   }
 
@@ -1798,7 +1846,7 @@ class Nesting {
       asksNamed: undefined,
     };
     if (kind === "shadow") this.attach(tag.start);
-    else this.request(attribute(tag, "slot") ?? "");
+    else this.request(attribute(tag, "slot") ?? "", this.elements.items.length - 1);
     this.elements.push(kind === "shadow" ? { ...element, host } : element);
     if (kind === "inert") this.inertTemplates += 1;
     this.elements.settle(tag, foreign);
@@ -1815,9 +1863,10 @@ class Nesting {
    * DOM hands every text node to the default slot, a lone newline too, so tidy markup fills it.
    * Comments don't count.
    * @param name - The child's `slot` attribute, empty for text and elements without one.
+   * @param index - The parent's position in the open stack.
    */
-  private request(name: string): void {
-    const parent = this.elements.items.at(-1);
+  private request(name: string, index: number): void {
+    const parent = this.elements.items[index];
     if (parent === undefined) return;
     if (name === "") parent.asksDefault = true;
     else (parent.asksNamed ??= new Set()).add(name);
