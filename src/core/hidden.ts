@@ -243,17 +243,47 @@ interface ImpliedEnd {
   readonly scope?: readonly string[];
   /** Table scope, the only one that looks past {@link SCOPE_FENCES}. */
   readonly table?: boolean;
+  /** Close the farthest match in scope, not the nearest: a new row ends its cell too. */
+  readonly whole?: boolean;
 }
 
 const PARAGRAPH_END: ImpliedEnd = { closes: ["p"], scope: PARAGRAPH_SCOPE };
+const CELL_END: ImpliedEnd = {
+  closes: ["td", "th", "caption", "colgroup"],
+  scope: ["tr", "table"],
+  table: true,
+};
+/** A new row ends the open one, cell and all. */
+const ROW_END: ImpliedEnd = {
+  closes: ["tr", ...CELL_END.closes],
+  scope: ["table"],
+  table: true,
+  whole: true,
+};
+/** A new section, caption or column group ends the open section too. */
+const SECTION_END: ImpliedEnd = {
+  ...ROW_END,
+  closes: ["tbody", "thead", "tfoot", ...ROW_END.closes],
+};
+/** A `<col>` ends the same, short of the column group it belongs in. */
+const COLUMN_END: ImpliedEnd = {
+  ...SECTION_END,
+  closes: SECTION_END.closes.filter((name) => name !== "colgroup"),
+};
 const IMPLIED_END: Readonly<Record<string, ImpliedEnd>> = {
   li: { closes: ["li"] },
   dt: { closes: ["dt", "dd"] },
   dd: { closes: ["dt", "dd"] },
   option: { closes: ["option"], scope: ["select", "datalist", "optgroup"] },
-  tr: { closes: ["tr", "td", "th"], scope: ["table", "tbody", "thead", "tfoot"], table: true },
-  td: { closes: ["td", "th"], scope: ["tr", "table"], table: true },
-  th: { closes: ["td", "th"], scope: ["tr", "table"], table: true },
+  tr: ROW_END,
+  td: CELL_END,
+  th: CELL_END,
+  tbody: SECTION_END,
+  thead: SECTION_END,
+  tfoot: SECTION_END,
+  caption: SECTION_END,
+  colgroup: SECTION_END,
+  col: COLUMN_END,
 };
 /** Utility classes that CSS frameworks define as hidden. */
 const HIDING_CLASSES = new Set([
@@ -727,21 +757,21 @@ class ElementStack<T extends Readonly<{ name: string; foreign: boolean; content:
   }
 
   /**
-   * Close the nearest open element the rule ends, unless one of its `scope` or a fence sits above.
+   * Close the open element the rule ends, unless one of its `scope` or a fence sits above.
    * @param rule - What the start tag closes and what keeps it open.
    */
   private closeWithin(rule: ImpliedEnd): void {
     const { closes } = rule;
     if (!closes.some((name) => this.isOpen(name))) return;
     const bottom = Math.max(0, this.items.length - SCOPE_SCAN_LIMIT);
-    for (let index = this.items.length - 1; index >= bottom; index -= 1) {
+    let found = this.items.length;
+    for (let index = found - 1; index >= bottom; index -= 1) {
       const element = this.items[index]!;
-      if (closes.includes(element.name)) {
-        while (this.items.length > index) this.pop();
-        return;
-      }
-      if (holds(rule, element)) return;
+      if (closes.includes(element.name)) found = index;
+      else if (holds(rule, element)) break;
+      if (found === index && rule.whole !== true) break;
     }
+    while (this.items.length > found) this.pop();
   }
 }
 

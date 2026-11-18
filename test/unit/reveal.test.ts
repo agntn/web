@@ -1681,6 +1681,44 @@ describe("revealHtml", () => {
     ]);
   });
 
+  it("ends a table row or section where the next one starts", () => {
+    const html = [
+      "<table><tr hidden><td>a<tr><td>b</table>",
+      "<table><tbody hidden><tr><td>c<tbody><tr><td>d</table>",
+      "<table><thead hidden><tr><th>e<tfoot><tr><td>f</table>",
+      "<table><tr hidden><td>g<div>h<tbody><tr><td>i</table>",
+      "<table><tbody hidden><tr><td>j<caption>k</table>",
+      "<table><tr hidden><td>l<col><tr><td>m</table>",
+      "<table><caption hidden>n<tr><td>o</table>",
+      "<table><tr hidden><td>p<svg><foreignObject><tr><td>q</table>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [1, "a"],
+      [2, "c"],
+      [3, "e"],
+      [4, "gh"],
+      [5, "j"],
+      [6, "l"],
+      [7, "n"],
+      [8, "p"],
+    ]);
+  });
+
+  it("keeps a row or section open past a nested table or a template", () => {
+    const html = [
+      "<table><tr hidden><td>a<table><tr><td>b<tr><td>c</table>d</table>",
+      "<table><tbody hidden><tr><td>e<table><tbody><tr><td>f</table>g</table>",
+      "<table><tr hidden><td>h<template><tr><td>i</template>j</table>",
+    ].join("\n");
+
+    expect(ofKind(revealHtml(html), "hidden").map(({ line, value }) => [line, value])).toEqual([
+      [1, "abcd"],
+      [2, "efg"],
+      [3, "hij"],
+    ]);
+  });
+
   it("lets table tags, </template> and </p> reach past SVG and MathML", () => {
     const html = [
       "<table><tr><td hidden>a<svg><foreignObject><td>b</td></foreignObject></svg></td></tr></table>",
